@@ -37,8 +37,9 @@ def transaction(conn: sqlite3.Connection) -> Iterator[None]:
     conn.execute("BEGIN IMMEDIATE")
     try:
         yield
+        # Başarısız COMMIT (SQLITE_BUSY, ertelenmiş FK ihlali) transaction'ı açık bırakır.
+        conn.execute("COMMIT")
     except BaseException:
         if conn.in_transaction:
             conn.execute("ROLLBACK")
         raise
-    conn.execute("COMMIT")

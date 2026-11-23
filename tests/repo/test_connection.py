@@ -71,6 +71,22 @@ def test_transaction_rolls_back_on_error(tmp_path: Path) -> None:
         assert conn.execute("SELECT count(*) FROM t").fetchone()[0] == 0
 
 
+def _commit_with_deferred_foreign_key_violation(conn: sqlite3.Connection) -> None:
+    with transaction(conn):
+        conn.execute("PRAGMA defer_foreign_keys = ON")
+        conn.execute("INSERT INTO child VALUES (42)")
+
+
+def test_failed_commit_is_rolled_back(tmp_path: Path) -> None:
+    with closing(connect(tmp_path / "t.db")) as conn:
+        conn.execute("CREATE TABLE parent (id INTEGER PRIMARY KEY) STRICT")
+        conn.execute("CREATE TABLE child (parent_id INTEGER NOT NULL REFERENCES parent(id)) STRICT")
+        with pytest.raises(sqlite3.IntegrityError):
+            _commit_with_deferred_foreign_key_violation(conn)
+        assert not conn.in_transaction
+        assert conn.execute("SELECT count(*) FROM child").fetchone()[0] == 0
+
+
 def test_transaction_is_visible_to_other_connections_only_after_commit(tmp_path: Path) -> None:
     db = tmp_path / "t.db"
     with closing(connect(db)) as writer, closing(connect(db)) as other:

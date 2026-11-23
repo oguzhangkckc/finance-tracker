@@ -17,8 +17,12 @@ WALL_CLOCK_CALLS = frozenset(
         "datetime.date.today",
         "time.time",
         "time.time_ns",
+        "time.localtime",
+        "time.gmtime",
+        "time.ctime",
     }
 )
+CURRENT_TIME_WHEN_SINGLE_ARGUMENT = "time.strftime"
 
 
 def _python_files(base: Path) -> list[Path]:
@@ -81,6 +85,11 @@ def wall_clock_usages(tree: ast.Module) -> Iterator[int]:
         if (
             isinstance(node, ast.Attribute | ast.Name)
             and _qualified_name(node, aliases) in WALL_CLOCK_CALLS
+        ) or (
+            isinstance(node, ast.Call)
+            and len(node.args) == 1
+            and not node.keywords
+            and _qualified_name(node.func, aliases) == CURRENT_TIME_WHEN_SINGLE_ARGUMENT
         ):
             yield node.lineno
 
@@ -92,6 +101,11 @@ def wall_clock_usages(tree: ast.Module) -> Iterator[int]:
         ("import datetime\nx = datetime.date.today()", [2]),
         ("import datetime as dt\nx = dt.datetime.utcnow()", [2]),
         ("from time import time\nx = time()", [2]),
+        ("import time\nx = time.localtime()", [2]),
+        ("from time import gmtime\nx = gmtime(0)", [2]),
+        ("import time\nx = time.ctime()", [2]),
+        ("import time\nx = time.strftime('%Y')", [2]),
+        ("import time\nx = time.strftime('%Y', t)", []),
         ("def f(clock):\n    return clock.now(), clock.today()", []),
         ("from datetime import UTC, datetime\nx = datetime(2026, 1, 1, tzinfo=UTC)", []),
     ],
