@@ -1,0 +1,129 @@
+[project]
+name = "finans-takip"
+version = "0.1.0"
+description = "Kişisel portföy takip servisi"
+readme = "docs/DESIGN.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "pydantic>=2.14.4",
+    "pydantic-settings>=2.16.3",
+    "typer>=0.29.2",
+]
+
+[project.scripts]
+ft = "finans.cli.main:app"
+ft-agent = "finans.cli.agent:app"
+
+[build-system]
+requires = ["uv_build>=0.10.8,<0.11.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+python-preference = "only-managed"
+
+[tool.uv.build-backend]
+module-name = "finans"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.format]
+exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "C4", "DTZ", "S", "PT", "RUF", "TID", "T20", "ERA"]
+allowed-confusables = ["ı"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.mypy]
+strict = true
+warn_unreachable = true
+plugins = ["pydantic.mypy"]
+files = ["src", "tests"]
+mypy_path = "src"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib", "-m", "not live"]
+markers = ["live: gerçek ağa çıkar; CI'da çalışmaz"]
+xfail_strict = true
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+branch = true
+source = ["finans"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.importlinter]
+root_packages = ["finans"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Katmanlar"
+type = "layers"
+layers = [
+    "finans.cli",
+    "finans.bootstrap",
+    "finans.settings",
+    "finans.application | finans.adapters",
+    "finans.ports",
+    "finans.contracts",
+    "finans.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "CLI somut adapter görmez; bağlama yalnızca bootstrap'ta"
+type = "forbidden"
+source_modules = ["finans.cli"]
+forbidden_modules = ["finans.adapters"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Adapter'lar birbirinden bağımsız"
+type = "independence"
+modules = [
+    "finans.adapters.clock",
+    "finans.adapters.sqlite",
+]
+
+[[tool.importlinter.contracts]]
+name = "Ağ ve SQLite yalnızca adapter'larda"
+type = "forbidden"
+source_modules = [
+    "finans.domain",
+    "finans.contracts",
+    "finans.ports",
+    "finans.application",
+    "finans.settings",
+    "finans.cli",
+]
+forbidden_modules = ["sqlite3", "socket", "urllib", "http"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "domain ve ports altyapı kütüphanesi görmez"
+type = "forbidden"
+source_modules = ["finans.domain", "finans.ports"]
+forbidden_modules = ["pydantic", "pydantic_settings", "typer"]
+
+[dependency-groups]
+dev = [
+    "import-linter>=2.17",
+    "mypy>=2.4.1",
+    "pip-audit>=2.10.1",
+    "pre-commit>=4.7.0",
+    "pytest>=9.2.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.17.6",
+]
