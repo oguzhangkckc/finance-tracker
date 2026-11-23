@@ -32,9 +32,10 @@ def connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
 
 
 @contextmanager
-def transaction(conn: sqlite3.Connection) -> Iterator[None]:
+def transaction(conn: sqlite3.Connection, *, immediate: bool = True) -> Iterator[None]:
     # autocommit=True iken commit()/rollback() hiçbir şey yapmaz; transaction SQL ile yönetilir.
-    conn.execute("BEGIN IMMEDIATE")
+    # Salt okunur bağlantıda BEGIN IMMEDIATE yazma kilidi istediği için hata verir.
+    conn.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
     try:
         yield
         # Başarısız COMMIT (SQLITE_BUSY, ertelenmiş FK ihlali) transaction'ı açık bırakır.

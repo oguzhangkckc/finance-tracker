@@ -166,6 +166,95 @@ def test_discovery_ignores_non_sql_files(migrations_dir: Path) -> None:
     assert [m.name for m in discover(migrations_dir)] == ["0001_a.sql"]
 
 
+PARENT_CHILD = (
+    "CREATE TABLE parent (id INTEGER PRIMARY KEY,"
+    " kind TEXT NOT NULL CHECK (kind IN ('a'))) STRICT;\n"
+    "CREATE TABLE child (id INTEGER PRIMARY KEY,"
+    " parent_id INTEGER NOT NULL REFERENCES parent(id)) STRICT;\n"
+)
+REBUILD_PARENT = (
+    "-- finans: foreign_keys=off\n"
+    "CREATE TABLE parent_new (id INTEGER PRIMARY KEY,"
+    " kind TEXT NOT NULL CHECK (kind IN ('a', 'b'))) STRICT;\n"
+    "INSERT INTO parent_new SELECT id, kind FROM parent;\n"
+    "DROP TABLE parent;\n"
+    "ALTER TABLE parent_new RENAME TO parent;\n"
+)
+
+
+def _foreign_keys(conn: sqlite3.Connection) -> int:
+    return int(conn.execute("PRAGMA foreign_keys").fetchone()[0])
+
+
+def _with_parent_and_child(
+    conn: sqlite3.Connection, migrations_dir: Path, clock: FixedClock
+) -> None:
+    _write(migrations_dir, "0001_parent_child.sql", PARENT_CHILD)
+    apply(conn, discover(migrations_dir), clock=clock)
+    conn.execute("INSERT INTO parent VALUES (1, 'a')")
+    conn.execute("INSERT INTO child VALUES (10, 1)")
+
+
+def test_rebuild_migration_changes_a_referenced_table(
+    conn: sqlite3.Connection, migrations_dir: Path, clock: FixedClock
+) -> None:
+    _with_parent_and_child(conn, migrations_dir, clock)
+    _write(migrations_dir, "0002_widen_kind.sql", REBUILD_PARENT)
+
+    assert apply(conn, discover(migrations_dir), clock=clock) == [2]
+
+    conn.execute("INSERT INTO parent VALUES (2, 'b')")
+    assert conn.execute("SELECT parent_id FROM child").fetchall() == [(1,)]
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert _foreign_keys(conn) == 1
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO child VALUES (11, 99)")
+
+
+def test_rebuild_with_a_violation_is_rolled_back_and_foreign_keys_restored(
+    conn: sqlite3.Connection, migrations_dir: Path, clock: FixedClock
+) -> None:
+    _with_parent_and_child(conn, migrations_dir, clock)
+    _write(migrations_dir, "0002_orphan.sql", "-- finans: foreign_keys=off\nDELETE FROM parent;\n")
+
+    with pytest.raises(MigrationError, match="foreign key ihlali"):
+        apply(conn, discover(migrations_dir), clock=clock)
+
+    assert _user_version(conn) == 1
+    assert conn.execute("SELECT count(*) FROM parent").fetchone()[0] == 1
+    assert _foreign_keys(conn) == 1
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "-- finans: foreign_keys=of\nSELECT 1;\n",
+        "-- finans: everything\nSELECT 1;\n",
+        "SELECT 1;\n-- finans: foreign_keys=off\n",
+    ],
+    ids=["yazim-hatasi", "bilinmeyen", "yanlis-yer"],
+)
+def test_invalid_or_misplaced_header_is_rejected(migrations_dir: Path, sql: str) -> None:
+    _write(migrations_dir, "0001_a.sql", sql)
+    with pytest.raises(MigrationError, match="finans:"):
+        discover(migrations_dir)
+
+
+def test_pending_migrations_are_split_at_a_rebuild(
+    conn: sqlite3.Connection, migrations_dir: Path, clock: FixedClock
+) -> None:
+    _write(migrations_dir, "0001_parent_child.sql", PARENT_CHILD)
+    _write(migrations_dir, "0002_widen_kind.sql", REBUILD_PARENT)
+    _write(migrations_dir, "0003_broken.sql", "CREATE TABLE broken (id INTEGER) STRIC;")
+
+    with pytest.raises(MigrationError, match="0003_broken"):
+        apply(conn, discover(migrations_dir), clock=clock)
+
+    assert _user_version(conn) == 2
+    assert {"parent", "child"} <= _tables(conn)
+    assert _foreign_keys(conn) == 1
+
+
 def test_bundled_migrations_are_valid_and_apply_cleanly(
     conn: sqlite3.Connection, clock: FixedClock
 ) -> None:
