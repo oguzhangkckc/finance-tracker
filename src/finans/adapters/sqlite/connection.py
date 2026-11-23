@@ -7,6 +7,11 @@ MIN_SQLITE_VERSION = (3, 37, 0)  # STRICT tablolar
 BUSY_TIMEOUT_MS = 5000
 
 
+def sqlite_version() -> tuple[str, bool]:
+    """Çalışan SQLite sürümü ve STRICT tablolar için yeterli olup olmadığı."""
+    return sqlite3.sqlite_version, sqlite3.sqlite_version_info >= MIN_SQLITE_VERSION
+
+
 def connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
     if sqlite3.sqlite_version_info < MIN_SQLITE_VERSION:
         raise RuntimeError(

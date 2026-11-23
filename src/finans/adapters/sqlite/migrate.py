@@ -2,12 +2,14 @@ import hashlib
 import re
 import sqlite3
 from collections.abc import Iterator, Sequence
+from contextlib import closing
 from dataclasses import dataclass
 from importlib.resources import files
 from importlib.resources.abc import Traversable
+from pathlib import Path
 
 from finans.adapters.sqlite.codec import encode_timestamp
-from finans.adapters.sqlite.connection import transaction
+from finans.adapters.sqlite.connection import connect, transaction
 from finans.ports.clock import Clock
 
 _FILE_NAME = re.compile(r"^(?P<version>\d{4})_[a-z0-9_]+\.sql$")
@@ -64,6 +66,17 @@ def discover(directory: Traversable) -> list[Migration]:
 
 def bundled() -> list[Migration]:
     return discover(files("finans.adapters.sqlite.migrations"))
+
+
+@dataclass(frozen=True, slots=True)
+class SchemaStatus:
+    current: int
+    latest: int
+
+
+def schema_status(path: Path) -> SchemaStatus:
+    with closing(connect(path, readonly=True)) as conn:
+        return SchemaStatus(current=_user_version(conn), latest=len(bundled()))
 
 
 def apply(conn: sqlite3.Connection, migrations: Sequence[Migration], *, clock: Clock) -> list[int]:

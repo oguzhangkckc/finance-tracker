@@ -234,6 +234,20 @@ def value(
         typer.echo(f"Fiyatı eksik: {', '.join(valuation.missing_prices)}")
 
 
+_SYMBOLS = {"ok": "✓", "warn": "!", "fail": "✗"}
+
+
+@app.command("doctor")
+def doctor() -> None:
+    """Kurulumu ve verinin tutarlılığını kontrol eder; yalnızca hatalar 1 ile çıkar."""
+    settings = _load_settings_or_exit()
+    checks = bootstrap.run_doctor(settings)
+    for check in checks:
+        typer.echo(f"{_SYMBOLS[check.status]} {check.name}: {check.detail}")
+    if any(check.status == "fail" for check in checks):
+        raise typer.Exit(code=1)
+
+
 def _format_transaction(stored: StoredTransaction) -> str:
     tx = stored.transaction
     parts = [
