@@ -1,0 +1,3 @@
+* text=auto eol=lf
+# Migration'ların sha256 özeti satır sonuna duyarlı; CRLF dönüşümü "değiştirilmiş migration" hatası verir.
+*.sql text eol=lf
