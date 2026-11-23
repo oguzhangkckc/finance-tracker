@@ -1,5 +1,7 @@
+import decimal
 import os
 import socket
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import NoReturn
@@ -23,6 +25,15 @@ def _no_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(socket.socket, "connect_ex", _network_blocked)
     monkeypatch.setattr(socket, "create_connection", _network_blocked)
     monkeypatch.setattr(socket, "getaddrinfo", _network_blocked)
+
+
+@pytest.fixture(autouse=True)
+def _strict_decimal() -> Iterator[None]:
+    context = decimal.getcontext()
+    previous = context.traps[decimal.FloatOperation]
+    context.traps[decimal.FloatOperation] = True
+    yield
+    context.traps[decimal.FloatOperation] = previous
 
 
 @pytest.fixture(autouse=True)

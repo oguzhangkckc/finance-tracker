@@ -17,8 +17,14 @@ WALL_CLOCK_CALLS = frozenset(
         "datetime.date.today",
         "time.time",
         "time.time_ns",
+        "time.localtime",
+        "time.gmtime",
+        "time.ctime",
     }
 )
+CURRENT_TIME_WHEN_SINGLE_ARGUMENT = "time.strftime"
+DOMAIN_CONTEXT_DECORATOR = "in_domain_context"
+DOMAIN_CONTEXT_DEFINITION = SRC / "domain" / "numeric.py"
 
 
 def _python_files(base: Path) -> list[Path]:
@@ -81,6 +87,11 @@ def wall_clock_usages(tree: ast.Module) -> Iterator[int]:
         if (
             isinstance(node, ast.Attribute | ast.Name)
             and _qualified_name(node, aliases) in WALL_CLOCK_CALLS
+        ) or (
+            isinstance(node, ast.Call)
+            and len(node.args) == 1
+            and not node.keywords
+            and _qualified_name(node.func, aliases) == CURRENT_TIME_WHEN_SINGLE_ARGUMENT
         ):
             yield node.lineno
 
@@ -92,12 +103,43 @@ def wall_clock_usages(tree: ast.Module) -> Iterator[int]:
         ("import datetime\nx = datetime.date.today()", [2]),
         ("import datetime as dt\nx = dt.datetime.utcnow()", [2]),
         ("from time import time\nx = time()", [2]),
+        ("import time\nx = time.localtime()", [2]),
+        ("from time import gmtime\nx = gmtime(0)", [2]),
+        ("import time\nx = time.ctime()", [2]),
+        ("import time\nx = time.strftime('%Y')", [2]),
+        ("import time\nx = time.strftime('%Y', t)", []),
         ("def f(clock):\n    return clock.now(), clock.today()", []),
         ("from datetime import UTC, datetime\nx = datetime(2026, 1, 1, tzinfo=UTC)", []),
     ],
 )
 def test_wall_clock_detector(source: str, expected: list[int]) -> None:
     assert list(wall_clock_usages(ast.parse(source))) == expected
+
+
+def undecorated_public_functions(tree: ast.Module) -> Iterator[str]:
+    for node in tree.body:
+        if not isinstance(node, ast.FunctionDef) or node.name.startswith("_"):
+            continue
+        decorators = {
+            d.id if isinstance(d, ast.Name) else d.attr if isinstance(d, ast.Attribute) else ""
+            for d in node.decorator_list
+        }
+        if DOMAIN_CONTEXT_DECORATOR not in decorators:
+            yield node.name
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("def f(): ...", ["f"]),
+        ("@in_domain_context\ndef f(): ...", []),
+        ("@numeric.in_domain_context\ndef f(): ...", []),
+        ("def _helper(): ...", []),
+        ("@other\ndef g(): ...", ["g"]),
+    ],
+)
+def test_undecorated_function_detector(source: str, expected: list[str]) -> None:
+    assert list(undecorated_public_functions(ast.parse(source))) == expected
 
 
 @pytest.mark.parametrize(
@@ -125,6 +167,16 @@ def test_domain_imports_only_stdlib_and_itself() -> None:
         if module.split(".")[0] not in sys.stdlib_module_names
         and module != "finans.domain"
         and not module.startswith("finans.domain.")
+    ]
+    assert violations == []
+
+
+def test_domain_public_functions_run_in_domain_context() -> None:
+    violations = [
+        f"{_relative(path)}: {name}"
+        for path in _python_files(SRC / "domain")
+        if path != DOMAIN_CONTEXT_DEFINITION
+        for name in undecorated_public_functions(_parse(path))
     ]
     assert violations == []
 

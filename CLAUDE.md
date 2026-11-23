@@ -9,12 +9,15 @@ docs/DESIGN.md tek doğruluk kaynağıdır; alınmış kararlar oradaki "Karar k
 - Commit ve push yalnızca kullanıcı istediğinde.
 - Yeni bağımlılık eklemeden önce sor.
 - Bitti tanımı: `make check` yeşil (ruff, mypy --strict, import-linter, pytest).
+- Kontrol komutlarının (`make check`, pytest, ruff, mypy, lint-imports) çıktısı pipe'lanmaz. Çıktı gerekiyorsa dosyaya yazılır; çıkış kodu doğrudan kontrol edilir ve commit ya da push yalnızca 0 ise yapılır. `cmd | grep … && git commit` biçimi grep'in çıkış koduna baktığı için yasak.
+- Push öncesinde pre-commit'in pre-push aşaması `make check`'i çalıştırır (`uv run pre-commit install` iki hook'u da kurar).
 
 ## Kod kuralları
 
 - Katman sırası: cli → bootstrap → settings → application | adapters → ports → contracts → domain. Kurallar pyproject.toml'daki import-linter kurallarıyla ve tests/arch ile zorlanır.
 - domain yalnızca standart kütüphaneyi kullanır. Somut sınıflar yalnızca bootstrap.py'de bağlanır.
 - Para, fiyat ve adet her yerde Decimal. `float` kaynak kodun hiçbir yerinde kullanılmaz.
+- domain'deki public (alt çizgisiz) üst düzey fonksiyonlar `@in_domain_context` ile sarılır (28 basamak, FloatOperation trap'i); tests/arch bunu denetler.
 - Duvar saatine yalnızca `adapters/clock.py` erişir; geri kalan her yer Clock port'unu kullanır. Mantıksal tarih (logical_date) dışarıdan verilir.
 - Ağ ve SQLite erişimi yalnızca adapters altında. Testlerde gerçek ağ kapalıdır; gerçek ağa çıkan test `@pytest.mark.live` ile işaretlenir.
 - adapters altına yeni bir modül ya da alt paket eklenince pyproject.toml'daki bağımsızlık kuralına da ekle; tests/arch bunu denetler.
