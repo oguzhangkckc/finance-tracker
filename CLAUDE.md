@@ -9,6 +9,8 @@ docs/DESIGN.md tek doğruluk kaynağıdır; alınmış kararlar oradaki "Karar k
 - Commit ve push yalnızca kullanıcı istediğinde.
 - Yeni bağımlılık eklemeden önce sor.
 - Bitti tanımı: `make check` yeşil (ruff, mypy --strict, import-linter, pytest).
+- Kontrol komutlarının (`make check`, pytest, ruff, mypy, lint-imports) çıktısı pipe'lanmaz. Çıktı gerekiyorsa dosyaya yazılır; çıkış kodu doğrudan kontrol edilir ve commit ya da push yalnızca 0 ise yapılır. `cmd | grep … && git commit` biçimi grep'in çıkış koduna baktığı için yasak.
+- Push öncesinde pre-commit'in pre-push aşaması `make check`'i çalıştırır (`uv run pre-commit install` iki hook'u da kurar).
 
 ## Kod kuralları
 
