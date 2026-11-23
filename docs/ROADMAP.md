@@ -22,12 +22,14 @@ Not: Migration çalıştırıcısına tablo yeniden kurma desteği: `-- finans: 
 TEFAS ve EVDS3 adapter'ları (ilk iş: EVDS3 anahtar iletimi), backfill, veri kalitesi kontrolleri; kayıtlı fixture'larla kontrat testleri, haftalık canlı smoke testi.
 Geliştirme kapısı: Kontrat testleri yeşil; backfill ile geçmiş dönem mutabakatı ±0,01 TL/kalem.
 Not: JSON her yerde `json.loads(..., parse_float=Decimal)` ile ayrıştırılır; `response.json()` kullanılmaz; çok basamaklı fiyatla kontrat testi yazılır (K-32).
+Not: TÜFE 2025=100 serisi tüm geçmişiyle doğrudan çekilir; ilk işlerden biri EVDS3'te bu geçmişin bulunduğunu doğrulamak. `chain_link` yedek olarak kalır (K-43).
 Kabul kapısı: Bir ay canlı veri; elle tutulan tabloyla mutabakat ±0,01 TL/kalem.
 
 ## M4 · Rapor ve bildirim (ilk kullanılabilir sürüm)
 Report modeli, metin ve JSON render, aylık raporda XIRR ve yalnızca katkıyla dengeleme, Telegram (rapor botu), uyarı tekilleştirme; systemd timer'ları, job_run, dead man's switch, yedekleme.
 Geliştirme kapısı: Snapshot ve iş testleri yeşil; zamanlayıcılar test ortamında doğrulandı.
 Kabul kapısı: İki hafta kesintisiz ve doğru rapor.
+Not: Para ağırlıklı getirinin kökü [−0,99; 10] dışındaysa (alt ya da üst) rapor basit getiriyi ve "Zamanlama nedeniyle para ağırlıklı getiri anlamlı değil." notunu gösterir; domain sonuç türü bu durumu "hesaplanamadı"dan ayırır (K-44).
 
 ## M5 · OpenClaw ve güvenlik sertleştirmesi
 JSON anlık görüntüleri ve rrsync ile aktarımı (yalnızca çekirdekten dışarı), ft-agent (boru hattı ve veri tazeliği için iki ayrı bayatlık sinyali), JSON Schema kontratı, SKILL.md, PPK özeti akışı (oranlar kodla çıkarılır), asistan botu; iki makine, ayrı OS kullanıcıları, systemd sertleştirme, LoadCredential, makine bazında egress allowlist.

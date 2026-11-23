@@ -328,12 +328,15 @@ class CpiSource(Protocol):
 - Resmi API kullanılır. TCMB, Ocak 2026'da EVDS3'e (evds3.tcmb.gov.tr) geçti; evds2 bir süre daha açık kalacak. Anahtarın EVDS3'te HTTP başlığında mı, parametrede mi gönderileceği M3'ün ilk işinde doğrulanır. Başlıkta gönderilebiliyorsa başlık kullanılır. Parametrede gönderilmesi gerekiyorsa URL log'lanmaz ve hata metinlerinde maskelenir.
 - Seri kodları, bağlantı ayı ve taban URL config'tedir. EVDS sürüm değişikliği ya da TÜİK baz yılı güncellemesi koda dokunmadan karşılanır.
 - Yüzde değişim değil endeks seviyesi saklanır. Her dönem hesabı endeks oranından türetilir.
-- TÜİK, Ocak 2026 verisinden itibaren TÜFE'yi 2025=100 bazında yayımlıyor. Bu yüzden 2003=100 serisiyle zincirleme (chain-linking) v1'de zorunludur. Zincirleme tek bir çakışma ayında yapılır: **Aralık 2025**. Bu ayda iki serinin de değeri vardır.
+- TÜİK, Ocak 2026 verisinden itibaren TÜFE'yi 2025=100 bazında yayımlıyor. TÜİK, 2005–2025 geçmişini de 2025=100 bazında yeniden yayımladı. Bunu zincir endeks yapısını ve manşet oranları değiştirmeden yaptı: 2025 aylarının yeni baz değerleri, eski serinin sabit bir katsayıyla çarpılmış halidir.
+- **M3'te 2025=100 serisi tüm geçmişiyle doğrudan çekilir; çalışma anında zincirleme yapılmaz (K-43).** EVDS3'te yeni bazdaki geçmişin bulunduğu, M3'ün ilk işlerinden biri olarak doğrulanır.
+- Aralık 2025 zincirlemesi (chain-linking) test edilmiş bir yedek olarak kalır; yeni bazda geçmiş bulunamazsa kullanılır. Zincirleme tek bir çakışma ayında yapılır: **Aralık 2025**. Bu ayda iki serinin de değeri vardır.
   - Eski seri, k = E_yeni(Aralık 2025) / E_eski(Aralık 2025) katsayısıyla yeni baza (2025=100) taşınır.
   - Aralık 2025 ve öncesi eski seriden (× k), sonrası yeni seriden alınır. Oranlar baz seçiminden bağımsızdır.
   - Bu, domain/inflation.py içinde saf ve test edilmiş bir fonksiyondur ve M1'de P0 test vakasıdır.
   - Test kaynağı TÜİK'in yayımladığı yıllık enflasyon oranlarıdır. Yalnızca TÜİK'in birincil bültenleri ve tabloları kullanılır, ikincil site kullanılmaz. Her değerin kaynak linki testte yazılır.
   - Zincirlenmiş seriden hesaplanan yıllık oranlar, yayımlanan oranlarla ±0,01 puan toleransla eşleşmelidir. Endeksler yuvarlanmış yayımlandığı için tam eşitlik beklenmez. Sistematik bir sapma çıkarsa tolerans genişletilmez; sapma incelenir ve bildirilir.
+  - M1 sonucu: 2026 Ocak–Ekim yıllık oranları en fazla 0,0048 puan farkla eşleşti ve farkların işaretleri karışık, yani sistematik sapma yok. Aralık'ta zincirlenen eski seri, TÜİK'in yeni bazdaki Ocak 2025 değerini (88,578291) 7 basamakta üretiyor. Kaynaklar: TÜİK istatistiksel tabloları `DF_TUFE_SDMX_2003` ve `DF_TUFE_SDMX_TT10`; yeniden yayımlama için TÜİK "Geçmiş Yıl Revizyonları" sayfası ve 30.10.2025 tarihli TÜFE kamuoyu duyurusu.
 - t ayının TÜFE'si t+1 ayının başında açıklanır. Hangi dönemin endeksinin kullanılacağını "TÜFE referans ay kuralı" belirler (Hesap motoru bölümü); kullanılan dönemler raporda açıkça yazılır.
 
 ### Elle değerlenen varlıklar
@@ -392,6 +395,8 @@ Fonlar dağıtım yapmadığı ve değerleme birim fiyattan yapıldığı için 
 Basit getiri yalnızca açık pozisyonlar üzerinden hesaplanır: açık lotların değeri, açık lotların kalan maliyetine bölünür. Satışlardan doğan gerçekleşmiş kâr/zarar (net satış geliri − FIFO ile düşülen maliyet) raporda ayrı bir satırda gösterilir ve basit getiriye karışmaz. Kısmen satılmış bir lotun reel getirisi de kalan adet ve orantılı maliyetle hesaplanır.
 
 Bir yıldan kısa dönemlerde hiçbir getiri yıllıklandırılmaz (GIPS yaklaşımı). Dönem 365 günden kısaysa XIRR ve reel XIRR yerine yıllıklandırılmamış, para ağırlıklı dönem getirisi gösterilir; fon TWR'ı da dönem getirisi olarak kalır. Çıktıdaki `annualized` alanı hangisinin gösterildiğini belirtir. Dönem, ilk nakit akışından değerleme tarihine kadar olan süredir.
+
+**Aralık dışı sonuç (M4).** Çözücü [−0,99; 10] aralığında kök bulamazsa, yani gerçek oran alt sınırın altında ya da üst sınırın üstündeyse, para ağırlıklı getiri gösterilmez. Rapor onun yerine basit getiriyi ve "Zamanlama nedeniyle para ağırlıklı getiri anlamlı değil." notunu gösterir. Bu durum, örneğin paranın çoğu dönem sonuna yakın girip kısa sürede büyük kâr ya da zarar ettiğinde ortaya çıkar. Domain şu an her iki durumda da None döndürüyor. M4'te sonuç türü sebebi ayırt edecek şekilde genişletilir: "aralık dışı" ile "hesaplanamadı" (D = 0 ya da işaret değişmiyor) birbirinden ayrılır (K-44).
 
 Raporda bu durumda şu etiketler kullanılır: **Dönem getirisi (para ağırlıklı, yıllık değil)** ve **Reel dönem getirisi (para ağırlıklı, yıllık değil)**. Etiketin altında tek satırlık bir açıklama yer alır: "Alım ve satışların tarihi ve tutarı hesaba katılarak, ilk yatırımdan değerleme tarihine kadarki getiri; bir yıldan kısa dönemde yıllığa çevrilmez."
 
@@ -721,6 +726,8 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-40 | TÜFE zincirlemesi tek çakışma ayında (Aralık 2025); test kaynağı TÜİK'in yayımladığı yıllık oranlar (yalnızca birincil kaynak, her değerin linki testte); tolerans ±0,01 puan, sistematik sapmada tolerans genişletilmez | Bağlantı noktası tek ve belgeli olsun; doğruluk resmî oranlarla sınansın | Veri toplama, Test |
 | K-41 | BYF temettüsü nedeniyle TWR'ın eksik ölçmesi bilinen kısıt olarak kabul edildi (M6'da temettüyle birlikte ele alınır) | v1'de temettü işlem türü yok | Hesap motoru |
 | K-42 | Aynı gün önce alımlar, sonra satışlar. Aynı gün aynı enstrümandaki alımlar tek lotta birleşir; aynı günün satışları FIFO'dan birlikte düşülür ve maliyet adetle orantılı paylaştırılır | Yalnızca türler arası sıralama, aynı gün farklı fiyatlı alımlarda sonucu girdi sırasına bağımlı bırakıyordu | Hesap motoru |
+| K-43 | K-23 ve K-40'ı günceller: M3'te TÜFE 2025=100 serisi tüm geçmişiyle doğrudan çekilir; çalışma anında zincirleme yapılmaz. `chain_link` test edilmiş yedek olarak kalır | TÜİK 2005–2025'i yeni bazda, zincir yapısını ve manşet oranları koruyarak yeniden yayımladı; Aralık zincirlemesi TÜİK'in yeni baz değerlerini 7 basamakta üretiyor | Veri toplama |
+| K-44 | Para ağırlıklı getirinin kökü [−0,99; 10] dışındaysa (alt ya da üst), rapor basit getiriyi ve "Zamanlama nedeniyle para ağırlıklı getiri anlamlı değil." notunu gösterir; domain sonucu bu durumu "hesaplanamadı"dan ayırır (M4) | Paranın zamanlaması uç bir orana yol açtığında rakam yanıltıcıdır; "hesaplanamadı" ile karışmamalı | Hesap motoru, Raporlama |
 
 ## Planı kodlama ajanıyla uygulama
 
