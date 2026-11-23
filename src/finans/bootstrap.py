@@ -1,12 +1,13 @@
 from contextlib import closing
 
 from finans.adapters.clock import SystemClock
+from finans.adapters.csv_transactions import CsvTransactionFile
 from finans.adapters.portfolio_toml import TomlPortfolioSource
 from finans.adapters.sqlite.connection import connect
 from finans.adapters.sqlite.migrate import MigrationError, apply, bundled
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.ports.clock import Clock
-from finans.ports.sources import PortfolioConfigSource
+from finans.ports.sources import PortfolioConfigSource, TransactionFile
 from finans.ports.unit_of_work import UnitOfWork
 from finans.settings import Settings
 
@@ -17,6 +18,7 @@ __all__ = [
     "open_unit_of_work",
     "portfolio_source",
     "system_clock",
+    "transaction_file",
 ]
 
 
@@ -47,3 +49,7 @@ def portfolio_source() -> PortfolioConfigSource:
 
 def system_clock() -> Clock:
     return SystemClock()
+
+
+def transaction_file() -> TransactionFile:
+    return CsvTransactionFile()

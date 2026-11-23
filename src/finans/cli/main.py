@@ -1,5 +1,8 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import date
+from decimal import Decimal, InvalidOperation
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
 
@@ -8,9 +11,16 @@ from pydantic import ValidationError
 
 from finans import bootstrap
 from finans.application.portfolio_config import ApplyReport, apply_portfolio
+from finans.application.transactions import (
+    add_transaction,
+    import_transactions,
+    void_transaction,
+)
 from finans.cli._common import VersionOption
-from finans.domain.models import DomainError
+from finans.domain.models import DomainError, Side, Transaction
+from finans.domain.numeric import canonical_text
 from finans.domain.portfolio import ConfigError
+from finans.ports.repositories import StoredTransaction
 from finans.settings import Settings, load_settings
 
 app = typer.Typer(
@@ -18,8 +28,16 @@ app = typer.Typer(
 )
 db_app = typer.Typer(no_args_is_help=True, help="Veritabanı işlemleri.")
 config_app = typer.Typer(no_args_is_help=True, help="Portföy tanımı (portfolio.toml).")
+tx_app = typer.Typer(no_args_is_help=True, help="İşlemler.")
 app.add_typer(db_app, name="db")
 app.add_typer(config_app, name="config")
+app.add_typer(tx_app, name="tx")
+
+
+class SideChoice(StrEnum):
+    buy = "buy"
+    sell = "sell"
+
 
 FileOption = Annotated[
     Path | None,
@@ -67,6 +85,134 @@ def config_apply(file: FileOption = None) -> None:
         with bootstrap.open_unit_of_work(settings) as uow:
             report = apply_portfolio(uow, config)
     _print_apply(report)
+
+
+@tx_app.command("add")
+def tx_add(
+    side: Annotated[SideChoice, typer.Argument(help="buy ya da sell")],
+    code: Annotated[str, typer.Argument(help="Varlık kodu")],
+    units: Annotated[str, typer.Argument(help="Adet")],
+    price: Annotated[str, typer.Argument(help="Birim fiyat")],
+    trade_date: Annotated[str, typer.Option("--date", help="Fiyatın uygulandığı gün (YYYY-AA-GG)")],
+    fee: Annotated[str, typer.Option("--fee", help="Komisyon")] = "0",
+    ref: Annotated[str | None, typer.Option("--ref", help="Dış referans")] = None,
+    note: Annotated[str | None, typer.Option("--note", help="Not")] = None,
+) -> None:
+    """İşlem ekler."""
+    settings = _load_settings_or_exit()
+    parsed_date = _parse_date(trade_date)
+    amounts = _parse_decimal("units", units), _parse_decimal("price", price)
+    parsed_fee = _parse_decimal("fee", fee)
+    with _user_errors():
+        transaction = Transaction(
+            code, parsed_date, Side(side.value.upper()), amounts[0], amounts[1], parsed_fee
+        )
+        with bootstrap.open_unit_of_work(settings) as uow:
+            txn_id = add_transaction(
+                uow, transaction, ref=ref, note=note, now=bootstrap.system_clock().now()
+            )
+    typer.echo(f"İşlem eklendi: #{txn_id}")
+
+
+@tx_app.command("list")
+def tx_list(
+    until: Annotated[str | None, typer.Option("--until", help="Bu güne kadar")] = None,
+    instrument: Annotated[str | None, typer.Option("--instrument", help="Varlık kodu")] = None,
+    show_all: Annotated[bool, typer.Option("--all", help="İptal edilenleri de göster.")] = False,
+) -> None:
+    """İşlemleri listeler; iptal edilenler yalnızca --all ile görünür."""
+    settings = _load_settings_or_exit()
+    until_date = None if until is None else _parse_date(until)
+    with _user_errors(), bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+        rows = uow.transactions.list(
+            include_voided=show_all, until=until_date, instrument=instrument
+        )
+    if not rows:
+        typer.echo("Kayıtlı işlem yok.")
+    for stored in rows:
+        typer.echo(_format_transaction(stored))
+
+
+@tx_app.command("void")
+def tx_void(
+    txn_id: Annotated[int, typer.Argument(help="İşlem numarası")],
+    reason: Annotated[str, typer.Option("--reason", help="İptal gerekçesi")],
+) -> None:
+    """İşlemi iptal eder; kayıt ve gerekçe kalır, pozisyonda yok sayılır."""
+    settings = _load_settings_or_exit()
+    with _user_errors(), bootstrap.open_unit_of_work(settings) as uow:
+        void_transaction(uow, txn_id, reason=reason, now=bootstrap.system_clock().now())
+    typer.echo(f"İşlem #{txn_id} iptal edildi.")
+
+
+@tx_app.command("import")
+def tx_import(
+    path: Annotated[Path, typer.Argument(help="CSV dosyası")],
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Yazmadan ne olacağını göster.")
+    ] = False,
+) -> None:
+    """CSV'den işlem içe aktarır; ya bütün satırlar yazılır ya hiçbiri."""
+    settings = _load_settings_or_exit()
+    parsed = bootstrap.transaction_file().read(path)
+    with _user_errors(), bootstrap.open_unit_of_work(settings) as uow:
+        report = import_transactions(
+            uow, parsed, now=bootstrap.system_clock().now(), dry_run=dry_run
+        )
+    if report.issues:
+        typer.echo(
+            f"İçe aktarma durduruldu; hiçbir işlem yazılmadı. {len(report.issues)} sorun:",
+            err=True,
+        )
+        for issue in report.issues:
+            typer.echo(f"  - {issue}", err=True)
+        raise typer.Exit(code=1)
+    verb, skip = ("Eklenecek", "atlanacak") if dry_run else ("Eklendi", "atlandı")
+    typer.echo(f"{verb}: {len(report.added)}, {skip} (zaten var): {len(report.skipped)}")
+
+
+def _format_transaction(stored: StoredTransaction) -> str:
+    tx = stored.transaction
+    parts = [
+        f"#{stored.id}",
+        tx.trade_date.isoformat(),
+        tx.instrument,
+        tx.side.value,
+        f"{canonical_text(tx.units)} × {canonical_text(tx.unit_price)}",
+        f"komisyon {canonical_text(tx.fee)}",
+    ]
+    if stored.external_ref:
+        parts.append(f"ref {stored.external_ref}")
+    if stored.note:
+        parts.append(f"not: {stored.note}")
+    if stored.is_voided:
+        parts.append(f"[İPTAL: {stored.void_reason}]")
+    return "  ".join(parts)
+
+
+def _parse_date(text: str) -> date:
+    try:
+        value = date.fromisoformat(text)
+    except ValueError:
+        value = None
+    if value is None or value.isoformat() != text:
+        typer.echo(f"Tarih YYYY-AA-GG biçiminde olmalı, {text!r} verildi.", err=True)
+        raise typer.Exit(code=2)
+    return value
+
+
+def _parse_decimal(name: str, text: str) -> Decimal:
+    if text.count(",") == 1 and "." not in text:
+        typer.echo(
+            f"{name}: ondalık ayırıcı nokta olmalı; {text} yerine {text.replace(',', '.')} yaz.",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    try:
+        return Decimal(text)
+    except InvalidOperation:
+        typer.echo(f"{name}: sayı olmalı, {text!r} verildi.", err=True)
+        raise typer.Exit(code=2) from None
 
 
 def _print_apply(report: ApplyReport) -> None:
