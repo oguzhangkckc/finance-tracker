@@ -14,7 +14,6 @@ LOWER_BOUND: Final = Decimal("-0.99")
 UPPER_BOUND: Final = Decimal(10)
 TOLERANCE: Final = Decimal("1e-10")
 MAX_NEWTON_STEPS: Final = 100
-MAX_BISECTION_STEPS: Final = 200
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,13 +147,11 @@ def _bisection(flows: Sequence[CashFlow], day_count: int) -> Decimal | None:
     high_value, _ = _npv_and_derivative(flows, day_count, high)
     if (low_value > ZERO) == (high_value > ZERO):
         return None
-    for _ in range(MAX_BISECTION_STEPS):
+    while high - low >= TOLERANCE:
         middle = (low + high) / 2
         middle_value, _ = _npv_and_derivative(flows, day_count, middle)
         if (middle_value > ZERO) == (low_value > ZERO):
             low, low_value = middle, middle_value
         else:
             high = middle
-        if high - low < TOLERANCE:
-            break
     return (low + high) / 2

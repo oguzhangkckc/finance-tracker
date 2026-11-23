@@ -5,6 +5,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from finans.domain import returns
 from finans.domain.inflation import CpiSeries, fisher_real
 from finans.domain.models import (
     CashFlow,
@@ -233,3 +234,57 @@ def test_bisection_fallback_finds_the_root_after_a_bad_guess() -> None:
 
 def test_bisection_fallback_gives_up_when_both_ends_have_the_same_sign() -> None:
     assert solve_irr(V8, day_count=365, guess=D("9.9")) is None
+
+
+def test_newton_that_does_not_converge_falls_back_to_bisection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(returns, "MAX_NEWTON_STEPS", 1)
+    rate = solve_irr(V1, day_count=365, guess=D("0.1"))
+    assert rate is not None
+    assert is_close(rate, D("0.3"))
+
+
+def test_zero_derivative_is_not_computable() -> None:
+    same_day = _flows(("2025-01-02", "-100"), ("2025-01-02", "100"))
+    assert solve_irr(same_day, day_count=365, guess=D("0.1")) is None
+
+
+def test_solver_needs_a_sign_change() -> None:
+    assert (
+        solve_irr(_flows(("2025-01-02", "-1"), ("2025-06-02", "-2")), day_count=365, guess=D(0))
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "flows",
+    [
+        _flows(("2024-01-01", "-1"), ("2024-09-01", "-10"), ("2024-10-01", "3")),
+        _flows(("2025-01-01", "-100"), ("2025-04-11", "2000")),
+    ],
+    ids=["alt-sinirin-alti", "ust-sinirin-ustu"],
+)
+def test_root_outside_the_search_range_is_not_computable(flows: list[CashFlow]) -> None:
+    days = (flows[-1].on - flows[0].on).days
+    ends = [net_present_value(flows, bound, day_count=days) for bound in (LOWER_BOUND, UPPER_BOUND)]
+    assert (ends[0] > 0) == (ends[1] > 0)
+    assert money_weighted_return(flows) is None
+
+
+def test_fund_twr_requires_the_same_fund() -> None:
+    start = PricePoint("AAA", date(2025, 1, 2), D(10), source="tefas")
+    end = PricePoint("BBB", date(2025, 7, 1), D(12), source="tefas")
+    with pytest.raises(DomainError, match="tek fon"):
+        fund_twr(start, end)
+
+
+def test_negative_terminal_value_is_rejected() -> None:
+    with pytest.raises(DomainError, match="negatif"):
+        portfolio_cash_flows([], terminal_value=D(-1), on=date(2026, 1, 2))
+
+
+def test_lot_without_cost_has_no_real_return() -> None:
+    lot = Lot("AAA", date(2025, 1, 2), D(1), D(1), D(0))
+    with pytest.raises(DomainError, match="maliyeti sıfır"):
+        lot_real_return(lot, D(10), CPI_100_TO_120, on=date(2026, 1, 2))
