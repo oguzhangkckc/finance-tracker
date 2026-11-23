@@ -94,6 +94,7 @@ name = "Adapter'lar birbirinden bağımsız"
 type = "independence"
 modules = [
     "finans.adapters.clock",
+    "finans.adapters.portfolio_toml",
     "finans.adapters.sqlite",
 ]
 

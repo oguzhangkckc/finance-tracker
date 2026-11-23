@@ -2,12 +2,15 @@ import decimal
 import os
 import socket
 from collections.abc import Iterator
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import NoReturn
 
 import pytest
 
+from finans.adapters.sqlite.connection import connect
+from finans.adapters.sqlite.migrate import apply, bundled
 from tests.fakes.clock import FixedClock
 
 
@@ -47,3 +50,11 @@ def _isolated_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
 @pytest.fixture
 def clock() -> FixedClock:
     return FixedClock(datetime(2026, 11, 23, 12, 0, tzinfo=UTC))
+
+
+@pytest.fixture
+def migrated_db(tmp_path: Path, clock: FixedClock) -> Path:
+    path = tmp_path / "finans.db"
+    with closing(connect(path)) as conn:
+        apply(conn, bundled(), clock=clock)
+    return path
