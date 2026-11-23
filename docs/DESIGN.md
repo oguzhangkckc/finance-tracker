@@ -374,6 +374,8 @@ r_{reel} = \frac{1 + r_{nom}}{1 + \pi} - 1
 
 **TÜFE referans ay kuralı.** Bir d tarihi için kullanılacak endeks dönemi, d'nin ayından önceki aydır. Bu dönem veritabanında henüz yoksa, veritabanındaki son dönem kullanılır. Kural hem alım hem değerleme tarafında aynıdır. Sonuç olarak yeni alınmış bir lotun reel getirisi nominal getirisine eşit çıkar ve oran hiçbir zaman tanımsız kalmaz. Aylık çözünürlük bilinçli bir yaklaşımdır. Değerlemede kullanılan dönem raporun provenance bölümüne, her lotun alım dönemi lot satırına yazılır.
 
+**Bilinen davranış: yeniden üretimde TÜFE dönemi değişebilir.** Kural, veritabanında o anda bulunan dönemlere bakar. Bu yüzden ayın ilk günlerinde (TÜFE açıklanmadan önce) üretilmiş bir rapor, aynı mantıksal tarih için sonradan yeniden üretilirse farklı bir TÜFE dönemi kullanabilir. Örneğin 2 Kasım'da canlı üretilen rapor Eylül endeksini kullanır. Aynı rapor Ekim endeksi açıklandıktan sonra üretilirse Ekim endeksini kullanır. Bu, "aynı veri, aynı rapor" ilkesini bozmaz, çünkü arada veri değişmiştir. Kullanılan dönem raporda yazdığı için fark izlenebilir. Bilinçli olarak kabul edilmiştir (K-30).
+
 ```latex
 \mathrm{ref}(d) = \min\big(\mathrm{ay}(d) - 1,\; \mathrm{son\ mevcut\ dönem}\big)
 ```
@@ -382,10 +384,10 @@ r_{reel} = \frac{1 + r_{nom}}{1 + \pi} - 1
 r_{lot,reel} = \frac{V_t / E_{\mathrm{ref}(t)}}{M_{lot} / E_{\mathrm{ref}(t_{alim})}} - 1
 ```
 
-XIRR, nakit akışlarının net bugünkü değerini sıfırlayan oranı bulur. Reel XIRR için her akış önce değerleme tarihinin TL'sine çevrilir: C'_i = C_i × E[ref(t)] / E[ref(t_i)]. Zaman birimi T, yıllık hesapta 365 gündür; bir yıldan kısa dönemde dönem uzunluğudur (t_son − t_0). İkinci durumda r, yıllıklandırılmamış dönem getirisidir.
+XIRR, nakit akışlarının net bugünkü değerini sıfırlayan oranı bulur. Reel XIRR için her akış önce değerleme tarihinin TL'sine çevrilir: C'_i = C_i × E[ref(t)] / E[ref(t_i)]. Zaman birimi D, yıllık hesapta 365 gündür; bir yıldan kısa dönemde dönem uzunluğudur (t_son − t_0). İkinci durumda r, yıllıklandırılmamış dönem getirisidir.
 
 ```latex
-\sum_{i} \frac{C_i}{(1 + r)^{(t_i - t_0)/T}} = 0
+\sum_{i} \frac{C_i}{(1 + r)^{(t_i - t_0)/D}} = 0
 ```
 
 - Çözücü: Newton-Raphson, yakınsamazsa [−0,99; 10] aralığında bisection. Tolerans 1e−10.
@@ -664,6 +666,7 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-27 | Aktarım: çekirdek, ayrı bir SSH anahtarıyla rsync ile iter. OpenClaw tarafında anahtar authorized_keys'te `restrict` ve rrsync ile tek dizine yalnızca yazmaya sınırlıdır. "OpenClaw'dan çekirdeğe bağlantı yok" kuralı aynen geçerlidir (K-07). Snapshot'lar çekirdekte geçici dosya + rename ile atomik yazılır | Ajan makinesine çekirdeğe erişim vermeden aktarım; ele geçirilen anahtar en fazla o dizine yazabilir | OpenClaw |
 | K-28 | İki ayrı bayatlık sinyali: boru hattı (`generated_at` yaşı, 26 saat, ft-agent okuma anında hesaplar) ve veri tazeliği (son fiyat tarihi; veriden çıkarılan işlem günü kuralı ve 4 takvim günlük genel kural; çekirdek hesaplar). Snapshot taze olsa bile eski fiyat ayrı alanda görünür | Biri boru hattının, diğeri verinin sağlığını ölçer; tek bayrak ikisini karıştırır | OpenClaw, Veri toplama |
 | K-29 | Bir yıldan kısa dönemde para ağırlıklı getiri, XIRR ile aynı çözücüyle ve zaman birimi dönem uzunluğu alınarak hesaplanır. Rapor etiketi "Dönem getirisi (para ağırlıklı, yıllık değil)" (reel için "Reel dönem getirisi …"); altında tek satırlık açıklama | K-17'nin hesap ve sunum biçimi; kullanıcı yıllık rakamla karıştırmasın | Hesap motoru, Raporlama |
+| K-30 | TÜFE referans ay kuralı yüzünden, ayın ilk günlerinde üretilmiş bir raporun sonradan yeniden üretilmesi farklı TÜFE dönemi kullanabilir. Bilinen davranış olarak kabul edildi; yayın tarihi kuralı eklenmedi | Etki ayın ilk birkaç günüyle sınırlı; kullanılan dönem raporda yazdığı için izlenebilir | Hesap motoru |
 
 ## Planı kodlama ajanıyla uygulama
 
