@@ -80,6 +80,7 @@ class Instrument:
     kind: InstrumentKind
     asset_class: str
     category: str | None = None
+    name: str | None = None
 
     def __post_init__(self) -> None:
         if not self.code.strip():
