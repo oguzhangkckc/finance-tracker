@@ -45,7 +45,7 @@ P0 gereksinimler ilk kullanılabilir sürümü (M4) tanımlar; P1 ve P2 sonraki 
 | FR-12 | OpenClaw skill ve salt okunur sorgu komutları | P1 |
 | FR-13 | PPK karar özeti (LLM, yalnızca tcmb.gov.tr metni) | P2 |
 | FR-14 | Maaş günü hatırlatması | P2 |
-| FR-15 | Satışlı dengeleme önerisi (katkı açığı kapatamıyorsa) | P2 |
+| FR-15 | Satışlı dengeleme önerisi (katkı dağıtıldıktan sonra sapma eşiğin iki katını aşıyorsa) | P2 |
 
 | Fonksiyonel olmayan | Kabul ölçütü |
 | --- | --- |
@@ -177,7 +177,7 @@ Katman kuralları (yukarıdan aşağıya: cli → bootstrap → settings → app
 - adapters ports'u uygular; birbirini import etmez. Tek istisna ortak `adapters/_http.py`'dir. Adapter'lar application'ı ve settings'i görmez; ayarlar onlara bootstrap'ta enjekte edilir.
 - cli somut adapter import etmez. Somut sınıflar yalnızca bootstrap.py içinde bağlanır; testler aynı noktadan sahte uygulamaları enjekte eder.
 - Ağ ve SQLite erişimi yalnızca adapters altında yapılabilir; testlerde gerçek ağ kapalıdır.
-- `float` kaynak kodun hiçbir yerinde kullanılmaz. Duvar saatine (now, today, time.time) yalnızca `adapters/clock.py` erişir.
+- `float` kaynak kodun hiçbir yerinde kullanılmaz. Duvar saatine yalnızca `adapters/clock.py` erişir. Duvar saati sayılanlar: `datetime.now`, `datetime.utcnow`, `datetime.today`, `date.today`, `time.time`, `time.time_ns`, `time.localtime`, `time.gmtime`, `time.ctime` ve zaman argümanı verilmeden çağrılan `time.strftime`.
 
 ## Veri modeli
 
@@ -188,6 +188,8 @@ Para, fiyat ve adet değerleri SQLite'ta kanonik Decimal string olarak (TEXT) tu
 Varlık tanımlarının kaynağı `portfolio.toml`'dur. `ft config apply` komutu tanımları instrument tablosuna idempotent olarak yazar; dosyadan çıkarılan varlık silinmez, `active=0` olur, çünkü işlemler ona bağlıdır. Yükleme sırasında iki şey doğrulanır: hedef dağılımdaki sınıf kümesi varlık sınıflarıyla birebir aynıdır ve hedeflerin toplamı 1'dir.
 
 Bağlantı ayarları şemada değil, her bağlantıyı açan fabrikadadır. Bunun sebebi, `journal_mode` değişikliğinin transaction içinde hata vermesi ve `foreign_keys`'in bağlantı bazlı bir ayar olmasıdır. Her bağlantıda `journal_mode=WAL`, `foreign_keys=ON` ve `busy_timeout=5000` ayarlanır; salt okunur bağlantıda ayrıca `query_only=ON`.
+
+Transaction'lar `transaction()` yardımcı fonksiyonuyla `BEGIN IMMEDIATE` olarak açılır. Gövdede hata olursa ROLLBACK yapılır. COMMIT'in kendisi hata verirse, örneğin SQLITE_BUSY ya da ertelenmiş bir foreign key ihlali yüzünden, transaction açık kalır. Bu durumda da ROLLBACK yapılır ve hata yükseltilir; bağlantı hiçbir zaman açık bir transaction'la bırakılmaz (M1'in ilk commit'i).
 
 ```sql
 CREATE TABLE _migration (                -- uygulanan dosyaların özeti; değiştirilmiş dosya yakalanır
@@ -277,16 +279,25 @@ CREATE TABLE raw_payload (               -- hata ayıklama için ham yanıt; 30 
 
 Migration dosyaları paketin içinde (`src/finans/adapters/sqlite/migrations/`) durur ve `importlib.resources` ile okunur; böylece systemd kurulu paketten çalışırken de bulunur. Uygulama kuralları:
 
-- Yazan süreç (ft), bekleyen migration'ları `BEGIN IMMEDIATE` ile tek transaction içinde uygular. Aynı anda açılan iki süreç yarışmaz.
+- Yazan süreç (ft), bekleyen migration'ları `BEGIN IMMEDIATE` ile tek transaction içinde uygular. Aynı anda açılan iki süreç yarışmaz. Bekleyenler arasında tablo yeniden kuran bir migration varsa gruplar o migration'da bölünür (aşağıda).
 - Sürüm PRAGMA user_version ile izlenir. Her dosyanın sha256 özeti `_migration` tablosuna yazılır; uygulanmış bir dosya sonradan değişirse çalıştırıcı hata verir.
 - Veritabanı kodun bildiğinden yeni bir sürümdeyse çalıştırıcı reddeder.
 - Migration'lara yalnızca ekleme yapılır. Geri alma yerine ileri yönlü düzeltme migration'ı yazılır.
+- **Tablo yeniden kurma (M2).** SQLite'ta CHECK kısıtını ya da kolon tipini değiştirmek tabloyu yeniden kurmayı gerektirir. Başka tabloların başvurduğu bir tablo, foreign key kontrolü açıkken yeniden kurulamaz. Bunu yapan migration'ın ilk satırı `-- finans: foreign_keys=off` olur. Çalıştırıcı böyle bir migration'ı tek başına, kendi transaction'ında uygular:
+  1. Transaction açılmadan önce `PRAGMA foreign_keys = OFF` çalıştırılır ve gerçekten kapandığı doğrulanır; bu ayar transaction içinde etkisizdir.
+  2. `BEGIN IMMEDIATE`, ardından migration, `_migration` kaydı ve `user_version`.
+  3. COMMIT'ten önce `PRAGMA foreign_key_check` çalışır. Tek bir ihlal bile varsa migration geri alınır ve ihlaller hata mesajında listelenir.
+  4. COMMIT. Ardından, başarıda da hatada da `PRAGMA foreign_keys = ON` yapılır.
+
+  Tanınmayan bir `-- finans:` başlığı hata verir; böylece yazım hatası sessizce yok sayılmaz. Bu durumda atomiklik grup bazındadır: bekleyen migration'lar işaretli migration'larda gruplara bölünür ve her grup kendi transaction'ında atomiktir. Sonraki bir grup başarısız olursa önceki gruplar uygulanmış kalır.
 
 Yedekleme her gece sqlite3 .backup ile alınır, şifrelenip makine dışına kopyalanır; geri yükleme ayda bir test edilir.
 
 ## Veri toplama katmanı
 
 Her kaynak tek bir port arkasında izole edilir; kırılgan olan TEFAS uç noktası değiştiğinde yalnızca bir dosya değişir. Tüm yanıtlar pydantic ile doğrulanır ve fiyatlar idempotent upsert ile kaydedilir. Kaynaklar ayrıştırılmış veriyle birlikte ham yanıtı da döndürür. Ham yanıtı RawPayloadRepo aracılığıyla application yazar; böylece kaynak adapter'ı sqlite adapter'ına bağımlı olmaz. Zaman aşımı, retry ve kibarlık kuralları gibi ortak HTTP davranışları `adapters/_http.py`'dedir.
+
+JSON her yerde `json.loads(body, parse_float=Decimal)` ile ayrıştırılır. httpx'in `response.json()` metodu kullanılmaz, çünkü sayıları float'a çevirir ve hassasiyet daha ayrıştırma anında kaybolur. Tek ayrıştırma yolu bu olsun diye pydantic'in `model_validate_json` metodu da kullanılmaz; ayrıştırılan sözlük `model_validate` ile doğrulanır. Kural, çok basamaklı bir fiyatla (ör. `1.123456789012345678`) kontrat testinde doğrulanır (M3).
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -317,7 +328,12 @@ class CpiSource(Protocol):
 - Resmi API kullanılır. TCMB, Ocak 2026'da EVDS3'e (evds3.tcmb.gov.tr) geçti; evds2 bir süre daha açık kalacak. Anahtarın EVDS3'te HTTP başlığında mı, parametrede mi gönderileceği M3'ün ilk işinde doğrulanır. Başlıkta gönderilebiliyorsa başlık kullanılır. Parametrede gönderilmesi gerekiyorsa URL log'lanmaz ve hata metinlerinde maskelenir.
 - Seri kodları, bağlantı ayı ve taban URL config'tedir. EVDS sürüm değişikliği ya da TÜİK baz yılı güncellemesi koda dokunmadan karşılanır.
 - Yüzde değişim değil endeks seviyesi saklanır. Her dönem hesabı endeks oranından türetilir.
-- TÜİK, Ocak 2026 verisinden itibaren TÜFE'yi 2025=100 bazında yayımlıyor. Bu yüzden 2003=100 serisiyle zincirleme (chain-linking) v1'de zorunludur. Yeni seri, eski seriyle çakışan ayda zincirlenir. Bu, domain/inflation.py içinde saf ve test edilmiş bir fonksiyondur ve M1'de P0 test vakasıdır.
+- TÜİK, Ocak 2026 verisinden itibaren TÜFE'yi 2025=100 bazında yayımlıyor. Bu yüzden 2003=100 serisiyle zincirleme (chain-linking) v1'de zorunludur. Zincirleme tek bir çakışma ayında yapılır: **Aralık 2025**. Bu ayda iki serinin de değeri vardır.
+  - Eski seri, k = E_yeni(Aralık 2025) / E_eski(Aralık 2025) katsayısıyla yeni baza (2025=100) taşınır.
+  - Aralık 2025 ve öncesi eski seriden (× k), sonrası yeni seriden alınır. Oranlar baz seçiminden bağımsızdır.
+  - Bu, domain/inflation.py içinde saf ve test edilmiş bir fonksiyondur ve M1'de P0 test vakasıdır.
+  - Test kaynağı TÜİK'in yayımladığı yıllık enflasyon oranlarıdır. Yalnızca TÜİK'in birincil bültenleri ve tabloları kullanılır, ikincil site kullanılmaz. Her değerin kaynak linki testte yazılır.
+  - Zincirlenmiş seriden hesaplanan yıllık oranlar, yayımlanan oranlarla ±0,01 puan toleransla eşleşmelidir. Endeksler yuvarlanmış yayımlandığı için tam eşitlik beklenmez. Sistematik bir sapma çıkarsa tolerans genişletilmez; sapma incelenir ve bildirilir.
 - t ayının TÜFE'si t+1 ayının başında açıklanır. Hangi dönemin endeksinin kullanılacağını "TÜFE referans ay kuralı" belirler (Hesap motoru bölümü); kullanılan dönemler raporda açıkça yazılır.
 
 ### Elle değerlenen varlıklar
@@ -343,11 +359,20 @@ Her senkronizasyondan sonra çalışır; sonuçlar uyarıya ve raporun "Veri sor
 
 Tüm hesaplar domain katmanında saf fonksiyonlardır: girdi veri ve mantıksal tarih, çıktı Decimal. Decimal bağlamı 28 basamak ve ROUND_HALF_EVEN'dir. Domain bu bağlamı açık bir `localcontext` ile kurar; böylece süreçteki global ayardan, örneğin bir kütüphanenin değiştirdiği hassasiyetten etkilenmez. Yuvarlama yalnızca sunum katmanında yapılır.
 
+Bu bağlamda `decimal.FloatOperation` trap'i açıktır (M1). Float'tan Decimal üretmek (`Decimal(0.1)`) ya da Decimal ile float'ı sıralama karşılaştırmasına sokmak hata fırlatır. Testlerde conftest aynı trap'i global bağlamda da açar.
+- **Neden gerekli:** AST testi örtük float kaynaklarını göremez: int/int bölmesi, `math` fonksiyonları ya da bir değişken üzerinden yapılan `Decimal(x)` gibi. Trap bunları, float Decimal'le buluştuğu anda yakalar.
+- **Sınırı:** Eşitlik karşılaştırması (`==`) ve açık dönüşüm (`Decimal.from_float`) sessiz kalır. Float'ın Decimal'le hiç buluşmadığı hesaplar da yakalanmaz.
+
 ### Pozisyon ve değerleme
 
 - Lotlar işlemlerden türetilir. Satışlar FIFO ile en eski lotlardan düşülür; ortalama maliyet desteklenmez. GVK geçici 67. madde stopajında da maliyetin FIFO ile bulunduğu M2'de birincil kaynakla doğrulanacak ve kaynağıyla birlikte buraya yazılacak.
 - As-of değerleme, t tarihinde ve öncesinde açıklanan son fiyatı kullanır. Kullanılan fiyat tarihi her kalemle birlikte rapora yazılır.
 - Komisyon maliyete eklenir; satışta gelirden düşülür.
+- Kısmen satılmış bir lotun kalan maliyeti kalan adetle orantılıdır: M_kalan = M_lot × kalan adet / ilk adet (alış komisyonu dahil).
+- Aynı gün içinde önce alımlar, sonra satışlar işlenir. Sonuç girdi sırasından bağımsızdır:
+  - Aynı gün aynı enstrümandaki alımlar tek lotta birleşir (adetler ve maliyetler toplanır).
+  - Aynı günün satışları FIFO'dan birlikte düşülür. Düşülen maliyet satışlara adetleriyle orantılı paylaştırılır.
+  - Girdi sırası yalnızca aynı gündeki satışların listelenme sırasını belirler, tutarları değil.
 
 ### Getiri ölçüleri
 
@@ -355,12 +380,16 @@ Dört ölçü farklı soruları cevaplar ve raporda karıştırılmaz.
 
 | Ölçü | Cevapladığı soru | Kullanım |
 | --- | --- | --- |
-| Basit getiri (değer / maliyet − 1) | Toplamda ne kadar kârdayım? | Özet satırı |
+| Basit getiri (açık pozisyon değeri / kalan maliyet − 1) | Elimdekilerde ne kadar kârdayım? | Özet satırı |
 | Fon TWR'ı (dönem sonu fiyat / dönem başı fiyat − 1) | Fon ne kadar iyi? Nakit akışlarından bağımsız | Fon karşılaştırma |
 | XIRR (para ağırlıklı) | Düzenli alımlarımla benim param yıllık ne kadar büyüdü? | Kişisel performans |
 | Reel XIRR | Alım gücüm yıllık ne kadar arttı? | Ana KPI |
 
 Fonlar dağıtım yapmadığı ve değerleme birim fiyattan yapıldığı için fon bazında TWR, fiyat oranına eşittir; alt dönemlere bölmeye gerek yoktur. Portföy düzeyinde TWR kapsam dışıdır.
+
+**Bilinen kısıt: BYF temettüsü.** BYF'ler temettü dağıtabilir. Dağıtım günü birim fiyat düşer, ama dağıtılan tutar fiyat oranına yansımaz. Bu yüzden temettü dağıtan bir BYF'nin TWR'ı gerçek getirisinden düşük görünür. v1'de temettü işlem türü olmadığı için (K-11) bu kısıt kabul edilir. Temettü işlem türü eklendiğinde (M6) TWR, dağıtımları hesaba katacak şekilde güncellenir.
+
+Basit getiri yalnızca açık pozisyonlar üzerinden hesaplanır: açık lotların değeri, açık lotların kalan maliyetine bölünür. Satışlardan doğan gerçekleşmiş kâr/zarar (net satış geliri − FIFO ile düşülen maliyet) raporda ayrı bir satırda gösterilir ve basit getiriye karışmaz. Kısmen satılmış bir lotun reel getirisi de kalan adet ve orantılı maliyetle hesaplanır.
 
 Bir yıldan kısa dönemlerde hiçbir getiri yıllıklandırılmaz (GIPS yaklaşımı). Dönem 365 günden kısaysa XIRR ve reel XIRR yerine yıllıklandırılmamış, para ağırlıklı dönem getirisi gösterilir; fon TWR'ı da dönem getirisi olarak kalır. Çıktıdaki `annualized` alanı hangisinin gösterildiğini belirtir. Dönem, ilk nakit akışından değerleme tarihine kadar olan süredir.
 
@@ -390,8 +419,17 @@ XIRR, nakit akışlarının net bugünkü değerini sıfırlayan oranı bulur. R
 \sum_{i} \frac{C_i}{(1 + r)^{(t_i - t_0)/D}} = 0
 ```
 
+**İşaret kuralı.** Yatırımcının cebinden çıkan para negatif, cebine giren pozitiftir:
+- Alım: −(adet × fiyat + komisyon)
+- Satış: +(adet × fiyat − komisyon)
+- Değerleme tarihindeki açık pozisyon değeri V_t, son akış olarak pozitif işaretle girer (t_son = t).
+
+Reel XIRR'da her akış E[ref(t)] / E[ref(t_i)] ile çarpılır. Son akışta t_i = t olduğundan bu çarpan 1'dir.
+
 - Çözücü: Newton-Raphson, yakınsamazsa [−0,99; 10] aralığında bisection. Tolerans 1e−10.
 - Akışlar işaret değiştirmiyorsa çözüm yoktur; fonksiyon None döner ve rapor "hesaplanamadı" yazar.
+- D = 0, yani ilk akış değerleme günündeyse, oran tanımsızdır. Fonksiyon None döner ve rapor "hesaplanamadı" yazar. Basit getiri özet satırında zaten gösterildiği için burada tekrarlanmaz.
+- **Çoklu kök.** Akışlar birden çok kez işaret değiştirirse (alım, satış, yeniden alım) denklemin birden fazla kökü olabilir. Başlangıç tahmini basit getiriden türetilir: r_0 = (ΣC⁺ / Σ|C⁻|)^(D / (t_son − t_0)) − 1, [−0,99; 10] aralığına kırpılarak. Böylece seçilen kök deterministiktir. Bu davranış iki köklü bir referans vakayla test edilir.
 
 ### Dağılım, sapma ve dengeleme
 
@@ -403,8 +441,12 @@ XIRR, nakit akışlarının net bugünkü değerini sıfırlayan oranı bulur. R
 T_c = h_c (V + K), \quad d_c = \max(0,\, T_c - V_c)
 ```
 
-- Σd ≤ K ise her sınıfa açığı d_c kadar, kalan K − Σd hedef ağırlıklarla dağıtılır. Değilse K, açıklarla orantılı dağıtılır: a_c = K × d_c / Σd.
-- Satışlı dengeleme önerisi M6'ya ertelendi (FR-15). Taslak kural: katkı açığı kapatamıyorsa ve sapma eşiğin iki katını aşıyorsa üretilir.
+- Σ_c (T_c − V_c) = K'dır ve d_c bu farkların yalnızca pozitif kısmını alır. Bu yüzden Σd ≥ K her zaman geçerlidir; eşitlik yalnızca hiçbir sınıf hedefin üstünde değilken olur. Tek kural vardır: **a_c = K × d_c / Σd**. K = 0 ise tüm a_c = 0'dır (o durumda Σd = 0 olabilir).
+- a_c tam hassasiyetle hesaplanır. Kuruşa yuvarlama sunum katmanında, toplamı K'ya eşit tutan en büyük kalan (Hamilton) yöntemiyle yapılır (M4).
+- Özellik testleri: Σa = K; a_c ≥ 0; a_c ≤ d_c. Decimal bölmesinin artığı için bu koşullar 1e−20 göreli toleransla sınanır.
+  - a_c ≤ d_c, hedefin altındaki sınıflar için V_c + a_c ≤ T_c demektir.
+  - Hedefte ya da hedefin üstünde olan sınıflar (d_c = 0) pay almaz. Onlarda V_c + a_c = V_c ≥ T_c olabilir; bu yüzden V_c + a_c ≤ T_c tüm sınıflar için değil, yalnızca d_c > 0 olanlar için sınanır.
+- Satışlı dengeleme önerisi M6'ya ertelendi (FR-15). "Katkı açığı kapatamıyorsa" koşulu (Σd > K) tek bir sınıf hedefin üstündeyken bile doğrudur, yani ayırt edici değildir. Taslak kural: katkı yukarıdaki kuralla dağıtıldıktan sonraki ağırlıklarla hesaplanan sapma, herhangi bir sınıfta eşiğin iki katını aşıyorsa satış önerisi üretilir.
 - Çıktı her zaman öneridir; sistem işlem yapmaz.
 
 ## Raporlama ve bildirim
@@ -581,10 +623,10 @@ Hesap doğruluğu bu projenin tek vazgeçilmez kalitesidir; test ağırlığı d
 
 | Katman | Araç | Ne doğrulanır |
 | --- | --- | --- |
-| Domain birim | pytest | XIRR'ın Excel ile üretilmiş referans değerlere göreli 1e-6 toleransla eşitliği (Excel'in kendi hassasiyeti bu düzeyde); Fisher; FIFO lot düşümü; bir yıldan kısa dönemde yıllıklandırma yapılmaması |
+| Domain birim | pytest | XIRR'ın Excel ile üretilmiş referans değerlere eşitliği. Tolerans `math.isclose` ile aynı formüldür ama Decimal ile uygulanır: \|a − b\| ≤ max(1e-6 × max(\|a\|, \|b\|), 1e-8). Sıfıra yakın getiride yalnızca göreli tolerans yanlış alarm verirdi. Ayrıca zincirlenmiş TÜFE'den hesaplanan yıllık oranların TÜİK'in yayımladığı oranlarla eşleşmesi; Fisher; FIFO lot düşümü; bir yıldan kısa dönemde yıllıklandırma yapılmaması |
 | Domain özellik | hypothesis | Dağılım toplamı 1; dengeleme dağıtımı katkıyı aşmaz; XIRR çözümünde NPV ≈ 0; histerezis titreşmez |
 | Takvim ve zaman | pytest ve FixedClock | Hafta sonu ve bayram as-of'u, ay sonu, artık yıl, TÜFE yayın gecikmesi ve referans ay kuralı, 2003=100'den 2025=100'e zincirleme |
-| Mimari | import-linter ve AST testleri | Katman kuralları; domain'in yalnızca standart kütüphaneyi kullanması; float ve duvar saati yasağı; her adapter'ın bağımsızlık kuralında listelenmesi |
+| Mimari | import-linter ve AST testleri | Katman kuralları; domain'in yalnızca standart kütüphaneyi kullanması; float yasağı; duvar saati yasağı (`time.localtime`, `time.gmtime`, `time.ctime` ve zaman argümansız `time.strftime` dahil); her adapter'ın bağımsızlık kuralında listelenmesi |
 | Adapter kontratı | respx ve kayıtlı fixture'lar | TEFAS ve EVDS ayrıştırma, epoch'tan TR tarihine çeviri, retry ve hata kodları, bozuk yanıt |
 | Repository | Geçici SQLite | Migration'lar, upsert idempotency, Decimal gidiş-dönüş, revizyon kaydı |
 | Rapor | syrupy snapshot | Metin ve JSON çıktının bilinçsiz değişmemesi |
@@ -593,7 +635,7 @@ Hesap doğruluğu bu projenin tek vazgeçilmez kalitesidir; test ağırlığı d
 
 Hedefler: domain katmanında %95+ satır kapsamı, mypy --strict temiz, CI süresi 2 dakikanın altında.
 
-Testlerde gerçek ağ, conftest'teki bir fixture ile kapalıdır; yalnızca `-m live` ile işaretli testler ağa çıkabilir.
+Testlerde gerçek ağ, conftest'teki bir fixture ile kapalıdır; yalnızca `-m live` ile işaretli testler ağa çıkabilir. Aynı conftest, global Decimal bağlamında `FloatOperation` trap'ini açar (M1).
 
 Kabul testi: canlıya geçmeden önce bir ay boyunca aynı işlemleri bir tabloda elle tut ve sistemin rakamlarıyla mutabakat yap. Tolerans kalem başına ±0,01 TL'dir; farkın sebebi yuvarlama yöntemleri olabilir (Excel yarımı yukarı yuvarlar, sistem sunumda banker yuvarlaması kullanır). Geçmiş dönemler için mutabakat, backfill ile çekilen fiyatlar ve eski ekstreler kullanılarak beklemeden yapılabilir. Tolerans dışı bir fark çıkarsa, nedeni bulunmadan milestone kabul edilmez.
 
@@ -667,6 +709,18 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-28 | İki ayrı bayatlık sinyali: boru hattı (`generated_at` yaşı, 26 saat, ft-agent okuma anında hesaplar) ve veri tazeliği (son fiyat tarihi; veriden çıkarılan işlem günü kuralı ve 4 takvim günlük genel kural; çekirdek hesaplar). Snapshot taze olsa bile eski fiyat ayrı alanda görünür | Biri boru hattının, diğeri verinin sağlığını ölçer; tek bayrak ikisini karıştırır | OpenClaw, Veri toplama |
 | K-29 | Bir yıldan kısa dönemde para ağırlıklı getiri, XIRR ile aynı çözücüyle ve zaman birimi dönem uzunluğu alınarak hesaplanır. Rapor etiketi "Dönem getirisi (para ağırlıklı, yıllık değil)" (reel için "Reel dönem getirisi …"); altında tek satırlık açıklama | K-17'nin hesap ve sunum biçimi; kullanıcı yıllık rakamla karıştırmasın | Hesap motoru, Raporlama |
 | K-30 | TÜFE referans ay kuralı yüzünden, ayın ilk günlerinde üretilmiş bir raporun sonradan yeniden üretilmesi farklı TÜFE dönemi kullanabilir. Bilinen davranış olarak kabul edildi; yayın tarihi kuralı eklenmedi | Etki ayın ilk birkaç günüyle sınırlı; kullanılan dönem raporda yazdığı için izlenebilir | Hesap motoru |
+| K-31 | Domain'in `localcontext`'inde `decimal.FloatOperation` trap'i açık; testlerde conftest aynı trap'i global bağlamda açar (M1) | AST testi int/int bölmesi, `math` fonksiyonları ve `Decimal(float)` gibi örtük float'ları göremiyor | Hesap motoru, Test |
+| K-32 | JSON her yerde `json.loads(..., parse_float=Decimal)` ile ayrıştırılır; `response.json()` ve `model_validate_json` kullanılmaz; çok basamaklı fiyatla kontrat testi (M3) | Float'a çevirme, hassasiyeti daha ayrıştırma anında kaybettirir | Veri toplama |
+| K-33 | Migration çalıştırıcısına tablo yeniden kurma desteği: `-- finans: foreign_keys=off` başlığı, transaction dışında FK kapatma, COMMIT öncesi `foreign_key_check`, sonra FK açma; atomiklik grup bazında (M2) | SQLite'ta CHECK ya da tip değişikliği tablo yeniden kurmayı gerektiriyor; FK ayarı transaction içinde değiştirilemiyor | Veri modeli |
+| K-34 | `transaction()`, COMMIT hata verirse de ROLLBACK yapar (M1'in ilk commit'i) | Başarısız COMMIT transaction'ı açık bırakır; bağlantı yarım transaction'la kalmamalı | Veri modeli |
+| K-35 | Duvar saati dedektörüne `time.localtime`, `time.gmtime`, `time.ctime` ve zaman argümansız `time.strftime` eklenir (M1'in ilk commit'i) | Bu çağrılar da şimdiki zamanı okur; dedektör onları görmüyordu | Proje yapısı, Test |
+| K-36 | XIRR işaret kuralı: alım −, satış +, V_t son pozitif akış; reel XIRR'da son akışın çarpanı 1. D = 0 ise "hesaplanamadı". Çoklu kökte başlangıç tahmini basit getiriden türetilir ve test edilir | Denklem tek anlamlı olsun; seçilen kök deterministik olsun | Hesap motoru |
+| K-37 | Dengeleme tek kuralla: a_c = K × d_c / Σd (Σd ≥ K her zaman geçerli; K = 0 ise sıfır). Özellikler: Σa = K, a_c ≥ 0, a_c ≤ d_c (1e−20 göreli toleransla); kuruşa yuvarlama sunumda Hamilton yöntemiyle. FR-15 taslağı, katkı sonrası sapmaya göre yeniden yazıldı | "Σd ≤ K" dalı gereksizdi; V_c + a_c ≤ T_c hedefin üstündeki sınıflarda geçerli değil; eski satış koşulu ayırt edici değildi | Dağılım, Gereksinimler |
+| K-38 | K-26'yı günceller: tolerans göreli 1e-6 ve mutlak 1e-8 (`math.isclose` formülü, Decimal ile) | Sıfıra yakın getiride yalnızca göreli tolerans yanlış alarm verir | Test |
+| K-39 | Basit getiri açık pozisyonların kalan maliyeti üzerinden; gerçekleşmiş K/Z ayrı satır; kısmen satılmış lotun maliyeti ve reel getirisi kalan adetle orantılı | Satılmış payların kârı basit getiriyi bozmasın | Hesap motoru |
+| K-40 | TÜFE zincirlemesi tek çakışma ayında (Aralık 2025); test kaynağı TÜİK'in yayımladığı yıllık oranlar (yalnızca birincil kaynak, her değerin linki testte); tolerans ±0,01 puan, sistematik sapmada tolerans genişletilmez | Bağlantı noktası tek ve belgeli olsun; doğruluk resmî oranlarla sınansın | Veri toplama, Test |
+| K-41 | BYF temettüsü nedeniyle TWR'ın eksik ölçmesi bilinen kısıt olarak kabul edildi (M6'da temettüyle birlikte ele alınır) | v1'de temettü işlem türü yok | Hesap motoru |
+| K-42 | Aynı gün önce alımlar, sonra satışlar. Aynı gün aynı enstrümandaki alımlar tek lotta birleşir; aynı günün satışları FIFO'dan birlikte düşülür ve maliyet adetle orantılı paylaştırılır | Yalnızca türler arası sıralama, aynı gün farklı fiyatlı alımlarda sonucu girdi sırasına bağımlı bırakıyordu | Hesap motoru |
 
 ## Planı kodlama ajanıyla uygulama
 
