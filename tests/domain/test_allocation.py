@@ -6,9 +6,12 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from finans.domain.allocation import (
+    Direction,
     DriftDecision,
+    DriftEvent,
     allocate_contribution,
     deviations,
+    drift_fingerprint,
     evaluate_drift,
     should_notify,
     validate_targets,
@@ -69,68 +72,119 @@ class TestTargetsAndDeviations:
             deviations({"hisse": D("0.7"), "dusuk_risk": D("0.3")}, TARGETS)
 
 
-def _drift(deviation: str, *, was_open: bool) -> DriftDecision:
+def _drift(deviation: Decimal | str, open_direction: Direction | None) -> DriftDecision:
     return evaluate_drift(
-        "hisse", D(deviation), was_open=was_open, open_above=OPEN_ABOVE, close_below=CLOSE_BELOW
+        "hisse",
+        D(deviation),
+        open_direction=open_direction,
+        open_above=OPEN_ABOVE,
+        close_below=CLOSE_BELOW,
     )
+
+
+OPENED_ABOVE = DriftEvent("opened", "above")
+OPENED_BELOW = DriftEvent("opened", "below")
+RESOLVED_ABOVE = DriftEvent("resolved", "above")
+RESOLVED_BELOW = DriftEvent("resolved", "below")
 
 
 class TestHysteresis:
     @pytest.mark.parametrize(
-        ("deviation", "was_open", "is_open", "transition", "direction"),
+        ("deviation", "open_before", "open_after", "events"),
         [
-            ("0.0501", False, True, "opened", "above"),
-            ("0.05", False, False, None, "above"),
-            ("0.04", True, True, None, "above"),
-            ("0.03", True, True, None, "above"),
-            ("0.0299", True, False, "resolved", "above"),
-            ("0.02", False, False, None, "above"),
-            ("-0.0501", False, True, "opened", "below"),
-            ("-0.05", False, False, None, "below"),
-            ("-0.03", True, True, None, "below"),
-            ("-0.0299", True, False, "resolved", "below"),
+            ("0.0501", None, "above", (OPENED_ABOVE,)),
+            ("0.05", None, None, ()),
+            ("0.04", "above", "above", ()),
+            ("0.03", "above", "above", ()),
+            ("0.0299", "above", None, (RESOLVED_ABOVE,)),
+            ("0.02", None, None, ()),
+            ("-0.0501", None, "below", (OPENED_BELOW,)),
+            ("-0.05", None, None, ()),
+            ("-0.03", "below", "below", ()),
+            ("-0.0299", "below", None, (RESOLVED_BELOW,)),
+            ("0", "above", None, (RESOLVED_ABOVE,)),
         ],
     )
     def test_thresholds(
         self,
         deviation: str,
-        was_open: bool,
-        is_open: bool,
-        transition: str | None,
-        direction: str,
+        open_before: Direction | None,
+        open_after: Direction | None,
+        events: tuple[DriftEvent, ...],
     ) -> None:
-        assert _drift(deviation, was_open=was_open) == DriftDecision(
-            f"drift:hisse:{direction}",
-            is_open,
-            transition,  # type: ignore[arg-type]
-        )
+        assert _drift(deviation, open_before) == DriftDecision("drift:hisse", open_after, events)
+
+    def test_sign_change_within_open_threshold_only_resolves(self) -> None:
+        decision = _drift("-0.04", "above")
+        assert decision.events == (RESOLVED_ABOVE,)
+        assert not decision.is_open
+
+    @pytest.mark.parametrize(
+        ("deviation", "open_before", "events", "open_after"),
+        [
+            ("-0.06", "above", (RESOLVED_ABOVE, OPENED_BELOW), "below"),
+            ("0.06", "below", (RESOLVED_BELOW, OPENED_ABOVE), "above"),
+        ],
+    )
+    def test_sign_change_beyond_open_threshold_resolves_and_reopens(
+        self,
+        deviation: str,
+        open_before: Direction,
+        events: tuple[DriftEvent, ...],
+        open_after: Direction,
+    ) -> None:
+        decision = _drift(deviation, open_before)
+        assert decision.events == events
+        assert decision.open_direction == open_after
+
+    def test_fingerprint_is_one_per_class_regardless_of_direction(self) -> None:
+        decisions = [_drift("0.06", None), _drift("-0.06", None), _drift("-0.06", "above")]
+        assert {d.fingerprint for d in decisions} == {drift_fingerprint("hisse")} == {"drift:hisse"}
 
     def test_close_threshold_must_be_below_open_threshold(self) -> None:
         with pytest.raises(DomainError):
             evaluate_drift(
-                "hisse", D("0.1"), was_open=False, open_above=D("0.03"), close_below=D("0.05")
+                "hisse", D("0.1"), open_direction=None, open_above=D("0.03"), close_below=D("0.05")
             )
 
     @given(
-        st.booleans(),
         st.lists(st.decimals(min_value=CLOSE_BELOW, max_value=OPEN_ABOVE, places=6), min_size=1),
+        st.booleans(),
         st.booleans(),
     )
     def test_no_flapping_inside_the_band(
-        self, was_open: bool, magnitudes: list[Decimal], negative: bool
+        self, magnitudes: list[Decimal], negative: bool, starts_open: bool
     ) -> None:
-        state = was_open
+        side: Direction = "below" if negative else "above"
+        state: Direction | None = side if starts_open else None
         for magnitude in magnitudes:
-            decision = evaluate_drift(
-                "hisse",
-                -magnitude if negative else magnitude,
-                was_open=state,
-                open_above=OPEN_ABOVE,
-                close_below=CLOSE_BELOW,
-            )
-            assert decision.transition is None
-            state = decision.is_open
-        assert state is was_open
+            decision = _drift(-magnitude if negative else magnitude, state)
+            assert decision.events == ()
+            state = decision.open_direction
+        assert state == (side if starts_open else None)
+
+    @given(st.lists(st.decimals(min_value=D("-0.2"), max_value=D("0.2"), places=4), max_size=60))
+    def test_at_most_one_open_alarm_and_every_opening_is_resolved(
+        self, deviations_: list[Decimal]
+    ) -> None:
+        state: Direction | None = None
+        opened = resolved = 0
+        for deviation in [*deviations_, D(0)]:
+            decision = _drift(deviation, state)
+            replay = state
+            for event in decision.events:
+                if event.kind == "resolved":
+                    assert replay == event.direction
+                    replay = None
+                    resolved += 1
+                else:
+                    assert replay is None
+                    replay = event.direction
+                    opened += 1
+            assert replay == decision.open_direction
+            state = decision.open_direction
+        assert state is None
+        assert opened == resolved
 
 
 @pytest.mark.parametrize(

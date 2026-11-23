@@ -261,11 +261,11 @@ CREATE TABLE job_run (                  -- her deneme ayrı satır
 CREATE UNIQUE INDEX job_run_ok ON job_run (job, logical_date) WHERE status = 'ok';
 
 CREATE TABLE alert (
-  fingerprint TEXT PRIMARY KEY,          -- ör. drift:hisse:above
+  fingerprint TEXT PRIMARY KEY,          -- ör. drift:hisse (sınıf başına tek; yön payload'da)
   state       TEXT NOT NULL CHECK (state IN ('open','resolved')),
   first_seen  TEXT NOT NULL,
   last_sent   TEXT,
-  payload     TEXT NOT NULL
+  payload     TEXT NOT NULL              -- JSON: yön (above | below), sapma, eşikler
 ) STRICT;
 
 CREATE TABLE raw_payload (               -- hata ayıklama için ham yanıt; 30 günden eskisi yedek işinde silinir
@@ -440,6 +440,10 @@ Reel XIRR'da her akış E[ref(t)] / E[ref(t_i)] ile çarpılır. Son akışta t_
 
 - Sınıf ağırlığı w = sınıf değeri / toplam değer. Sapma = w − hedef.
 - Histerezis: uyarı sapma 5 puanı geçince açılır, 3 puanın altına inince kapanır. Aynı uyarı (fingerprint) 7 gün içinde tekrar gönderilmez.
+  - Alarm kimliği sınıf başına tektir: `drift:{sınıf}`. Yön (hedefin üstü ya da altı) alarmın içeriğinde durur. Böylece aynı sınıf için aynı anda en fazla bir açık alarm olur.
+  - Açık bir alarm varken sapmanın işareti değişirse eski alarm kapanır ("resolved"). Ters yön, açık alarm yokmuş gibi, yani açılma eşiğiyle (5 puan) değerlendirilir. Örneğin +4 puanda açık bir alarm, sapma −4 puan olunca yalnızca kapanır; −6 puan olunca kapanır ve ters yönde yeniden açılır.
+  - Tek değerlendirme bu yüzden iki geçiş üretebilir. Sonuç, sıralı bir olay listesi taşır: önce "kapandı", sonra "açıldı".
+  - Sapma tam sıfırsa işaret değişmiş sayılmaz; açık alarm, kapanma eşiğinin altında kaldığı için normal yoldan kapanır.
 - Dengeleme yalnızca yeni birikimle yapılır, çünkü satış komisyon ve stopaj doğurur. K bu ayki katkı, V toplam değer, h hedef ağırlıktır. K, `portfolio.toml` içinde `[contribution]` bölümünde tanımlanır ve `ft report monthly --contribution` ile geçersiz kılınabilir.
 
 ```latex
@@ -728,6 +732,7 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-42 | Aynı gün önce alımlar, sonra satışlar. Aynı gün aynı enstrümandaki alımlar tek lotta birleşir; aynı günün satışları FIFO'dan birlikte düşülür ve maliyet adetle orantılı paylaştırılır | Yalnızca türler arası sıralama, aynı gün farklı fiyatlı alımlarda sonucu girdi sırasına bağımlı bırakıyordu | Hesap motoru |
 | K-43 | K-23 ve K-40'ı günceller: M3'te TÜFE 2025=100 serisi tüm geçmişiyle doğrudan çekilir; çalışma anında zincirleme yapılmaz. `chain_link` test edilmiş yedek olarak kalır | TÜİK 2005–2025'i yeni bazda, zincir yapısını ve manşet oranları koruyarak yeniden yayımladı; Aralık zincirlemesi TÜİK'in yeni baz değerlerini 7 basamakta üretiyor | Veri toplama |
 | K-44 | Para ağırlıklı getirinin kökü [−0,99; 10] dışındaysa (alt ya da üst), rapor basit getiriyi ve "Zamanlama nedeniyle para ağırlıklı getiri anlamlı değil." notunu gösterir; domain sonucu bu durumu "hesaplanamadı"dan ayırır (M4) | Paranın zamanlaması uç bir orana yol açtığında rakam yanıltıcıdır; "hesaplanamadı" ile karışmamalı | Hesap motoru, Raporlama |
+| K-45 | Sapma alarmının kimliği sınıf başına tek (`drift:{sınıf}`); yön alarm içeriğinde. Açıkken işaret değişirse eski alarm kapanır ve ters yön açılma eşiğiyle değerlendirilir; tek değerlendirme sıralı iki olay ("kapandı", "açıldı") üretebilir | Yön içeren kimlikte, işaret değişince eski alarmı kapatan kimse olmuyordu: alarm ya asılı kalıyor ya da yeni yön bildirimsiz açılıyordu | Hesap motoru, Veri modeli |
 
 ## Planı kodlama ajanıyla uygulama
 

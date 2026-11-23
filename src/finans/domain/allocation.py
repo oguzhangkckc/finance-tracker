@@ -7,14 +7,25 @@ from typing import Literal
 from finans.domain.models import ZERO, DomainError
 from finans.domain.numeric import in_domain_context
 
-Transition = Literal["opened", "resolved"]
+Direction = Literal["above", "below"]
+EventKind = Literal["opened", "resolved"]
+
+
+@dataclass(frozen=True, slots=True)
+class DriftEvent:
+    kind: EventKind
+    direction: Direction
 
 
 @dataclass(frozen=True, slots=True)
 class DriftDecision:
     fingerprint: str
-    is_open: bool
-    transition: Transition | None
+    open_direction: Direction | None
+    events: tuple[DriftEvent, ...]
+
+    @property
+    def is_open(self) -> bool:
+        return self.open_direction is not None
 
 
 def _require_non_negative(values: Mapping[str, Decimal], what: str) -> None:
@@ -58,11 +69,16 @@ def deviations(
 
 
 @in_domain_context
+def drift_fingerprint(asset_class: str) -> str:
+    return f"drift:{asset_class}"
+
+
+@in_domain_context
 def evaluate_drift(
     asset_class: str,
     deviation: Decimal,
     *,
-    was_open: bool,
+    open_direction: Direction | None,
     open_above: Decimal,
     close_below: Decimal,
 ) -> DriftDecision:
@@ -71,14 +87,17 @@ def evaluate_drift(
             f"Kapanma eşiği ({close_below}) açılma eşiğinin ({open_above}) altında olmalı"
         )
     magnitude = abs(deviation)
-    is_open = magnitude >= close_below if was_open else magnitude > open_above
-    transition: Transition | None = None
-    if is_open and not was_open:
-        transition = "opened"
-    elif was_open and not is_open:
-        transition = "resolved"
-    direction = "above" if deviation >= ZERO else "below"
-    return DriftDecision(f"drift:{asset_class}:{direction}", is_open, transition)
+    events: list[DriftEvent] = []
+    current = open_direction
+    if current is not None:
+        crossed = deviation < ZERO if current == "above" else deviation > ZERO
+        if crossed or magnitude < close_below:
+            events.append(DriftEvent("resolved", current))
+            current = None
+    if current is None and magnitude > open_above:
+        current = "above" if deviation > ZERO else "below"
+        events.append(DriftEvent("opened", current))
+    return DriftDecision(drift_fingerprint(asset_class), current, tuple(events))
 
 
 @in_domain_context
