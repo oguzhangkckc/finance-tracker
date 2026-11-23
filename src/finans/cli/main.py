@@ -11,6 +11,8 @@ from pydantic import ValidationError
 
 from finans import bootstrap
 from finans.application.portfolio_config import ApplyReport, apply_portfolio
+from finans.application.portfolio_view import portfolio_as_of
+from finans.application.prices import set_manual_price
 from finans.application.transactions import (
     add_transaction,
     import_transactions,
@@ -29,9 +31,13 @@ app = typer.Typer(
 db_app = typer.Typer(no_args_is_help=True, help="Veritabanı işlemleri.")
 config_app = typer.Typer(no_args_is_help=True, help="Portföy tanımı (portfolio.toml).")
 tx_app = typer.Typer(no_args_is_help=True, help="İşlemler.")
+price_app = typer.Typer(
+    no_args_is_help=True, help="Elle girilen fiyatlar (yalnızca MANUAL varlıklar)."
+)
 app.add_typer(db_app, name="db")
 app.add_typer(config_app, name="config")
 app.add_typer(tx_app, name="tx")
+app.add_typer(price_app, name="price")
 
 
 class SideChoice(StrEnum):
@@ -169,6 +175,63 @@ def tx_import(
         raise typer.Exit(code=1)
     verb, skip = ("Eklenecek", "atlanacak") if dry_run else ("Eklendi", "atlandı")
     typer.echo(f"{verb}: {len(report.added)}, {skip} (zaten var): {len(report.skipped)}")
+
+
+@price_app.command("set")
+def price_set(
+    code: Annotated[str, typer.Argument(help="Varlık kodu")],
+    on: Annotated[str, typer.Argument(help="Fiyat günü (YYYY-AA-GG)")],
+    price: Annotated[str, typer.Argument(help="Birim fiyat (TL)")],
+) -> None:
+    """MANUAL bir varlığın o günkü birim fiyatını kaydeder."""
+    settings = _load_settings_or_exit()
+    day, amount = _parse_date(on), _parse_decimal("price", price)
+    with _user_errors(), bootstrap.open_unit_of_work(settings) as uow:
+        write = set_manual_price(uow, code, day, amount, now=bootstrap.system_clock().now())
+    if write.status == "inserted":
+        typer.echo("Fiyat kaydedildi.")
+    elif write.status == "unchanged":
+        typer.echo("Fiyat aynı; değişiklik yok.")
+    else:
+        previous = "?" if write.previous is None else canonical_text(write.previous)
+        typer.echo(f"Fiyat güncellendi; önceki değer {previous}.")
+
+
+@app.command("value")
+def value(
+    on: Annotated[str | None, typer.Option("--on", help="Değerleme günü; verilmezse bugün")] = None,
+) -> None:
+    """Portföyün verilen gündeki değerini gösterir."""
+    settings = _load_settings_or_exit()
+    day = bootstrap.system_clock().today() if on is None else _parse_date(on)
+    with _user_errors(), bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+        view = portfolio_as_of(uow, day)
+    typer.echo(f"Değerleme: {day.isoformat()}")
+    valuation = view.valuation
+    if not valuation.holdings:
+        typer.echo("Pozisyon yok.")
+        return
+    for holding in valuation.holdings:
+        units, cost = canonical_text(holding.units), canonical_text(holding.cost)
+        if holding.price is None or holding.value is None:
+            typer.echo(f"{holding.instrument}  {units} adet  fiyat yok  maliyet {cost}")
+            continue
+        typer.echo(
+            f"{holding.instrument}  {units} adet × {canonical_text(holding.price.price)} "
+            f"({holding.price.price_date.isoformat()}) = {canonical_text(holding.value)}"
+            f"  maliyet {cost}"
+        )
+    typer.echo(
+        f"Toplam değer: {canonical_text(valuation.total_value)} "
+        f"(fiyatı olan varlıkların maliyeti {canonical_text(valuation.priced_cost)})"
+    )
+    if view.simple_return is None:
+        typer.echo("Basit getiri: hesaplanamadı")
+    else:
+        typer.echo(f"Basit getiri: %{(view.simple_return * 100).quantize(Decimal('0.01'))}")
+    typer.echo(f"Gerçekleşmiş K/Z: {canonical_text(view.realized_pnl)}")
+    if valuation.missing_prices:
+        typer.echo(f"Fiyatı eksik: {', '.join(valuation.missing_prices)}")
 
 
 def _format_transaction(stored: StoredTransaction) -> str:
