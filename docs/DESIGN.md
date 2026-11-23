@@ -183,9 +183,37 @@ Katman kuralları (yukarıdan aşağıya: cli → bootstrap → settings → app
 
 Tek doğruluk kaynağı işlem tablosudur; pozisyonlar ve lotlar saklanmaz, her seferinde türetilir. Yüzlerce işlemlik bir portföyde bu milisaniyeler sürer ve senkronizasyon hatası riskini sıfırlar.
 
-Para, fiyat ve adet değerleri SQLite'ta kanonik Decimal string olarak (TEXT) tutulur, asla REAL değil. Kanonik biçim üstel gösterim içermez ve sondaki sıfırları atar (ör. `10`, `1.5`); tek bir dönüştürücü fonksiyon üretir. Dönüşüm yalnızca repository sınırında yapılır. Bu kolonlar SQL içinde toplanmaz, sıralanmaz ve sayı olarak karşılaştırılmaz, çünkü TEXT üzerinde bu işlemler sözlük sırasıyla çalışır ve yanlış sonuç verir. Tüm hesap Python'da yapılır. Tarihler ISO 8601 string, zaman damgaları UTC'dir; iş mantığındaki tarihler Europe/Istanbul takvim günüdür.
+Para, fiyat ve adet değerleri SQLite'ta kanonik Decimal string olarak (TEXT) tutulur, asla REAL değil. Kanonik biçim üstel gösterim içermez ve sondaki sıfırları atar (ör. `10`, `1.5`); tek bir dönüştürücü fonksiyon, `format(d.normalize(), "f")` ile üretir. `normalize()` tek başına kullanılmaz, çünkü `Decimal("100").normalize()` `1E+2` verir. `-0` her zaman `0` olarak yazılır (K-52). Dönüşüm yalnızca repository sınırında yapılır. Bu kolonlar SQL içinde toplanmaz, sıralanmaz ve sayı olarak karşılaştırılmaz, çünkü TEXT üzerinde bu işlemler sözlük sırasıyla çalışır ve yanlış sonuç verir. Tüm hesap Python'da yapılır. Tarihler ISO 8601 string, zaman damgaları UTC'dir; iş mantığındaki tarihler Europe/Istanbul takvim günüdür.
 
 Varlık tanımlarının kaynağı `portfolio.toml`'dur. `ft config apply` komutu tanımları instrument tablosuna idempotent olarak yazar; dosyadan çıkarılan varlık silinmez, `active=0` olur, çünkü işlemler ona bağlıdır. Yükleme sırasında iki şey doğrulanır: hedef dağılımdaki sınıf kümesi varlık sınıflarıyla birebir aynıdır ve hedeflerin toplamı 1'dir.
+
+**Config doğrulaması ve hata mesajları (M2, K-47).**
+- TOML, `tomllib` ile `parse_float=Decimal` kullanılarak okunur; float hiç oluşmaz (K-32 ile aynı ilke).
+- Bütün hatalar tek seferde toplanır ve birlikte gösterilir; ilk hatada durulmaz. Doğrulama hatası varsa veritabanına hiçbir şey yazılmaz.
+- Her mesaj dört şey içerir: hatanın yeri (ör. `instruments[2].kind`), verilen değer, beklenen ve mümkünse somut bir düzeltme önerisi. Değerler dosyada yazıldığı gibi (ondalık nokta ile) gösterilir.
+- Örnekler:
+  - Hedef toplamı: `targets: ağırlıkların toplamı 1 olmalı, şu an 0.9999 (eksik 0.0001). Örneğin altin değerini 0.3333 yerine 0.3334 yaparsan toplam tam 1 olur (0.3333 + 0.3333 + 0.3334).` Öneri, farkı listedeki son sınıfa ekleyerek hesaplanır.
+  - Geçersiz tür: `instruments[2].kind: "TEFAS" geçersiz; TEFAS_YAT, TEFAS_EMK, TEFAS_BYF ya da MANUAL olmalı.`
+  - Hedefte olmayan sınıf: `instruments[1].asset_class: "kripto" hedeflerde yok. Hedef sınıflar: altin, dusuk_risk, hisse.`
+  - Varlığı olmayan hedef: `targets.emtia: bu sınıfta tanımlı varlık yok.`
+  - Tekrarlanan kod: `instruments[3].code: "TTE" iki kez tanımlı (ilki instruments[0]).`
+
+**Pasif enstrüman (M2, K-51).** Dosyadan çıkarılan enstrüman pasif olur. Pasif enstrümana alış girilemez, satış girilebilir; böylece elde kalan pay çıkarılabilir. Elde pay varken pasif yapılan bir enstrüman için `ft config apply` uyarı verir; `ft doctor` da aynı durumu kontrol eder.
+
+**İşlem iptali (M2, K-48).** İşlemler silinmez. Yanlış girilen bir işlem `ft tx void ID --reason "…"` ile iptal edilir ve doğrusu yeniden girilir.
+- `voided_at` ve `void_reason` birlikte dolar; gerekçe zorunludur. İptal edilen işlem pozisyon hesabında yok sayılır, kaydı ve gerekçesi kalır.
+- `external_ref` tekilliği yalnızca iptal edilmemiş işlemler arasındadır (kısmi index). Böylece iptal edilen bir kaydın doğrusu aynı ref ile yeniden içe aktarılabilir.
+- Bir iptal, sonraki satışları geçersiz kılıyorsa reddedilir. Örneğin bir alışın iptali sonraki satışları fazla satışa düşürüyorsa. Kontrol, iptal sonrası bütün geçmişle domain'de yapılır.
+- `ft tx list` iptal edilen işlemleri varsayılan olarak göstermez; `--all` ile gösterir.
+
+**İşlem içe aktarma (M2, K-50).** CSV biçimi: `date,code,side,units,price,fee,ref,note`; UTF-8, ondalık nokta, başlık zorunlu. Ya bütün satırlar yazılır ya hiçbiri; hatalar satır numarasıyla birlikte toplanır.
+- **Özet:** Her satırın içerik özeti, `date, code, side, units, price, fee` alanlarının kanonik halinden sha256 ile hesaplanır. `ref` boşsa özet ref olarak kullanılır.
+- **Aynı içerik:** Aynı ref ve aynı özet, ya da ref'siz ama özeti mevcut bir kayıtla aynı satır, zaten içe aktarılmış sayılır ve atlanır.
+- **Durduran durumlar:** Aşağıdakiler raporlanır ve içe aktarma durur:
+  - Aynı ref ama farklı özet. Düzeltmek için önce eski kayıt iptal edilir.
+  - Tarih, kod, yön ve adedi mevcut bir kayıtla ya da aynı dosyadaki başka bir satırla aynı ama özeti farklı satır: "olası düzeltme ya da çift kayıt".
+  - Aynı dosyada ref'siz, birebir aynı iki satır. Aynı gün aynı işlem gerçekten iki kez yapıldıysa ref yazılmalıdır.
+- Karşılaştırmalar yalnızca iptal edilmemiş kayıtlarla yapılır.
 
 Bağlantı ayarları şemada değil, her bağlantıyı açan fabrikadadır. Bunun sebebi, `journal_mode` değişikliğinin transaction içinde hata vermesi ve `foreign_keys`'in bağlantı bazlı bir ayar olmasıdır. Her bağlantıda `journal_mode=WAL`, `foreign_keys=ON` ve `busy_timeout=5000` ayarlanır; salt okunur bağlantıda ayrıca `query_only=ON`.
 
@@ -199,6 +227,7 @@ CREATE TABLE _migration (                -- uygulanan dosyaların özeti; deği�
   applied_at  TEXT NOT NULL
 ) STRICT;
 
+-- 0001_init (M2): instrument, txn, price, price_revision
 CREATE TABLE instrument (
   id          INTEGER PRIMARY KEY,
   code        TEXT NOT NULL UNIQUE,      -- TEFAS kodu veya elle verilen anahtar
@@ -209,36 +238,42 @@ CREATE TABLE instrument (
   active      INTEGER NOT NULL DEFAULT 1
 ) STRICT;
 
-CREATE TABLE txn (
+CREATE TABLE txn (                      -- silinmez; düzeltme iptal (void) ile yapılır
   id            INTEGER PRIMARY KEY,
   instrument_id INTEGER NOT NULL REFERENCES instrument(id),
-  trade_date    TEXT NOT NULL,           -- fiyatın uygulandığı gün (emir ya da valör günü değil)
+  trade_date    TEXT NOT NULL CHECK (date(trade_date) IS trade_date),  -- fiyatın uygulandığı gün
   side          TEXT NOT NULL CHECK (side IN ('BUY','SELL')),
   units         TEXT NOT NULL,           -- Decimal
   unit_price    TEXT NOT NULL,           -- Decimal
   fee           TEXT NOT NULL DEFAULT '0',
-  external_ref  TEXT UNIQUE,             -- CSV içe aktarmada tekrar engeli
+  external_ref  TEXT,                    -- içe aktarmada tekrar engeli; ref yoksa içerik özeti
   note          TEXT,
-  created_at    TEXT NOT NULL
+  created_at    TEXT NOT NULL,
+  voided_at     TEXT,                    -- iptal zamanı; iptal edilen işlem pozisyonda yok sayılır
+  void_reason   TEXT,
+  CHECK ((voided_at IS NULL) = (void_reason IS NULL))
 ) STRICT;
+
+CREATE UNIQUE INDEX txn_external_ref ON txn (external_ref) WHERE voided_at IS NULL;
 
 CREATE TABLE price (
   instrument_id INTEGER NOT NULL REFERENCES instrument(id),
-  price_date    TEXT NOT NULL,
+  price_date    TEXT NOT NULL CHECK (date(price_date) IS price_date),
   price         TEXT NOT NULL,
-  source        TEXT NOT NULL,           -- tefas | manual
+  source        TEXT NOT NULL CHECK (source IN ('tefas','manual')),
   fetched_at    TEXT NOT NULL,
   PRIMARY KEY (instrument_id, price_date)
 ) STRICT, WITHOUT ROWID;
 
 CREATE TABLE price_revision (            -- aynı gün için fiyat değişirse iz kalır
-  instrument_id INTEGER NOT NULL,
-  price_date    TEXT NOT NULL,
+  instrument_id INTEGER NOT NULL REFERENCES instrument(id),
+  price_date    TEXT NOT NULL CHECK (date(price_date) IS price_date),
   old_price     TEXT NOT NULL,
   new_price     TEXT NOT NULL,
   revised_at    TEXT NOT NULL
 ) STRICT;
 
+-- 0002 (M3): cpi, raw_payload
 CREATE TABLE cpi (
   series_code TEXT NOT NULL,
   period      TEXT NOT NULL,             -- YYYY-MM
@@ -248,6 +283,15 @@ CREATE TABLE cpi (
   PRIMARY KEY (series_code, period)
 ) STRICT, WITHOUT ROWID;
 
+CREATE TABLE raw_payload (               -- hata ayıklama için ham yanıt; 30 günden eskisi yedek işinde silinir
+  id          INTEGER PRIMARY KEY,
+  source      TEXT NOT NULL,
+  request_key TEXT NOT NULL,
+  fetched_at  TEXT NOT NULL,
+  body        BLOB NOT NULL
+) STRICT;
+
+-- 0003 (M4): job_run, alert, alert_event
 CREATE TABLE job_run (                  -- her deneme ayrı satır
   id            INTEGER PRIMARY KEY,
   job           TEXT NOT NULL,
@@ -260,20 +304,25 @@ CREATE TABLE job_run (                  -- her deneme ayrı satır
 
 CREATE UNIQUE INDEX job_run_ok ON job_run (job, logical_date) WHERE status = 'ok';
 
-CREATE TABLE alert (
-  fingerprint TEXT PRIMARY KEY,          -- ör. drift:hisse (sınıf başına tek; yön payload'da)
-  state       TEXT NOT NULL CHECK (state IN ('open','resolved')),
-  first_seen  TEXT NOT NULL,
-  last_sent   TEXT,
-  payload     TEXT NOT NULL              -- JSON: yön (above | below), sapma, eşikler
+CREATE TABLE alert (                     -- her sınıfın güncel alarm durumu
+  fingerprint      TEXT PRIMARY KEY,     -- drift:{sınıf}; sınıf başına tek (K-45)
+  state            TEXT NOT NULL CHECK (state IN ('open','resolved')),
+  direction        TEXT CHECK (direction IN ('above','below')),  -- yalnızca açıkken dolu
+  opened_at        TEXT NOT NULL,        -- son açılış zamanı
+  resolved_at      TEXT,                 -- son kapanış zamanı
+  last_notified_at TEXT,                 -- son bildirim; hatırlatma engeli buna göre (K-46)
+  payload          TEXT NOT NULL,        -- JSON: sapma, eşikler
+  CHECK ((state = 'open') = (direction IS NOT NULL))
 ) STRICT;
 
-CREATE TABLE raw_payload (               -- hata ayıklama için ham yanıt; 30 günden eskisi yedek işinde silinir
+CREATE TABLE alert_event (               -- olay günlüğü; yalnızca eklenir
   id          INTEGER PRIMARY KEY,
-  source      TEXT NOT NULL,
-  request_key TEXT NOT NULL,
-  fetched_at  TEXT NOT NULL,
-  body        BLOB NOT NULL
+  fingerprint TEXT NOT NULL,
+  kind        TEXT NOT NULL CHECK (kind IN ('opened','resolved')),
+  direction   TEXT NOT NULL CHECK (direction IN ('above','below')),
+  deviation   TEXT NOT NULL,             -- Decimal
+  occurred_at TEXT NOT NULL,
+  notified_at TEXT
 ) STRICT;
 ```
 
@@ -290,6 +339,11 @@ Migration dosyaları paketin içinde (`src/finans/adapters/sqlite/migrations/`) 
   4. COMMIT. Ardından, başarıda da hatada da `PRAGMA foreign_keys = ON` yapılır.
 
   Tanınmayan bir `-- finans:` başlığı hata verir; böylece yazım hatası sessizce yok sayılmaz. Bu durumda atomiklik grup bazındadır: bekleyen migration'lar işaretli migration'larda gruplara bölünür ve her grup kendi transaction'ında atomiktir. Sonraki bir grup başarısız olursa önceki gruplar uygulanmış kalır.
+
+  Ayrıntılar (M2):
+  - Başlık yalnızca dosyanın ilk satırında geçerlidir. `-- finans:` ile başlayan bir satır dosyanın başka bir yerindeyse çalıştırıcı hata verir; yanlış yere yazılmış bir başlık sessizce etkisiz kalmasın.
+  - Adım 4'ten sonra `PRAGMA foreign_keys` tekrar okunur ve 1 olduğu doğrulanır. Bağlantı, foreign key kontrolü kapalı halde bırakılmaz.
+  - Migration yazarı için yeniden kurma kalıbı, SQLite'ın önerdiği sıradır: yeni tabloyu geçici adla oluştur, verileri kopyala, eskisini sil, yenisinin adını değiştir, index ve trigger'ları yeniden oluştur. `legacy_alter_table` varsayılan değerinde (OFF) kalır; böylece diğer tabloların foreign key başvuruları yeni tabloya bağlanır.
 
 Yedekleme her gece sqlite3 .backup ile alınır, şifrelenip makine dışına kopyalanır; geri yükleme ayda bir test edilir.
 
@@ -356,7 +410,8 @@ Her senkronizasyondan sonra çalışır; sonuçlar uyarıya ve raporun "Veri sor
 | Sıçrama | Günlük değişim sınıf/kategori eşiğini aşıyor (ör. para_piyasasi %1, hisse %15) | Şüpheli işaretle, raporda göster |
 | Monotonluk | category = para_piyasasi olan fonun fiyatı düştü | Uyarı (ya veri hatası ya olağandışı olay) |
 | Boşluk | Komşu fonlarda olan bir tarih bu fonda yok | Backfill tetikle |
-| Revizyon | Kayıtlı bir günün fiyatı değişti | price_revision'a yaz, uyarı |
+| Revizyon | Kayıtlı bir günün fiyatı değişti. Eski ve yeni değer Decimal olarak karşılaştırılır; `10` ile `10.0` aynı fiyattır (K-52) | price_revision'a yaz, uyarı |
+| İşlem fiyatı (M3) | Girilen bir işlemin birim fiyatı, o günün TEFAS fiyatından eşikten fazla farklı. Eşik M3'te belirlenir | Uyarı: büyük olasılıkla işlem yanlış tarihle girildi (K-53) |
 
 ## Hesap motoru
 
@@ -368,7 +423,16 @@ Bu bağlamda `decimal.FloatOperation` trap'i açıktır (M1). Float'tan Decimal 
 
 ### Pozisyon ve değerleme
 
-- Lotlar işlemlerden türetilir. Satışlar FIFO ile en eski lotlardan düşülür; ortalama maliyet desteklenmez. GVK geçici 67. madde stopajında da maliyetin FIFO ile bulunduğu M2'de birincil kaynakla doğrulanacak ve kaynağıyla birlikte buraya yazılacak.
+- Lotlar işlemlerden türetilir; iptal edilen (void) işlemler yok sayılır (K-48). Satışlar FIFO ile en eski lotlardan düşülür; ortalama maliyet desteklenmez. GVK geçici 67 ile uyum aşağıdaki maddede (K-54).
+- **GVK geçici 67 ile uyum (doğrulandı, K-54).** FIFO kanunun kendisinde yazılı. Geçici madde 67, fıkra (1), ikinci paragraf (22/12/2005 tarihli 5436 sayılı Kanunla değişik): "Aynı menkul kıymet ve diğer sermaye piyasası aracından değişik tarihlerde alımlar yapıldıktan sonra bunların bir kısmının elden çıkarılması halinde, ilk giren ilk çıkar yöntemi kullanılmak suretiyle, tevkifat matrahının tespitinde dikkate alınacak alış bedeli belirlenir." Kaynak: [mevzuat.gov.tr, 193 sayılı Gelir Vergisi Kanunu](https://www.mevzuat.gov.tr/mevzuat?MevzuatNo=193&MevzuatTur=1&MevzuatTertip=4), 1 Temmuz 2026 tarihli metin.
+  - **Fon paylarına uygulanması.** Hüküm genel ("menkul kıymet ve diğer sermaye piyasası aracı"); hiçbir cümle katılma payları ile FIFO'yu birlikte anmıyor. Fon payları fıkra (1)'in kapsamında; bu da birincil kaynaklardan çıkıyor:
+    - Kanunun aynı fıkrasındaki istisna cümlesi yalnızca hisse senedi yoğun fonların bir yıldan uzun tutulan paylarını kapsam dışı bırakıyor.
+    - GİB'in "G.V.K. Geçici 67'nci Madde … Vergi Rehberi" (Şubat 2026, Yayın No: 598), bölüm 20: "yatırım fonu katılma paylarından elde edilen gelirler geçici 67 nci maddenin (1) numaralı fıkrası kapsamında nihai olarak tevkifat yoluyla vergilendirilmekte".
+    - 258 seri GVK Genel Tebliği §1.1.2 (RG 30/09/2006, sayı 26305) fon iadelerinin fıkra (1) kapsamına alındığını belirtiyor.
+
+    Yani FIFO'nun fon paylarına uygulandığı tek bir açık cümleyle değil, birincil hükümlerin birlikte okunmasıyla doğrulanıyor.
+  - **K-42 ile uyum.** Aynı paragrafın devamı: "Aynı gün içerisindeki işlemlerde ağırlıklı ortalama yöntemi kullanılabilir." Aynı günün alımlarını tek lotta birleştirmek ve satış maliyetini adetle orantılı paylaştırmak bu yöntemdir. Komisyonlar da maliyete dahildir: "Alış ve satış işlemleri dolayısıyla ödenen komisyonlar ile Banka ve Sigorta Muameleleri Vergisi tevkifat matrahının tespitinde dikkate alınır."
+  - **Stopaj genişleme noktası için not.** Fon stopaj oranı her lotun alım tarihine göre değişiyor; hisse senedi yoğun fonlarda bir yıllık elde tutma testi de alım tarihine bakıyor. Lotlar alım tarihini zaten taşıyor (`Lot.acquired`).
 - As-of değerleme, t tarihinde ve öncesinde açıklanan son fiyatı kullanır. Kullanılan fiyat tarihi her kalemle birlikte rapora yazılır.
 - Komisyon maliyete eklenir; satışta gelirden düşülür.
 - Kısmen satılmış bir lotun kalan maliyeti kalan adetle orantılıdır: M_kalan = M_lot × kalan adet / ilk adet (alış komisyonu dahil).
@@ -439,7 +503,7 @@ Reel XIRR'da her akış E[ref(t)] / E[ref(t_i)] ile çarpılır. Son akışta t_
 ### Dağılım, sapma ve dengeleme
 
 - Sınıf ağırlığı w = sınıf değeri / toplam değer. Sapma = w − hedef.
-- Histerezis: uyarı sapma 5 puanı geçince açılır, 3 puanın altına inince kapanır. Aynı uyarı (fingerprint) 7 gün içinde tekrar gönderilmez.
+- Histerezis: uyarı sapma 5 puanı geçince açılır, 3 puanın altına inince kapanır. Geçişler ("açıldı" ve "kapandı") her zaman bildirilir. 7 günlük engel yalnızca açık kalan bir alarmın tekrar hatırlatmalarına uygulanır (K-46).
   - Alarm kimliği sınıf başına tektir: `drift:{sınıf}`. Yön (hedefin üstü ya da altı) alarmın içeriğinde durur. Böylece aynı sınıf için aynı anda en fazla bir açık alarm olur.
   - Açık bir alarm varken sapmanın işareti değişirse eski alarm kapanır ("resolved"). Ters yön, açık alarm yokmuş gibi, yani açılma eşiğiyle (5 puan) değerlendirilir. Örneğin +4 puanda açık bir alarm, sapma −4 puan olunca yalnızca kapanır; −6 puan olunca kapanır ve ters yönde yeniden açılır.
   - Tek değerlendirme bu yüzden iki geçiş üretebilir. Sonuç, sıralı bir olay listesi taşır: önce "kapandı", sonra "açıldı".
@@ -495,6 +559,7 @@ Aylık rapor: haftalık içeriğe ek olarak kullanılan TÜFE dönemleri ve yıl
 
 - Notifier bir port'tur; e-posta veya ntfy gibi kanallar sonradan eklenebilir.
 - Uyarılar fingerprint ile tekilleştirilir; durumu açık ya da çözüldü olarak tutulur. Çözülen uyarı için tek bir "düzeldi" mesajı gider.
+- Geçişler ("açıldı", "kapandı"; aynı değerlendirmede ikisi birden de olabilir) her zaman bildirilir. Açık kalan bir alarm için hatırlatma, son bildirimden (`last_notified_at`) en az 7 gün sonra gönderilir. Bu engel geçiş bildirimlerini hiçbir zaman bastırmaz (K-46).
 - 23:00–08:00 arası sessiz saatlerdir. Bu saatlerde mesajlar bekletilmez; Telegram'ın `disable_notification=true` seçeneğiyle sessiz gönderilir. Bu sayede kuyruk tablosuna ve sabah gönderim işine gerek kalmaz.
 
 ## Zamanlama ve iş yönetimi
@@ -678,7 +743,7 @@ Açık sorular:
 - [ ] Hangi LLM sağlayıcısı ve aylık bütçe ne olacak?
 - [ ] TEFAS'ın kabul ettiği azami tarih aralığı ve fiyat yayın saati (ilk hafta deneysel olarak ölçülecek)
 - [ ] Elle değerlenen varlıklar için v2'de otomatik fiyat kaynağı istenecek mi?
-- [ ] GVK geçici 67 stopajında maliyetin FIFO ile bulunduğunun birincil kaynakla doğrulanması (M2)
+- [x] GVK geçici 67 stopajında maliyetin FIFO ile bulunduğunun birincil kaynakla doğrulanması: doğrulandı (K-54).
 - [ ] EVDS3'te API anahtarı başlıkta mı, parametrede mi? (M3'ün ilk işi)
 - [x] Anlık görüntülerin OpenClaw makinesine aktarım yöntemi: ayrı anahtar ve rrsync ile, yalnızca çekirdekten dışarı (K-27).
 
@@ -733,6 +798,15 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-43 | K-23 ve K-40'ı günceller: M3'te TÜFE 2025=100 serisi tüm geçmişiyle doğrudan çekilir; çalışma anında zincirleme yapılmaz. `chain_link` test edilmiş yedek olarak kalır | TÜİK 2005–2025'i yeni bazda, zincir yapısını ve manşet oranları koruyarak yeniden yayımladı; Aralık zincirlemesi TÜİK'in yeni baz değerlerini 7 basamakta üretiyor | Veri toplama |
 | K-44 | Para ağırlıklı getirinin kökü [−0,99; 10] dışındaysa (alt ya da üst), rapor basit getiriyi ve "Zamanlama nedeniyle para ağırlıklı getiri anlamlı değil." notunu gösterir; domain sonucu bu durumu "hesaplanamadı"dan ayırır (M4) | Paranın zamanlaması uç bir orana yol açtığında rakam yanıltıcıdır; "hesaplanamadı" ile karışmamalı | Hesap motoru, Raporlama |
 | K-45 | Sapma alarmının kimliği sınıf başına tek (`drift:{sınıf}`); yön alarm içeriğinde. Açıkken işaret değişirse eski alarm kapanır ve ters yön açılma eşiğiyle değerlendirilir; tek değerlendirme sıralı iki olay ("kapandı", "açıldı") üretebilir | Yön içeren kimlikte, işaret değişince eski alarmı kapatan kimse olmuyordu: alarm ya asılı kalıyor ya da yeni yön bildirimsiz açılıyordu | Hesap motoru, Veri modeli |
+| K-46 | Geçişler ("açıldı"/"kapandı") her zaman bildirilir; 7 günlük engel yalnızca açık alarmın tekrar hatırlatmalarına uygulanır (`last_notified_at`). `alert` tablosu buna göre: `direction`, `opened_at`, `resolved_at`, `last_notified_at` (M4) | Kimlik sınıf başına tek olunca engel yönler arasında da geçerli oluyordu; 7 gün içinde ters yönde açılan alarmın bildirimi bastırılabiliyordu | Bildirim, Veri modeli |
+| K-47 | Config doğrulaması: TOML `parse_float=Decimal` ile okunur; bütün hatalar tek seferde toplanır; her mesaj yer, verilen değer, beklenen ve somut düzeltme önerisi içerir; hata varsa hiçbir şey yazılmaz (M2) | Kullanıcı config'i elle yazıyor; tek tek hata düzeltmek yorucu, ondalık yuvarlama (0.3333 × 3) kolay düşülen bir tuzak | Veri modeli |
+| K-48 | İşlem düzeltme yolu: `ft tx void ID --reason`; `txn.voided_at` ve `void_reason` birlikte dolar; pozisyonlar iptal edilenleri yok sayar; `external_ref` tekilliği `WHERE voided_at IS NULL` kısmi index'iyle; sonraki satışları geçersiz kılan iptal reddedilir; `ft tx list` iptalleri `--all` ile gösterir | İşlemler silinmeden, iz bırakarak düzeltilebilmeli | Veri modeli, Hesap motoru |
+| K-49 | Şema milestone başına migration'la gelir: 0001 (M2) instrument, txn, price, price_revision; 0002 (M3) cpi, raw_payload; 0003 (M4) job_run, alert, alert_event | Her tablo onu kullanan kodla birlikte gelsin; migration mekanizması gerçek kullanımla sınansın | Veri modeli |
+| K-50 | CSV içe aktarma: içerik özeti (date, code, side, units, price, fee); ref boşsa özet ref olur; aynı içerik atlanır; aynı ref farklı özet, aynı tarih/kod/yön/adet ama farklı özet ("olası düzeltme ya da çift kayıt") ve dosyada ref'siz birebir aynı satırlar içe aktarmayı durdurur | Sessiz çift kayıt ve fark edilmeden üzerine yazılan düzeltme en tehlikeli veri hataları | Veri modeli |
+| K-51 | Pasif enstrümana alış girilemez, satış girilebilir; elde pay varken pasif yapılan enstrüman için `ft config apply` uyarır, `ft doctor` kontrol eder | Elde kalan pay çıkarılabilmeli; config'ten yanlışlıkla silinen varlık fark edilmeli | Veri modeli |
+| K-52 | Decimal kanonik biçimi `format(d.normalize(), "f")`; `-0` → `0`. Fiyat revizyonunda eski ve yeni değer Decimal olarak karşılaştırılır. Tarih kolonlarında `CHECK (date(kolon) IS kolon)` | `normalize()` tek başına `1E+2` üretir; metin karşılaştırması `10` ile `10.0`'ı farklı sayar; GLOB biçimi kontrol eder ama 2026-02-30 gibi geçersiz tarihleri kaçırır | Veri modeli |
+| K-53 | M3'te TEFAS fiyatları gelince her işlemin birim fiyatı o günün TEFAS fiyatıyla karşılaştırılır; eşik aşılırsa uyarı (büyük olasılıkla yanlış tarih) | `trade_date` fiyatın uygulandığı gün olduğu için fiyat tutmalı; tutmuyorsa tarih büyük olasılıkla yanlış | Veri kalitesi |
+| K-54 | K-18'i günceller: GVK geçici 67/1 ikinci paragraf FIFO'yu kanunla belirliyor; fon paylarına uygulanması kapsam hükümlerinin birlikte okunmasıyla (kanunun istisna cümlesi, GİB rehberi 2026 §20, 258 seri tebliğ §1.1.2). Aynı paragraftaki "aynı gün ağırlıklı ortalama" K-42 ile uyumlu | Birincil kaynakla doğrulama istendi; hiçbir cümle fon paylarını ve FIFO'yu birlikte anmadığı için bu ayrım açıkça yazıldı | Hesap motoru |
 
 ## Planı kodlama ajanıyla uygulama
 
