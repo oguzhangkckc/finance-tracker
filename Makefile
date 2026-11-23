@@ -21,6 +21,7 @@ imports:
 
 test:
 	$(RUN) pytest --cov --cov-report=term-missing
+	$(RUN) coverage report --include='src/finans/domain/*' --fail-under=95 --skip-covered
 
 audit:
 	@tmp=$$(mktemp) && trap 'rm -f "$$tmp"' EXIT && \
