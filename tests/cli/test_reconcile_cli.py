@@ -90,6 +90,18 @@ def test_price_date_difference_and_missing_line_fail_with_evidence(tmp_path: Pat
     assert "Mutabakat: kaldı (2/2 kalem uyumsuz)." in result.output
 
 
+def test_units_gap_names_the_recent_trade_by_its_number(tmp_path: Path) -> None:
+    path = _statement(tmp_path, "2026-11-23,XHT,10,1.73,17.30\n2026-11-23,XPP,100,,700\n")
+
+    result = runner.invoke(app, ["reconcile", path])
+
+    assert result.exit_code == 1
+    assert (
+        "✗ 2026-11-23 XHT (satır 2): adet farkı: ekstrede 10, kayıtlarda 15; "
+        "olası valör farkı (işlem #2, 2026-11-20)"
+    ) in result.output
+
+
 def test_unreadable_or_empty_statement_is_rejected(tmp_path: Path) -> None:
     bad = runner.invoke(app, ["reconcile", _statement(tmp_path, "2026-11-23,XHT,0,1,1\n")])
     assert bad.exit_code == 1

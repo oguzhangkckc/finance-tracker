@@ -815,7 +815,7 @@ Kabul testi: canlıya geçmeden önce bir ay boyunca aynı işlemleri bir tablod
 
 Mutabakat `ft reconcile EKSTRE.csv` ile yapılır (K-67, K-78). Dosya ekstreden elle doldurulur: `date,code,units,price,value`; `price` isteğe bağlıdır. Aracı kuruma özel ayrıştırıcı yazılmaz; gerçek ekstre görülünce karar verilir. Her kalemde kayıtların o günkü değerlemesiyle (`ft value --on` ile aynı hesap) adet, fiyat ve değer ayrı karşılaştırılır:
 
-- **Adet farkı:** eksik ya da yanlış girilmiş işlem.
+- **Adet farkı:** eksik ya da yanlış girilmiş işlem. Fark, ekstre gününe kadarki son 5 işlem gününde (ekstre günü dahil) girilmiş tek bir işlemin adediyle birebir ve doğru yönde açıklanıyorsa (alış kayıtlarda fazlalık, satış eksiklik olarak) mesaj "olası valör farkı (işlem #id, tarih)" olur; kalem yine uyumsuzdur (K-79).
 - **Fiyat farkı:** ekstre başka bir günün fiyatını kullanmış. Ekstre fiyatıyla (K-64'teki son basamak kuralı) ya da fiyat yoksa değerle (±0,01 TL) eşleşen TEFAS fiyatı ekstre gününün ±5 işlem günü içinde aranır; bulunan gün ve işlem günü farkı gösterilir.
 - **Yalnızca değer farkı:** adet ve fiyat aynı, değer tolerans dışı; yuvarlama. Az basamaklı ekstre fiyatı birden çok günle eşleşebildiği için önce hem fiyatı hem değeri tutan gün aranır; bulunursa fark fiyat farkıdır.
 
@@ -945,6 +945,7 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-76 | `txn.unit_price_scale` (migration 0003, M3): girilen birim fiyatın ondalık basamak sayısı; `ft tx add` ve `ft tx import` girilen metinden doldurur, repository okurken fiyatı bu basamağa geri getirir. Boşsa kayıtlı hal geçerli; geriye dönük doldurma yok. K-49'u günceller: M4 tabloları (job_run, alert, alert_event) 0004'e kayar | Kanonik metin sondaki sıfırları atıyor; 1.7200 olarak girilen fiyat K-64'te 2 basamaklı sayılıp kontrol dışı kalıyordu | Veri modeli, Veri kalitesi |
 | K-77 | `ft data check --strict`: en az bir uyarı varsa 1 ile çıkar; bilgi notları etkilemez. Varsayılan davranış (her durumda 0) değişmez | M4'teki zamanlanmış işler veri sorununu çıkış koduyla algılamalı | Veri kalitesi, Zamanlama |
 | K-78 | K-67'yi genişletir: ekstre dosyası `date,code,units,price,value` (`price` isteğe bağlı), ekstreden elle doldurulur; aracı kuruma özel ayrıştırıcı yok. Her kalemde adet, fiyat ve değer ayrı karşılaştırılır; uyuşmazlık adet farkı, fiyat farkı (eşleşen TEFAS fiyat günü ±5 işlem gününde aranıp gösterilir) ya da yalnızca değer farkı (yuvarlama) olarak sınıflanır. Değer toleransı kalem başına ±0,01 TL; ekstrede olmayan pozisyon uyumsuz. Fiyat günü teşhisi "D tarihli fiyat" sorusuna kanıt olarak, dayanağıyla (fiyat ve değer, yalnızca fiyat, yalnızca değer) ayrıca raporlanır | Tek bir değer farkı nedeni göstermiyordu; ekstrenin hangi günün fiyatını kullandığı açık soruyu kapatacak kanıttır | Test, Veri kalitesi |
+| K-79 | K-78'e ek: adet farkı, ekstre gününe kadarki son 5 işlem gününde (ekstre günü dahil) girilmiş tek bir işlemin adediyle birebir ve yönüyle eşleşiyorsa mesaj "olası valör farkı (işlem #id, tarih)" olur; birden çok işlem eşleşirse en yenisi gösterilir. Kalem yine uyumsuz sayılır | Ekstre takas edilmiş payları gösterir; yeni bir işlem ekstreye birkaç gün geç yansıyabilir, bu durum eksik işlemden ayırt edilmeli | Test, Veri kalitesi |
 
 ## Planı kodlama ajanıyla uygulama
 

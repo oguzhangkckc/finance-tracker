@@ -25,11 +25,12 @@ PRICES = [PricePoint("XHT", d, D(p), "tefas") for d, p in XHT_PRICES.items()] + 
 ]
 DAYS = tuple(sorted(XHT_PRICES))
 TRADES = [
-    Transaction("XHT", date(2026, 11, 17), Side.BUY, D(10), D("1.7")),
-    Transaction("XHT", date(2026, 11, 20), Side.BUY, D(5), D("1.744322")),
-    Transaction("XPP", date(2026, 11, 18), Side.BUY, D(100), D(7)),
-    Transaction("XAL", date(2026, 11, 18), Side.BUY, D(3), D(12)),
+    ("#1", Transaction("XHT", date(2026, 11, 17), Side.BUY, D(10), D("1.7"))),
+    ("#2", Transaction("XHT", date(2026, 11, 20), Side.BUY, D(5), D("1.744322"))),
+    ("#3", Transaction("XPP", date(2026, 11, 18), Side.BUY, D(100), D(7))),
+    ("#4", Transaction("XAL", date(2026, 11, 18), Side.BUY, D(3), D(12))),
 ]
+UNITS_HINT = "eksik ya da yanlış işlem olabilir"
 
 
 def _line(units: str, value: str, price: str | None = None, code: str = "XHT") -> StatementLine:
@@ -63,6 +64,41 @@ def test_units_difference_points_at_a_missing_or_wrong_trade() -> None:
         Finding.UNITS,
         "adet farkı: ekstrede 14, kayıtlarda 15; eksik ya da yanlış işlem olabilir",
     )
+
+
+def test_units_gap_equal_to_a_recent_buy_is_a_possible_value_date_difference() -> None:
+    report = reconcile([_line("10", "17.30", "1.73")], TRADES[:2], PRICES, DAYS)
+    [item] = report.items
+    assert item.finding is Finding.UNITS
+    assert item.message == (
+        "adet farkı: ekstrede 10, kayıtlarda 15; olası valör farkı (işlem #2, 2026-11-20)"
+    )
+    assert not report.passed
+
+
+def test_recent_sell_explains_a_statement_that_still_shows_the_units() -> None:
+    sell = ("#5", Transaction("XHT", DAY, Side.SELL, D(4), D("1.73")))
+    report = reconcile([_line("15", "25.95", "1.73")], [*TRADES[:2], sell], PRICES, DAYS)
+    assert report.items[0].message == (
+        "adet farkı: ekstrede 15, kayıtlarda 11; olası valör farkı (işlem #5, 2026-11-23)"
+    )
+
+
+def test_trade_before_the_last_five_trading_days_is_not_a_value_date_difference() -> None:
+    line = StatementLine(2, date(2026, 11, 24), "XHT", D(5), None, D("8.58"))
+    [item] = reconcile([line], TRADES[:2], PRICES, DAYS).items
+    assert item.message == f"adet farkı: ekstrede 5, kayıtlarda 15; {UNITS_HINT}"
+
+
+def test_statement_before_any_trading_day_has_no_value_date_hint() -> None:
+    line = StatementLine(2, date(2026, 11, 13), "XHT", D(3), None, D("5.10"))
+    [item] = reconcile([line], TRADES[:2], PRICES, DAYS).items
+    assert item.message == f"adet farkı: ekstrede 3, kayıtlarda 0; {UNITS_HINT}"
+
+
+def test_gap_in_the_wrong_direction_is_not_a_value_date_difference() -> None:
+    [item] = reconcile([_line("20", "34.60", "1.73")], TRADES[:2], PRICES, DAYS).items
+    assert item.message == f"adet farkı: ekstrede 20, kayıtlarda 15; {UNITS_HINT}"
 
 
 def test_price_difference_names_the_day_whose_price_the_statement_used() -> None:

@@ -8,7 +8,7 @@ from datetime import date
 from decimal import Decimal
 from enum import StrEnum
 
-from finans.domain.models import ZERO, PricePoint, Transaction
+from finans.domain.models import ZERO, PricePoint, Side, Transaction
 from finans.domain.numeric import canonical_text, in_domain_context
 from finans.domain.positions import build_positions
 from finans.domain.quality import price_matches
@@ -16,6 +16,7 @@ from finans.domain.valuation import Holding, PriceHistory, value_book
 
 VALUE_TOLERANCE = Decimal("0.01")
 SEARCH_TRADING_DAYS = 5
+VALUE_DATE_TRADING_DAYS = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,10 +116,12 @@ class _Market:
 @in_domain_context
 def reconcile(
     lines: Sequence[StatementLine],
-    transactions: Sequence[Transaction],
+    transactions: Sequence[tuple[str, Transaction]],
     prices: Iterable[PricePoint],
     days: Sequence[date],
 ) -> ReconcileReport:
+    """`transactions` iptal edilmemiş işlemler ve gösterim numaraları ("#12")."""
+    trades = [tx for _, tx in transactions]
     points = list(prices)
     by_code: dict[str, dict[date, Decimal]] = defaultdict(dict)
     for point in points:
@@ -126,10 +129,12 @@ def reconcile(
     market = _Market(PriceHistory(points), by_code, days)
     items: list[ReconcileItem] = []
     for day in sorted({line.day for line in lines}):
-        valuation = value_book(build_positions(transactions, as_of=day), market.history, day)
+        valuation = value_book(build_positions(trades, as_of=day), market.history, day)
         holdings = {holding.instrument: holding for holding in valuation.holdings}
         day_lines = [line for line in lines if line.day == day]
-        items.extend(_check(line, holdings.get(line.code), market) for line in day_lines)
+        items.extend(
+            _check(line, holdings.get(line.code), market, transactions) for line in day_lines
+        )
         listed = {line.code for line in day_lines}
         items.extend(
             ReconcileItem(
@@ -144,7 +149,12 @@ def reconcile(
     return ReconcileReport(tuple(items))
 
 
-def _check(line: StatementLine, holding: Holding | None, market: _Market) -> ReconcileItem:
+def _check(
+    line: StatementLine,
+    holding: Holding | None,
+    market: _Market,
+    transactions: Sequence[tuple[str, Transaction]],
+) -> ReconcileItem:
     def item(
         finding: Finding,
         message: str,
@@ -155,10 +165,16 @@ def _check(line: StatementLine, holding: Holding | None, market: _Market) -> Rec
 
     units = holding.units if holding is not None else ZERO
     if units != line.units:
+        recent = _value_date_trade(line, units - line.units, transactions, market)
+        hint = (
+            "eksik ya da yanlış işlem olabilir"
+            if recent is None
+            else f"olası valör farkı (işlem {recent[0]}, {recent[1].trade_date})"
+        )
         return item(
             Finding.UNITS,
             f"adet farkı: ekstrede {canonical_text(line.units)}, kayıtlarda "
-            f"{canonical_text(units)}; eksik ya da yanlış işlem olabilir",
+            f"{canonical_text(units)}; {hint}",
         )
     ours = holding.price if holding is not None else market.history.as_of(line.code, line.day)
     if ours is None:
@@ -231,6 +247,30 @@ def _check(line: StatementLine, holding: Holding | None, market: _Market) -> Rec
         + ("değer de tutuyor" if value_too else "değer bu fiyatla da tutmuyor")
     )
     return item(Finding.PRICE, message, difference, evidence)
+
+
+def _value_date_trade(
+    line: StatementLine,
+    gap: Decimal,
+    transactions: Sequence[tuple[str, Transaction]],
+    market: _Market,
+) -> tuple[str, Transaction] | None:
+    """Ekstre takas edilmiş payı gösterir; son günlerdeki tek işlem farkı açıklıyor mu (K-79)."""
+    anchor = market.anchor(line.day)
+    if anchor < 0:
+        return None
+    since = market.days[max(0, anchor - VALUE_DATE_TRADING_DAYS + 1)]
+    candidates = [
+        (position, ref, tx)
+        for position, (ref, tx) in enumerate(transactions)
+        if tx.instrument == line.code
+        and since <= tx.trade_date <= line.day
+        and (tx.units if tx.side is Side.BUY else -tx.units) == gap
+    ]
+    if not candidates:
+        return None
+    _, ref, tx = max(candidates, key=lambda c: (c[2].trade_date, c[0]))
+    return ref, tx
 
 
 def _evidence(

@@ -19,5 +19,5 @@ def reconcile_statement(uow: UnitOfWork, lines: Sequence[StatementLine]) -> Reco
         for point in prices
         if point.instrument in instruments and instruments[point.instrument].kind in TEFAS_KINDS
     )
-    transactions = [stored.transaction for stored in uow.transactions.list()]
+    transactions = [(f"#{stored.id}", stored.transaction) for stored in uow.transactions.list()]
     return reconcile(lines, transactions, prices, days)
