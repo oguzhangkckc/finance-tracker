@@ -5,17 +5,27 @@ from typing import Self
 
 from finans.adapters.sqlite.connection import connect, transaction
 from finans.adapters.sqlite.repositories import (
+    SqliteCpiRepo,
     SqliteInstrumentRepo,
     SqlitePriceRepo,
+    SqliteRawPayloadRepo,
     SqliteTransactionRepo,
 )
-from finans.ports.repositories import InstrumentRepo, PriceRepo, TransactionRepo
+from finans.ports.repositories import (
+    CpiRepo,
+    InstrumentRepo,
+    PriceRepo,
+    RawPayloadRepo,
+    TransactionRepo,
+)
 
 
 class SqliteUnitOfWork:
     instruments: InstrumentRepo
     transactions: TransactionRepo
     prices: PriceRepo
+    cpi: CpiRepo
+    raw_payloads: RawPayloadRepo
 
     def __init__(self, path: Path, *, readonly: bool = False) -> None:
         self._path = path
@@ -29,6 +39,8 @@ class SqliteUnitOfWork:
             self.instruments = SqliteInstrumentRepo(conn)
             self.transactions = SqliteTransactionRepo(conn)
             self.prices = SqlitePriceRepo(conn)
+            self.cpi = SqliteCpiRepo(conn)
+            self.raw_payloads = SqliteRawPayloadRepo(conn)
             self._stack = stack.pop_all()
         return self
 

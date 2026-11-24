@@ -38,10 +38,19 @@ def _txn(
     )
 
 
-def test_m2_tables_only_and_all_strict(conn: sqlite3.Connection) -> None:
+def test_expected_tables_and_all_strict(conn: sqlite3.Connection) -> None:
     rows = conn.execute("SELECT name, sql FROM sqlite_schema WHERE type = 'table'").fetchall()
     tables = dict(rows)
-    assert set(tables) == {"_migration", "instrument", "txn", "price", "price_revision"}
+    assert set(tables) == {
+        "_migration",
+        "instrument",
+        "txn",
+        "price",
+        "price_revision",
+        "cpi",
+        "cpi_revision",
+        "raw_payload",
+    }
     assert all(
         sql.rstrip().endswith(("STRICT", "STRICT, WITHOUT ROWID")) for sql in tables.values()
     )
@@ -79,6 +88,15 @@ def test_external_ref_is_unique_only_among_active_transactions(conn: sqlite3.Con
         ("INSERT INTO price VALUES (1, '2026-01-05', '1', 'web', ?)", (NOW,)),
         ("UPDATE instrument SET active = 2", ()),
         ("UPDATE instrument SET kind = 'FON'", ()),
+        (
+            "INSERT INTO price_revision VALUES (1, '2026-01-05', '1', '2', ?, 'web', 'tefas')",
+            (NOW,),
+        ),
+        (
+            "INSERT INTO raw_payload (source, request_key, fetched_at, body)"
+            " VALUES ('', 'k', ?, x'00')",
+            (NOW,),
+        ),
     ],
 )
 def test_enumerated_columns_are_checked(
@@ -86,3 +104,16 @@ def test_enumerated_columns_are_checked(
 ) -> None:
     with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
         conn.execute(statement, params)
+
+
+@pytest.mark.parametrize("period", ["2026-13", "2026-00", "2026-1", "26-01", "2026-01-01"])
+def test_cpi_period_must_be_a_valid_month(conn: sqlite3.Connection, period: str) -> None:
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+        conn.execute("INSERT INTO cpi VALUES ('TP.X', ?, '100', NULL, ?)", (period, NOW))
+
+
+def test_cpi_revision_refers_to_a_stored_period(conn: sqlite3.Connection) -> None:
+    conn.execute("INSERT INTO cpi VALUES ('TP.X', '2026-01', '100', '2025=100', ?)", (NOW,))
+    conn.execute("INSERT INTO cpi_revision VALUES ('TP.X', '2026-01', '100', '101', ?)", (NOW,))
+    with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
+        conn.execute("INSERT INTO cpi_revision VALUES ('TP.X', '2026-02', '100', '101', ?)", (NOW,))

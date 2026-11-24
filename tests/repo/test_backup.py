@@ -10,7 +10,14 @@ import pytest
 
 from finans.adapters.sqlite.backup import prune_backups, write_backup
 from finans.adapters.sqlite.connection import connect
-from finans.adapters.sqlite.migrate import Migration, MigrationError, bundled, discover, migrate
+from finans.adapters.sqlite.migrate import (
+    Migration,
+    MigrationError,
+    apply,
+    bundled,
+    discover,
+    migrate,
+)
 from finans.adapters.sqlite.repositories import SqliteInstrumentRepo
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.domain.models import Instrument, InstrumentKind, PricePoint, Side, Transaction
@@ -25,7 +32,8 @@ CREATE_B = "CREATE TABLE b (id INTEGER PRIMARY KEY) STRICT;\n"
 WIPE_REVISIONS = "DELETE FROM price_revision;\nALTER TABLE txn ADD COLUMN broker TEXT;\n"
 BROKEN_REBUILD = "-- finans: foreign_keys=off\nDELETE FROM instrument;\n"
 FAILING = "SELECT * FROM yok;\n"
-FIRST_BACKUP = "finans-20261123T120000Z-v1.db"
+CURRENT = len(bundled())
+FIRST_BACKUP = f"finans-20261123T120000Z-v{CURRENT}.db"
 
 
 @pytest.fixture
@@ -34,11 +42,12 @@ def backups(tmp_path: Path) -> Path:
 
 
 def _migrations(directory: Path, *extra: tuple[str, str]) -> list[Migration]:
+    """Paketteki migration'ların ardına extra'yı sırayla ekler (etiket, SQL)."""
     directory.mkdir()
     for migration in bundled():
         (directory / migration.name).write_bytes(migration.sql.encode("utf-8"))
-    for name, sql in extra:
-        (directory / name).write_text(sql, encoding="utf-8")
+    for offset, (label, sql) in enumerate(extra, start=1):
+        (directory / f"{CURRENT + offset:04d}_{label}.sql").write_text(sql, encoding="utf-8")
     return discover(directory)
 
 
@@ -83,8 +92,8 @@ def test_failed_migration_leaves_a_backup_with_the_old_schema_and_complete_data(
     before = _dump(migrated_db)
     migrations = _migrations(
         tmp_path / "migrations",
-        ("0002_wipe_revisions.sql", WIPE_REVISIONS),
-        ("0003_broken_rebuild.sql", BROKEN_REBUILD),
+        ("wipe_revisions", WIPE_REVISIONS),
+        ("broken_rebuild", BROKEN_REBUILD),
     )
 
     with pytest.raises(MigrationError, match="foreign key ihlali") as failure:
@@ -92,10 +101,10 @@ def test_failed_migration_leaves_a_backup_with_the_old_schema_and_complete_data(
 
     backup = backups / FIRST_BACKUP
     assert f"Migration öncesi yedek: {backup}" in str(failure.value)
-    # 0003 kendi grubunda geri alındı ama 0002 uygulanmış kaldı: canlı veritabanı ara sürümde.
-    assert _scalar(migrated_db, "PRAGMA user_version") == 2
+    # Yeniden kurma kendi grubunda geri alındı ama önceki migration kaldı: veritabanı ara sürümde.
+    assert _scalar(migrated_db, "PRAGMA user_version") == CURRENT + 1
     assert _scalar(migrated_db, "SELECT count(*) FROM price_revision") == 0
-    assert _scalar(backup, "PRAGMA user_version") == 1
+    assert _scalar(backup, "PRAGMA user_version") == CURRENT
     assert _scalar(backup, "SELECT count(*) FROM price_revision") == 1
     assert _dump(backup) == before
 
@@ -103,7 +112,7 @@ def test_failed_migration_leaves_a_backup_with_the_old_schema_and_complete_data(
 def test_backup_includes_changes_still_in_the_wal(
     migrated_db: Path, tmp_path: Path, backups: Path, clock: FixedClock
 ) -> None:
-    migrations = _migrations(tmp_path / "migrations", ("0002_b.sql", CREATE_B))
+    migrations = _migrations(tmp_path / "migrations", ("b", CREATE_B))
     with closing(connect(migrated_db)) as writer:
         writer.execute("PRAGMA wal_autocheckpoint = 0")
         SqliteInstrumentRepo(writer).sync([TTE])
@@ -117,16 +126,16 @@ def test_backup_includes_changes_still_in_the_wal(
 def test_successful_migration_reports_a_single_file_private_backup(
     migrated_db: Path, tmp_path: Path, backups: Path, clock: FixedClock
 ) -> None:
-    migrations = _migrations(tmp_path / "migrations", ("0002_b.sql", CREATE_B))
+    migrations = _migrations(tmp_path / "migrations", ("b", CREATE_B))
 
     run = migrate(migrated_db, migrations, clock=clock, backup_dir=backups, keep_backups=5)
 
-    assert run.applied == [2]
+    assert run.applied == [CURRENT + 1]
     assert run.backup == backups / FIRST_BACKUP
     assert [path.name for path in backups.iterdir()] == [FIRST_BACKUP]
     assert stat.S_IMODE(run.backup.stat().st_mode) == 0o600
     assert _scalar(run.backup, "PRAGMA journal_mode") == "delete"
-    assert _scalar(run.backup, "PRAGMA user_version") == 1
+    assert _scalar(run.backup, "PRAGMA user_version") == CURRENT
 
 
 def test_new_or_up_to_date_database_is_not_backed_up(
@@ -137,7 +146,7 @@ def test_new_or_up_to_date_database_is_not_backed_up(
     first = migrate(db, bundled(), clock=clock, backup_dir=backups, keep_backups=5)
     second = migrate(db, bundled(), clock=clock, backup_dir=backups, keep_backups=5)
 
-    assert (first.applied, first.backup) == ([1], None)
+    assert (first.applied, first.backup) == (list(range(1, CURRENT + 1)), None)
     assert (second.applied, second.backup) == ([], None)
     assert not backups.exists()
 
@@ -149,7 +158,7 @@ def test_only_the_newest_backups_are_kept(
     unrelated = ["notlar.txt", "baska-20200101T000000Z-v1.db", "finans-eski.db"]
     for name in unrelated:
         (backups / name).touch()
-    migrations = _migrations(tmp_path / "migrations", ("0002_failing.sql", FAILING))
+    migrations = _migrations(tmp_path / "migrations", ("failing", FAILING))
 
     for _ in range(3):
         with pytest.raises(MigrationError, match="no such table"):
@@ -157,7 +166,11 @@ def test_only_the_newest_backups_are_kept(
         clock.advance(timedelta(hours=1))
 
     assert sorted(path.name for path in backups.iterdir()) == sorted(
-        [*unrelated, "finans-20261123T130000Z-v1.db", "finans-20261123T140000Z-v1.db"]
+        [
+            *unrelated,
+            f"finans-20261123T130000Z-v{CURRENT}.db",
+            f"finans-20261123T140000Z-v{CURRENT}.db",
+        ]
     )
 
 
@@ -165,12 +178,12 @@ def test_migration_is_not_applied_when_the_backup_fails(
     migrated_db: Path, tmp_path: Path, backups: Path, clock: FixedClock
 ) -> None:
     backups.write_text("dizin değil", encoding="utf-8")
-    migrations = _migrations(tmp_path / "migrations", ("0002_b.sql", CREATE_B))
+    migrations = _migrations(tmp_path / "migrations", ("b", CREATE_B))
 
     with pytest.raises(MigrationError, match="yedekleme başarısız; migration uygulanmadı"):
         migrate(migrated_db, migrations, clock=clock, backup_dir=backups, keep_backups=5)
 
-    assert _scalar(migrated_db, "PRAGMA user_version") == 1
+    assert _scalar(migrated_db, "PRAGMA user_version") == CURRENT
 
 
 def test_existing_backup_is_never_overwritten(
@@ -179,14 +192,14 @@ def test_existing_backup_is_never_overwritten(
     backups.mkdir()
     existing = backups / FIRST_BACKUP
     existing.write_bytes(b"eski")
-    migrations = _migrations(tmp_path / "migrations", ("0002_b.sql", CREATE_B))
+    migrations = _migrations(tmp_path / "migrations", ("b", CREATE_B))
 
     with pytest.raises(MigrationError, match="üzerine yazılmaz"):
         migrate(migrated_db, migrations, clock=clock, backup_dir=backups, keep_backups=5)
 
     assert existing.read_bytes() == b"eski"
     assert sorted(path.name for path in backups.iterdir()) == [FIRST_BACKUP]
-    assert _scalar(migrated_db, "PRAGMA user_version") == 1
+    assert _scalar(migrated_db, "PRAGMA user_version") == CURRENT
 
 
 def test_keeping_no_backups_is_rejected(tmp_path: Path) -> None:
@@ -220,10 +233,49 @@ def test_stale_partial_files_of_this_database_are_removed(
         stamp = (clock.now() - age).timestamp()
         (backups / name).touch()
         os.utime(backups / name, (stamp, stamp))
-    migrations = _migrations(tmp_path / "migrations", ("0002_b.sql", CREATE_B))
+    migrations = _migrations(tmp_path / "migrations", ("b", CREATE_B))
 
     migrate(migrated_db, migrations, clock=clock, backup_dir=backups, keep_backups=5)
 
     assert sorted(path.name for path in backups.iterdir()) == sorted(
         [in_progress, *unrelated, FIRST_BACKUP]
     )
+
+
+V1_DATA = """
+INSERT INTO instrument (id, code, kind, asset_class) VALUES (1, 'TTE', 'TEFAS_YAT', 'hisse');
+INSERT INTO txn (instrument_id, trade_date, side, units, unit_price, created_at)
+  VALUES (1, '2026-01-05', 'BUY', '10', '12.5', '2026-01-05T18:00:00+00:00');
+INSERT INTO price VALUES (1, '2026-01-05', '12.5', 'manual', '2026-01-05T18:00:00+00:00');
+INSERT INTO price_revision VALUES (1, '2026-01-05', '12.4', '12.5', '2026-01-05T18:00:00+00:00');
+"""
+DATA_QUERIES = (
+    "SELECT * FROM instrument ORDER BY id",
+    "SELECT * FROM txn ORDER BY id",
+    "SELECT * FROM price ORDER BY instrument_id, price_date",
+)
+
+
+def _rows(path: Path) -> list[list[tuple[object, ...]]]:
+    with closing(connect(path, readonly=True)) as conn:
+        return [conn.execute(query).fetchall() for query in DATA_QUERIES]
+
+
+def test_bundled_upgrade_from_version_1_keeps_data_and_takes_a_backup(
+    tmp_path: Path, backups: Path, clock: FixedClock
+) -> None:
+    db = tmp_path / "finans.db"
+    with closing(connect(db)) as conn:
+        apply(conn, bundled()[:1], clock=clock)
+        conn.executescript(V1_DATA)
+    before = _rows(db)
+
+    run = migrate(db, bundled(), clock=clock, backup_dir=backups, keep_backups=5)
+
+    assert run.applied == list(range(2, CURRENT + 1))
+    assert run.backup == backups / "finans-20261123T120000Z-v1.db"
+    assert _scalar(run.backup, "PRAGMA user_version") == 1
+    assert _rows(db) == before
+    with closing(connect(db, readonly=True)) as conn:
+        revisions = conn.execute("SELECT old_price, old_source, new_source FROM price_revision")
+        assert revisions.fetchall() == [("12.4", None, None)]

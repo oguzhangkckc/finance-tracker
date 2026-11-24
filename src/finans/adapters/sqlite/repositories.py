@@ -10,13 +10,23 @@ from finans.adapters.sqlite.codec import (
     encode_decimal,
     encode_timestamp,
 )
-from finans.domain.models import Instrument, InstrumentKind, PricePoint, Side, Transaction
+from finans.domain.models import (
+    CpiPoint,
+    Instrument,
+    InstrumentKind,
+    PricePoint,
+    Side,
+    Transaction,
+    YearMonth,
+)
 from finans.ports.repositories import (
+    CpiWrite,
     InstrumentSync,
     PriceWrite,
     StoredInstrument,
     StoredTransaction,
 )
+from finans.ports.sources import RawPayload
 
 _INSTRUMENT_COLUMNS = "code, kind, asset_class, category, name, active"
 
@@ -203,7 +213,7 @@ class SqlitePriceRepo:
         instrument_id = _instrument_id(self._conn, point.instrument)
         day = encode_date(point.price_date)
         row = self._conn.execute(
-            "SELECT price FROM price WHERE instrument_id = ? AND price_date = ?",
+            "SELECT price, source FROM price WHERE instrument_id = ? AND price_date = ?",
             (instrument_id, day),
         ).fetchone()
         new_price = encode_decimal(point.price)
@@ -223,10 +233,17 @@ class SqlitePriceRepo:
             (new_price, point.source, encode_timestamp(fetched_at), instrument_id, day),
         )
         self._conn.execute(
-            "INSERT INTO price_revision"
-            " (instrument_id, price_date, old_price, new_price, revised_at)"
-            " VALUES (?, ?, ?, ?, ?)",
-            (instrument_id, day, row[0], new_price, encode_timestamp(fetched_at)),
+            "INSERT INTO price_revision (instrument_id, price_date, old_price, new_price,"
+            " revised_at, old_source, new_source) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                instrument_id,
+                day,
+                row[0],
+                new_price,
+                encode_timestamp(fetched_at),
+                row[1],
+                point.source,
+            ),
         )
         return PriceWrite("revised", previous=previous)
 
@@ -253,3 +270,75 @@ class SqlitePriceRepo:
             return None
         code, day, price, source = row
         return PricePoint(code, decode_date(day), decode_decimal(price), source)
+
+
+class SqliteCpiRepo:
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+
+    def upsert(
+        self, series: str, point: CpiPoint, *, base: str | None, fetched_at: datetime
+    ) -> CpiWrite:
+        period = str(point.period)
+        row = self._conn.execute(
+            "SELECT index_value FROM cpi WHERE series_code = ? AND period = ?", (series, period)
+        ).fetchone()
+        value = encode_decimal(point.index)
+        stamp = encode_timestamp(fetched_at)
+        if row is None:
+            self._conn.execute(
+                "INSERT INTO cpi (series_code, period, index_value, base, fetched_at)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (series, period, value, base, stamp),
+            )
+            return CpiWrite("inserted")
+        previous = decode_decimal(row[0])
+        if previous == point.index:
+            return CpiWrite("unchanged")
+        self._conn.execute(
+            "UPDATE cpi SET index_value = ?, base = ?, fetched_at = ?"
+            " WHERE series_code = ? AND period = ?",
+            (value, base, stamp, series, period),
+        )
+        self._conn.execute(
+            "INSERT INTO cpi_revision (series_code, period, old_value, new_value, revised_at)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (series, period, row[0], value, stamp),
+        )
+        return CpiWrite("revised", previous=previous)
+
+    def points(self, series: str) -> list[CpiPoint]:
+        rows = self._conn.execute(
+            "SELECT period, index_value FROM cpi WHERE series_code = ? ORDER BY period",
+            (series,),
+        ).fetchall()
+        return [CpiPoint(YearMonth.parse(period), decode_decimal(value)) for period, value in rows]
+
+    def latest(self, series: str) -> CpiPoint | None:
+        row = self._conn.execute(
+            "SELECT period, index_value FROM cpi WHERE series_code = ?"
+            " ORDER BY period DESC LIMIT 1",
+            (series,),
+        ).fetchone()
+        if row is None:
+            return None
+        return CpiPoint(YearMonth.parse(row[0]), decode_decimal(row[1]))
+
+
+class SqliteRawPayloadRepo:
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+
+    def add(self, payload: RawPayload) -> int:
+        cursor = self._conn.execute(
+            "INSERT INTO raw_payload (source, request_key, fetched_at, body) VALUES (?, ?, ?, ?)",
+            (
+                payload.source,
+                payload.request_key,
+                encode_timestamp(payload.fetched_at),
+                payload.body,
+            ),
+        )
+        if cursor.lastrowid is None:
+            raise RuntimeError("raw_payload satır numarası alınamadı")
+        return cursor.lastrowid

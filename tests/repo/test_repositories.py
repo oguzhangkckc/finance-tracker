@@ -12,8 +12,17 @@ from hypothesis import strategies as st
 from finans.adapters.sqlite.connection import connect
 from finans.adapters.sqlite.migrate import apply, bundled
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
-from finans.domain.models import Instrument, InstrumentKind, PricePoint, Side, Transaction
-from finans.ports.repositories import InstrumentSync, PriceWrite
+from finans.domain.models import (
+    CpiPoint,
+    Instrument,
+    InstrumentKind,
+    PricePoint,
+    Side,
+    Transaction,
+    YearMonth,
+)
+from finans.ports.repositories import CpiWrite, InstrumentSync, PriceWrite
+from finans.ports.sources import RawPayload
 from tests.fakes.clock import FixedClock
 
 D = Decimal
@@ -168,13 +177,13 @@ class TestPrices:
 def test_revision_row_is_written(db: Path) -> None:
     with SqliteUnitOfWork(db) as work:
         work.instruments.sync([TTE])
-        work.prices.upsert(PricePoint("TTE", date(2026, 1, 5), D("10"), "tefas"), fetched_at=NOW)
+        work.prices.upsert(PricePoint("TTE", date(2026, 1, 5), D("10"), "manual"), fetched_at=NOW)
         work.prices.upsert(PricePoint("TTE", date(2026, 1, 5), D("10.5"), "tefas"), fetched_at=NOW)
     with closing(connect(db, readonly=True)) as conn:
         rows = conn.execute(
-            "SELECT price_date, old_price, new_price FROM price_revision"
+            "SELECT price_date, old_price, new_price, old_source, new_source FROM price_revision"
         ).fetchall()
-    assert rows == [("2026-01-05", "10", "10.5")]
+    assert rows == [("2026-01-05", "10", "10.5", "manual", "tefas")]
 
 
 def _sync_then_fail(db: Path) -> None:
@@ -193,3 +202,54 @@ def test_unit_of_work_rolls_back_on_error(db: Path) -> None:
 def test_read_only_unit_of_work_cannot_write(db: Path) -> None:
     with pytest.raises(sqlite3.OperationalError), SqliteUnitOfWork(db, readonly=True) as work:
         work.instruments.sync([TTE])
+
+
+SERIES = "TP.TUKFIY2025.GENEL"
+
+
+def _cpi(period: str, index: str) -> CpiPoint:
+    return CpiPoint(YearMonth.parse(period), D(index))
+
+
+class TestCpi:
+    def test_insert_unchanged_and_revision(self, db: Path) -> None:
+        with SqliteUnitOfWork(db) as work:
+            write = work.cpi.upsert
+            assert write(SERIES, _cpi("2026-01", "104.1"), base="2025=100", fetched_at=NOW) == (
+                CpiWrite("inserted")
+            )
+            assert write(SERIES, _cpi("2026-01", "104.10"), base="2025=100", fetched_at=NOW) == (
+                CpiWrite("unchanged")
+            )
+            assert write(SERIES, _cpi("2026-01", "104.2"), base="2025=100", fetched_at=NOW) == (
+                CpiWrite("revised", previous=D("104.1"))
+            )
+        with closing(connect(db, readonly=True)) as conn:
+            revisions = conn.execute(
+                "SELECT series_code, period, old_value, new_value FROM cpi_revision"
+            ).fetchall()
+        assert revisions == [(SERIES, "2026-01", "104.1", "104.2")]
+
+    def test_points_are_ordered_and_series_are_separate(self, db: Path) -> None:
+        with SqliteUnitOfWork(db) as work:
+            for period, index in [("2026-02", "105"), ("2025-12", "103.5"), ("2026-01", "104")]:
+                work.cpi.upsert(SERIES, _cpi(period, index), base="2025=100", fetched_at=NOW)
+            work.cpi.upsert("TP.FG.J0", _cpi("2025-12", "3000"), base=None, fetched_at=NOW)
+            assert work.cpi.points(SERIES) == [
+                _cpi("2025-12", "103.5"),
+                _cpi("2026-01", "104"),
+                _cpi("2026-02", "105"),
+            ]
+            assert work.cpi.latest(SERIES) == _cpi("2026-02", "105")
+            assert work.cpi.latest("TP.YOK") is None
+
+
+def test_raw_payload_is_stored_as_bytes(db: Path) -> None:
+    body = b'{"items": [{"Tarih": "2026-1"}]}'
+    with SqliteUnitOfWork(db) as work:
+        first = work.raw_payloads.add(RawPayload("evds", f"{SERIES}:2005-01", NOW, body))
+        second = work.raw_payloads.add(RawPayload("evds", f"{SERIES}:2026-01", NOW, b"{}"))
+    assert second == first + 1
+    with closing(connect(db, readonly=True)) as conn:
+        stored = conn.execute("SELECT source, body FROM raw_payload WHERE id = ?", (first,))
+        assert stored.fetchone() == ("evds", body)

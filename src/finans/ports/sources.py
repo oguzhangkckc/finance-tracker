@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
@@ -37,3 +38,13 @@ class PortfolioConfigSource(Protocol):
     def load(self, path: Path) -> PortfolioConfig:
         """Geçersiz dosyada bütün sorunlarla birlikte ConfigError yükseltir."""
         ...
+
+
+@dataclass(frozen=True, slots=True)
+class RawPayload:
+    """Kaynaktan gelen ham yanıt; hata ayıklama için saklanır. request_key sır içermez."""
+
+    source: str
+    request_key: str
+    fetched_at: datetime
+    body: bytes

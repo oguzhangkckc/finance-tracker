@@ -49,13 +49,16 @@ def test_db_migrate_prints_the_backup_taken_before_pending_migrations(
     first = runner.invoke(ft_app, ["db", "migrate"])
     assert first.exit_code == 0, first.output
     assert "yedek" not in first.output
-    second_migration = Migration(2, "0002_b.sql", "CREATE TABLE b (id INTEGER) STRICT;", "0" * 64)
+    version = len(bundled()) + 1
+    second_migration = Migration(
+        version, f"{version:04d}_b.sql", "CREATE TABLE b (id INTEGER) STRICT;", "0" * 64
+    )
     monkeypatch.setattr(bootstrap, "bundled", lambda: [*bundled(), second_migration])
 
     result = runner.invoke(ft_app, ["db", "migrate"])
 
     assert result.exit_code == 0, result.output
-    assert "Uygulanan migration'lar: 2" in result.output
+    assert f"Uygulanan migration'lar: {version}" in result.output
     assert f"Migration öncesi yedek: {tmp_path / 'backups' / 'finans-'}" in result.output
     assert len(list((tmp_path / "backups").iterdir())) == 1
 
