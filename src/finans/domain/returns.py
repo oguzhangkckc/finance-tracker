@@ -162,3 +162,22 @@ def _bisection(flows: Sequence[CashFlow], day_count: int) -> Decimal | None:
         else:
             high = middle
     return (low + high) / 2
+
+
+@in_domain_context
+def real_simple_return(
+    lots: Iterable[Lot], value: Decimal, series: CpiSeries, *, on: date
+) -> Decimal | None:
+    """Her lotun maliyeti değerleme gününün TL'sine çevrilir; dağılım dışı varlıklar için (K-74)."""
+    real_cost = sum(
+        (lot.cost * deflator(series, flow_date=lot.acquired, on=on) for lot in lots), ZERO
+    )
+    return None if real_cost <= ZERO else value / real_cost - 1
+
+
+@in_domain_context
+def value_change(start: Decimal, end: Decimal, flows: Iterable[CashFlow]) -> Decimal | None:
+    """Dönemdeki alım ve satışlar çıkarılmış değişim; akış işareti K-36'daki gibidir (K-88)."""
+    if start <= ZERO:
+        return None
+    return (end - start + sum((flow.amount for flow in flows), ZERO)) / start

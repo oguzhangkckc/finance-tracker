@@ -28,8 +28,10 @@ from finans.domain.returns import (
     net_present_value,
     portfolio_cash_flows,
     real_cash_flows,
+    real_simple_return,
     simple_return,
     solve_irr,
+    value_change,
 )
 from tests.support.decimals import is_close
 
@@ -289,3 +291,24 @@ def test_lot_without_cost_has_no_real_return() -> None:
     lot = Lot("AAA", date(2025, 1, 2), D(1), D(1), D(0))
     with pytest.raises(DomainError, match="maliyeti sıfır"):
         lot_real_return(lot, D(10), CPI_100_TO_120, on=date(2026, 1, 2))
+
+
+def test_real_simple_return_deflates_each_lot_cost_to_the_valuation_date() -> None:
+    old_lot = Lot("AAA", date(2025, 1, 2), D(100), D(100), D(10000))
+    new_lot = Lot("AAA", date(2026, 1, 2), D(50), D(50), D(5000))
+    on = date(2026, 1, 2)
+
+    assert real_simple_return([old_lot, new_lot], D(19000), CPI_100_TO_120, on=on) == (
+        D(19000) / D(17000) - 1
+    )
+    assert real_simple_return([old_lot], D(13000), CPI_100_TO_120, on=on) == lot_real_return(
+        old_lot, D(13000), CPI_100_TO_120, on=on
+    )
+    assert real_simple_return([], D(0), CPI_100_TO_120, on=on) is None
+
+
+def test_value_change_leaves_out_money_put_in_or_taken_out() -> None:
+    flows = [CashFlow(date(2026, 11, 25), D(-110))]
+    assert value_change(D(2550), D(2780), flows) == D(120) / D(2550)
+    assert value_change(D(1000), D(900), [CashFlow(date(2026, 11, 25), D(150))]) == D("0.05")
+    assert value_change(D(0), D(100), []) is None

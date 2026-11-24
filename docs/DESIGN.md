@@ -612,7 +612,7 @@ Reel XIRR'da her akış E[ref(t)] / E[ref(t_i)] ile çarpılır. Son akışta t_
 - **Dağılım dışı varlık (M4, K-74).** Acil durum fonu gibi takip edilen ama hedef dağılıma girmeyen varlıklar desteklenir.
   - Önerilen biçim: `instruments[]` içinde `allocation = false`. Böyle bir varlık değerlemede ve raporda görünür; ağırlık, sapma, sapma alarmı ve dengeleme hesabına girmez. Config doğrulamasındaki "hedef sınıflar varlık sınıflarıyla birebir aynı" kuralı bu varlıkları saymaz.
   - Rapor dağılım içi, dağılım dışı ve toplam değeri ayrı gösterir.
-  - Para ağırlıklı getiri (nominal ve reel XIRR) yalnızca dağılım içi portföy için hesaplanır. Dağılım dışı her varlık kendi satırında basit reel getiriyle görünür; bu, basit getirinin (K-39) Fisher bağıntısıyla ve TÜFE referans ay kuralıyla reele çevrilmiş halidir.
+  - Para ağırlıklı getiri (nominal ve reel XIRR) yalnızca dağılım içi portföy için hesaplanır. Dağılım dışı her varlık kendi satırında basit reel getiriyle görünür; bu, basit getirinin (K-39) Fisher bağıntısıyla ve TÜFE referans ay kuralıyla reele çevrilmiş halidir. Birden çok lotta her lotun maliyeti değerleme gününün TL'sine çevrilir: r = V / Σ M_i × E[ref(t)] / E[ref(t_i)] − 1 (K-94).
 - **Başlangıçta sessiz sapma alarmları (M4, K-75).** Portföy birkaç aylık katkı büyüklüğüne ulaşana kadar sapma alarmları açılmaz ve bildirilmez; küçük bir portföyde tek bir alım ağırlıkları onlarca puan oynatır.
   - Kural: dağılım içi toplam değer `3 × aylık katkı`nın altındaysa sapma alarmı değerlendirilmez (N = 3). Raporda sapma değerleri ve katkıyla dengeleme önerisi yine gösterilir; alarm bölümünde "Portföy henüz küçük; sapma alarmları 3 aylık katkıya ulaşınca başlar." yazar.
   - Katkı tanımlı değilse (K-56) eşik 0'dır; alarmlar baştan çalışır.
@@ -661,7 +661,7 @@ class Report(BaseModel):
 
 Report ve ajan çıktıları `finans.contracts` içindeki pydantic modelleridir. Renderer'lar application'daki `ReportRenderer` port'unu uygular ve bootstrap'ta enjekte edilir.
 
-Haftalık rapor: toplam değer (dağılım içi, dağılım dışı ve toplam ayrı, K-74) ve haftalık değişim (bir önceki Pazar'ın as-of değerlemesine göre; o gün için değerleme yoksa "—", K-88), varlık satırları, dağılım ve sapma, açık uyarılar, veri sorunları, tek satırlık sistem sağlığı.
+Haftalık rapor: toplam değer (dağılım içi, dağılım dışı ve toplam ayrı, K-74) ve haftalık değişim (bir önceki Pazar'ın as-of değerlemesine göre; o gün için değerleme yoksa "—", K-88; dönemdeki alım ve satışlar değişimden çıkarılır: (V_t − V_{t−7} + Σ akış) / V_{t−7}, akış işareti K-36'daki gibi, K-94), varlık satırları, dağılım ve sapma, açık uyarılar, veri sorunları, tek satırlık sistem sağlığı.
 
 Aylık rapor: haftalık içeriğe ek olarak kullanılan TÜFE dönemleri ve yıllık enflasyon, lot bazlı reel getiri, nominal ve reel XIRR (bir yıldan kısa dönemde "Dönem getirisi (para ağırlıklı, yıllık değil)" etiketiyle), bu ayki katkı için yalnızca katkıyla dengeleme önerisi (katkı tanımlı değilse yalnızca "Katkı tanımlı değil.", açıkça 0 ise yalnızca "Bu ay katkı 0." notu; K-56, K-59). Para birimi biçimi (1.234,56 TL) `locale` modülüyle değil, kendi biçimlendiricimizle üretilir.
 
@@ -1010,6 +1010,7 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-91 | Kurulum adımı: makine kurulduğunda ilk iş `ft doctor` ve `ft sync cpi` ile erişim denemesi; Mac'te yedek çekme ve geri yükleme testi komutları dokümanda | Erişim ve anahtar sorunları zamanlanmış işten önce görülsün | Kurulum |
 | K-92 | M4 birimlerinde sırlar `LoadCredential=` ile (EVDS, Telegram, ping URL'leri); ProtectSystem ve diğer sertleştirme ile çıkış allowlist'i M5'te | M4 zamanlamayı, M5 sertleştirmeyi kapsar; sırlar baştan ortam değişkenine geçmesin | Güvenlik |
 | K-93 | K-90'a ek: maaş günü mesajının tutar gösterimi ayrı ayarla yönetilir: `FT_TELEGRAM_PAYDAY_SHOW_AMOUNTS` (varsayılan false; false iken paylar katkının yüzdesi). Diğer mesajların gizleme ayarından bağımsız | Maaş günü mesajının asıl içeriği tutarlar; gösterip göstermemek ayrı bir tercih | Raporlama, Dağılım |
+| K-94 | K-88 ve K-74'e ek: haftalık değişim dönemdeki alım ve satışlardan arındırılır ((V_t − V_{t−7} + Σ akış) / V_{t−7}); dağılım dışı varlığın basit reel getirisinde her lotun maliyeti ayrı ayrı değerleme gününün TL'sine çevrilir | Maaş günü alımı haftalık getiri gibi görünmesin; çok lotlu varlıkta reel getiri tek anlamlı olsun | Raporlama, Hesap motoru |
 
 ## Planı kodlama ajanıyla uygulama
 
