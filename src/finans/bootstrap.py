@@ -39,6 +39,8 @@ from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.adapters.tefas import TefasPriceSource
 from finans.adapters.telegram import TelegramNotifier
 from finans.application.backup import (
+    REAL_PREFIX,
+    SANAL_PREFIX,
     BackupOutcome,
     create_backup,
     files_with_secret_keys,
@@ -257,14 +259,19 @@ def run_scheduled_job(settings: Settings, clock: Clock, job: str, logical_date: 
         backup=_backup_factory(settings),
         profile=settings.profile,
     )
-    urls = {
-        check: url.get_secret_value()
-        for check, url in (
-            ("reports", settings.healthcheck_reports_url),
-            ("backup", settings.healthcheck_backup_url),
-        )
-        if url is not None
-    }
+    # K-110: ping'ler yalnızca gerçek sistemin sağlığını gösterir; sanal profil ping atmaz.
+    urls = (
+        {}
+        if is_sanal_profile(settings)
+        else {
+            check: url.get_secret_value()
+            for check, url in (
+                ("reports", settings.healthcheck_reports_url),
+                ("backup", settings.healthcheck_backup_url),
+            )
+            if url is not None
+        }
+    )
     lock = FlockJobLock(settings.lock_dir or settings.db_path.parent / "locks")
     with HttpClient(clock, secrets=list(urls.values())) as http:
         return run_job(
@@ -395,6 +402,7 @@ def _backup_factory(settings: Settings) -> Callable[[datetime], BackupOutcome] |
             directory=directory,
             scratch_parent=scratch,
             now=now,
+            prefix=SANAL_PREFIX if is_sanal_profile(settings) else REAL_PREFIX,
         )
 
     return backup

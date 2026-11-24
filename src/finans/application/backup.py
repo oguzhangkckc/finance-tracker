@@ -14,7 +14,9 @@ from finans.ports.backup import BackupError, DatabaseCopier, Encryptor
 
 KEEP: Final = 14
 SECRET_MARK: Final = "AGE-SECRET-KEY-"  # noqa: S105 - aranacak önek, sır değil
-_PREFIX: Final = "finans-"
+# K-110: sanal yedek ayrı dosyadır; budama ve doğrulama önekle ayrılır.
+REAL_PREFIX: Final = "finans-"
+SANAL_PREFIX: Final = "sanal-"
 _SUFFIX: Final = ".db.age"
 _CHUNK: Final = 1 << 20
 
@@ -59,6 +61,7 @@ def create_backup(
     scratch_parent: Path,
     now: datetime,
     keep: int = KEEP,
+    prefix: str = REAL_PREFIX,
 ) -> BackupOutcome:
     """Şifresiz kopya 700 izinli geçici dizinde 600 izinle oluşur ve her durumda silinir."""
     problems = recipient_problems(recipients)
@@ -66,7 +69,7 @@ def create_backup(
         raise BackupError("; ".join(problems))
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     scratch_parent.mkdir(parents=True, exist_ok=True)
-    name = f"{_PREFIX}{now.astimezone(UTC):%Y%m%dT%H%M%SZ}{_SUFFIX}"
+    name = f"{prefix}{now.astimezone(UTC):%Y%m%dT%H%M%SZ}{_SUFFIX}"
     target = directory / name
     if target.exists():
         raise BackupError(f"{name} zaten var; yedeğin üzerine yazılmaz")
@@ -89,13 +92,18 @@ def create_backup(
     sidecar = directory / f"{name}.sha256"
     sidecar.write_text(f"{digest}  {name}\n", encoding="utf-8")
     sidecar.chmod(0o600)
-    return BackupOutcome(name, digest, target.stat().st_size, integrity, _prune(directory, keep))
+    return BackupOutcome(
+        name, digest, target.stat().st_size, integrity, _prune(directory, keep, prefix)
+    )
 
 
 def verify_backups(directory: Path) -> list[BackupCheck]:
     """Sunucudaki şifreli kopyaların özetini denetler; içerik ancak Mac'te çözülerek denetlenir."""
     checks = []
-    for path in sorted(directory.glob(f"{_PREFIX}*{_SUFFIX}")):
+    backups = [
+        p for prefix in (REAL_PREFIX, SANAL_PREFIX) for p in directory.glob(f"{prefix}*{_SUFFIX}")
+    ]
+    for path in sorted(backups):
         sidecar = path.with_name(f"{path.name}.sha256")
         if not sidecar.exists():
             checks.append(BackupCheck(path.name, False, "özet dosyası yok"))
@@ -135,8 +143,8 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _prune(directory: Path, keep: int) -> tuple[str, ...]:
-    backups = sorted(directory.glob(f"{_PREFIX}*{_SUFFIX}"))
+def _prune(directory: Path, keep: int, prefix: str) -> tuple[str, ...]:
+    backups = sorted(directory.glob(f"{prefix}*{_SUFFIX}"))
     removed = backups[: max(0, len(backups) - keep)]
     for path in removed:
         path.unlink()

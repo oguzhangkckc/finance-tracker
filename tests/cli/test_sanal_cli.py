@@ -333,3 +333,20 @@ def test_telegram_messages_carry_the_prefix_only_in_the_sanal_profile(
         channel.send("Rapor", silent=True)
 
     assert json.loads(route.calls.last.request.content)["text"] == text
+
+
+@respx.mock
+@pytest.mark.usefixtures("real_db")
+@pytest.mark.parametrize(("profile", "pinged"), [("sanal", False), ("real", True)])
+def test_only_the_real_profile_pings_healthchecks(
+    monkeypatch: pytest.MonkeyPatch, profile: str, pinged: bool
+) -> None:
+    route = respx.get("https://hc-ping.com/raporlar").mock(return_value=httpx.Response(200))
+    monkeypatch.setenv("FT_HEALTHCHECK_REPORTS_URL", "https://hc-ping.com/raporlar")
+    if profile == "sanal":
+        _ready(monkeypatch)
+
+    result = runner.invoke(app, ["job", "run", "weekly-report", "--logical-date", "2026-06-21"])
+
+    assert result.exit_code == 0, result.output
+    assert route.called is pinged
