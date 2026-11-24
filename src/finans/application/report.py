@@ -31,12 +31,12 @@ from finans.domain.returns import (
     PeriodReturn,
     Unavailable,
     lot_real_return,
+    modified_dietz,
     money_weighted_return,
     portfolio_cash_flows,
     real_cash_flows,
     real_simple_return,
     simple_return,
-    value_change,
 )
 from finans.domain.valuation import PriceHistory, Valuation, value_book
 from finans.ports.unit_of_work import UnitOfWork
@@ -80,7 +80,13 @@ def build_report(
         previous_total=previous_total,
         weekly_change=None
         if previous_total is None
-        else value_change(previous_total, split.total, flows),
+        else modified_dietz(
+            previous_total,
+            split.total,
+            flows,
+            start_day=logical_date - WEEK,
+            end_day=logical_date,
+        ),
         simple_return=simple_return(valuation.total_value, valuation.priced_cost),
         realized_pnl=book.realized_pnl(),
     )

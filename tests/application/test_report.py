@@ -83,7 +83,9 @@ def test_weekly_report_splits_values_and_leaves_flows_out_of_the_change(db: Path
         in_allocation=D(2275), out_of_allocation=D("505"), total=D(2780)
     )
     assert report.summary.previous_total == D(2550)
-    assert report.summary.weekly_change == D(120) / D(2550)
+    # Modified Dietz (K-94): 2026-11-25 alımı dönemin 4/7'sinde portföyde.
+    assert report.summary.weekly_change is not None
+    assert is_close(report.summary.weekly_change, D(120) / (D(2550) + D(110) * D(4) / D(7)))
     assert report.summary.simple_return == D(2780) / D(2610) - 1
     assert report.summary.money_weighted is None
     assert report.allocation == [

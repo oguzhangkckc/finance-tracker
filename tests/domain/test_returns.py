@@ -24,6 +24,7 @@ from finans.domain.returns import (
     Unavailable,
     fund_twr,
     lot_real_return,
+    modified_dietz,
     money_weighted_return,
     net_present_value,
     portfolio_cash_flows,
@@ -31,7 +32,6 @@ from finans.domain.returns import (
     real_simple_return,
     simple_return,
     solve_irr,
-    value_change,
 )
 from tests.support.decimals import is_close
 
@@ -307,8 +307,42 @@ def test_real_simple_return_deflates_each_lot_cost_to_the_valuation_date() -> No
     assert real_simple_return([], D(0), CPI_100_TO_120, on=on) is None
 
 
-def test_value_change_leaves_out_money_put_in_or_taken_out() -> None:
-    flows = [CashFlow(date(2026, 11, 25), D(-110))]
-    assert value_change(D(2550), D(2780), flows) == D(120) / D(2550)
-    assert value_change(D(1000), D(900), [CashFlow(date(2026, 11, 25), D(150))]) == D("0.05")
-    assert value_change(D(0), D(100), []) is None
+SUNDAY_BEFORE = date(2026, 11, 22)
+SUNDAY = date(2026, 11, 29)
+
+
+def _week(start: str, end: str, *flows: tuple[date, str]) -> Decimal | None:
+    cash = [CashFlow(day, D(amount)) for day, amount in flows]
+    return modified_dietz(D(start), D(end), cash, start_day=SUNDAY_BEFORE, end_day=SUNDAY)
+
+
+def test_modified_dietz_weights_a_flow_by_the_days_it_stays_in_the_period() -> None:
+    # V0 = 1.000, Pazartesi 10.000 alım, hafta %1: eski formül ~%11 verirdi.
+    result = _week("1000", "11110", (date(2026, 11, 23), "-10000"))
+    assert result is not None
+    assert is_close(result, D(110) / (D(1000) + D(10000) * D(6) / D(7)))
+    assert D("0.011") < result < D("0.012")
+
+
+def test_modified_dietz_without_flows_is_the_simple_change() -> None:
+    assert _week("2550", "2780") == D(230) / D(2550)
+
+
+def test_modified_dietz_counts_a_sale_as_money_taken_out() -> None:
+    result = _week("1000", "905", (date(2026, 11, 26), "100"))
+    assert result is not None
+    assert is_close(result, D(5) / (D(1000) - D(100) * D(3) / D(7)))
+
+
+@pytest.mark.parametrize(
+    ("start", "flow"),
+    [("0", "-1000"), ("100", "150")],
+    ids=["ilk-hafta", "payda-negatif"],
+)
+def test_modified_dietz_is_undefined_without_a_positive_base(start: str, flow: str) -> None:
+    assert _week(start, "1010", (date(2026, 11, 23), flow)) is None
+
+
+def test_modified_dietz_needs_a_period_of_at_least_a_day() -> None:
+    with pytest.raises(DomainError, match="en az bir gün"):
+        modified_dietz(D(1), D(1), [], start_day=SUNDAY, end_day=SUNDAY)

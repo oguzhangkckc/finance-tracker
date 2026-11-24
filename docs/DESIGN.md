@@ -661,7 +661,7 @@ class Report(BaseModel):
 
 Report ve ajan çıktıları `finans.contracts` içindeki pydantic modelleridir. Renderer'lar application'daki `ReportRenderer` port'unu uygular ve bootstrap'ta enjekte edilir.
 
-Haftalık rapor: toplam değer (dağılım içi, dağılım dışı ve toplam ayrı, K-74) ve haftalık değişim (bir önceki Pazar'ın as-of değerlemesine göre; o gün için değerleme yoksa "—", K-88; dönemdeki alım ve satışlar değişimden çıkarılır: (V_t − V_{t−7} + Σ akış) / V_{t−7}, akış işareti K-36'daki gibi, K-94), varlık satırları, dağılım ve sapma, açık uyarılar, veri sorunları, tek satırlık sistem sağlığı.
+Haftalık rapor: toplam değer (dağılım içi, dağılım dışı ve toplam ayrı, K-74) ve haftalık değişim (bir önceki Pazar'ın as-of değerlemesine göre; o gün için değerleme yoksa "—", K-88; Modified Dietz ile hesaplanır: (V_1 − V_0 − ΣF) / (V_0 + Σ w_i·F_i), F portföye giren para (alım artı, satış eksi), w_i = akışın dönemde kaldığı gün / dönem günü; V_0 = 0 ya da payda ≤ 0 ise "—", K-94), varlık satırları, dağılım ve sapma, açık uyarılar, veri sorunları, tek satırlık sistem sağlığı.
 
 Aylık rapor: haftalık içeriğe ek olarak kullanılan TÜFE dönemleri ve yıllık enflasyon, lot bazlı reel getiri, nominal ve reel XIRR (bir yıldan kısa dönemde "Dönem getirisi (para ağırlıklı, yıllık değil)" etiketiyle), bu ayki katkı için yalnızca katkıyla dengeleme önerisi (katkı tanımlı değilse yalnızca "Katkı tanımlı değil.", açıkça 0 ise yalnızca "Bu ay katkı 0." notu; K-56, K-59). Para birimi biçimi (1.234,56 TL) `locale` modülüyle değil, kendi biçimlendiricimizle üretilir.
 
@@ -1010,7 +1010,7 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-91 | Kurulum adımı: makine kurulduğunda ilk iş `ft doctor` ve `ft sync cpi` ile erişim denemesi; Mac'te yedek çekme ve geri yükleme testi komutları dokümanda | Erişim ve anahtar sorunları zamanlanmış işten önce görülsün | Kurulum |
 | K-92 | M4 birimlerinde sırlar `LoadCredential=` ile (EVDS, Telegram, ping URL'leri); ProtectSystem ve diğer sertleştirme ile çıkış allowlist'i M5'te | M4 zamanlamayı, M5 sertleştirmeyi kapsar; sırlar baştan ortam değişkenine geçmesin | Güvenlik |
 | K-93 | K-90'a ek: maaş günü mesajının tutar gösterimi ayrı ayarla yönetilir: `FT_TELEGRAM_PAYDAY_SHOW_AMOUNTS` (varsayılan false; false iken paylar katkının yüzdesi). Diğer mesajların gizleme ayarından bağımsız | Maaş günü mesajının asıl içeriği tutarlar; gösterip göstermemek ayrı bir tercih | Raporlama, Dağılım |
-| K-94 | K-88 ve K-74'e ek: haftalık değişim dönemdeki alım ve satışlardan arındırılır ((V_t − V_{t−7} + Σ akış) / V_{t−7}); dağılım dışı varlığın basit reel getirisinde her lotun maliyeti ayrı ayrı değerleme gününün TL'sine çevrilir | Maaş günü alımı haftalık getiri gibi görünmesin; çok lotlu varlıkta reel getiri tek anlamlı olsun | Raporlama, Hesap motoru |
+| K-94 | K-88 ve K-74'e ek: haftalık değişim Modified Dietz ile hesaplanır: (V_1 − V_0 − ΣF) / (V_0 + Σ w_i·F_i), w_i = akışın dönemde kaldığı gün / dönem günü; V_0 = 0 ya da payda ≤ 0 ise "—". Dağılım dışı varlığın basit reel getirisinde her lotun maliyeti ayrı ayrı değerleme gününün TL'sine çevrilir | Akışları dönem sonunda sayan formül, katkı portföyden büyükken kazancı yalnızca başlangıç değerine bölüp şişiriyordu (V_0 = 1.000, Pazartesi 10.000 alım, hafta %1 → ~%11); çok lotlu varlıkta reel getiri tek anlamlı olsun | Raporlama, Hesap motoru |
 
 ## Planı kodlama ajanıyla uygulama
 

@@ -3,7 +3,7 @@
   '''
   Aylık rapor (2026-11-30)
   Dağılım içi %81,8, dağılım dışı %18,2 (toplam değerin yüzdesi)
-  Haftalık değişim: +%4,71 (alım ve satışlar hariç)
+  Haftalık değişim: +%4,59 (Modified Dietz; alım ve satışlar ayrılmış)
   Basit getiri: %6,51
   
   Varlıklar
@@ -50,7 +50,7 @@
         "total": "2780"
       },
       "previous_total": "2550",
-      "weekly_change": "0.04705882352941176470588235294",
+      "weekly_change": "0.04592673592126845270639693822",
       "simple_return": "0.065134099616858237547892720",
       "realized_pnl": "0",
       "money_weighted": {
@@ -175,7 +175,7 @@
   '''
   Aylık rapor (2026-11-30)
   Toplam değer: 2.780,00 TL (dağılım içi 2.275,00 TL, dağılım dışı 505,00 TL)
-  Haftalık değişim: +%4,71 (alım ve satışlar hariç)
+  Haftalık değişim: +%4,59 (Modified Dietz; alım ve satışlar ayrılmış)
   Basit getiri: %6,51
   Gerçekleşmiş K/Z: 0,00 TL
   
@@ -233,7 +233,7 @@
   '''
   Haftalık rapor (2026-11-29)
   Toplam değer: 2.780,00 TL (dağılım içi 2.275,00 TL, dağılım dışı 505,00 TL)
-  Haftalık değişim: +%4,71 (alım ve satışlar hariç)
+  Haftalık değişim: +%4,59 (Modified Dietz; alım ve satışlar ayrılmış)
   Basit getiri: %6,51
   Gerçekleşmiş K/Z: 0,00 TL
   

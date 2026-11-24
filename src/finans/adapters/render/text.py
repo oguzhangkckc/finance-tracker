@@ -15,6 +15,8 @@ from finans.domain.numeric import canonical_text
 from finans.ports.clock import BUSINESS_TZ
 
 _TITLES = {"weekly": "Haftalık rapor", "monthly": "Aylık rapor"}
+_DASH = "\u2014"
+_DIETZ_NOTE = " (Modified Dietz; alım ve satışlar ayrılmış)"
 _PERIOD_NOTE = (
     "Alım ve satışların tarihi ve tutarı hesaba katılarak, ilk yatırımdan değerleme tarihine "
     "kadarki getiri; bir yıldan kısa dönemde yıllığa çevrilmez."
@@ -93,11 +95,9 @@ class TextRenderer:
                 f"Toplam değer: {money(values.total)} (dağılım içi {money(values.in_allocation)},"
                 f" dağılım dışı {money(values.out_of_allocation)})"
             )
-        change = (
-            "önceki hafta için değerleme yok"
-            if summary.weekly_change is None
-            else f"{percent(summary.weekly_change, signed=True)} (alım ve satışlar hariç)"
-        )
+        change = _DASH
+        if summary.weekly_change is not None:
+            change = percent(summary.weekly_change, signed=True) + _DIETZ_NOTE
         lines.append(f"Haftalık değişim: {change}")
         simple = (
             "hesaplanamadı" if summary.simple_return is None else percent(summary.simple_return)

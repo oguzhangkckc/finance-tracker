@@ -34,7 +34,7 @@ WEEKLY = Report(
     summary=Summary(
         values=ValueSplit(in_allocation=D(2275), out_of_allocation=D(505), total=D(2780)),
         previous_total=D(2550),
-        weekly_change=D(120) / D(2550),
+        weekly_change=D(120) / (D(2550) + D(440) / D(7)),
         simple_return=D(2780) / D(2610) - 1,
         realized_pnl=D(0),
     ),

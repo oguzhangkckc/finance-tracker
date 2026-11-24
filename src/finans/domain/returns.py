@@ -176,8 +176,20 @@ def real_simple_return(
 
 
 @in_domain_context
-def value_change(start: Decimal, end: Decimal, flows: Iterable[CashFlow]) -> Decimal | None:
-    """Dönemdeki alım ve satışlar çıkarılmış değişim; akış işareti K-36'daki gibidir (K-88)."""
+def modified_dietz(
+    start: Decimal, end: Decimal, flows: Iterable[CashFlow], *, start_day: date, end_day: date
+) -> Decimal | None:
+    """Modified Dietz (K-94): her akış dönemde kaldığı gün oranıyla ağırlıklandırılır.
+
+    Akış işareti K-36'daki gibidir (alım eksi); portföye giren para bunun tersidir.
+    """
+    period = (end_day - start_day).days
+    if period <= 0:
+        raise DomainError(f"Dönem en az bir gün olmalı: {start_day} - {end_day}")
     if start <= ZERO:
         return None
-    return (end - start + sum((flow.amount for flow in flows), ZERO)) / start
+    moves = [(-flow.amount, (end_day - flow.on).days) for flow in flows]
+    base = start + sum((amount * days / period for amount, days in moves), ZERO)
+    if base <= ZERO:
+        return None
+    return (end - start - sum((amount for amount, _ in moves), ZERO)) / base
