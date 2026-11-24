@@ -26,6 +26,20 @@ WALL_CLOCK_CALLS = frozenset(
 CURRENT_TIME_WHEN_SINGLE_ARGUMENT = "time.strftime"
 DOMAIN_CONTEXT_DECORATOR = "in_domain_context"
 DOMAIN_CONTEXT_DEFINITION = SRC / "domain" / "numeric.py"
+# K-103: import-linter standart kütüphaneyi yalnız üst düzeyde tanır; urllib.parse serbest.
+NETWORK_MODULES = (
+    "urllib.request",
+    "urllib.response",
+    "http.client",
+    "http.server",
+    "socketserver",
+    "ftplib",
+    "smtplib",
+    "poplib",
+    "imaplib",
+    "xmlrpc",
+)
+NETWORK_FREE = ("domain", "contracts", "ports", "application", "settings.py", "cli", "web")
 
 
 def _python_files(base: Path) -> list[Path]:
@@ -214,3 +228,46 @@ def test_every_adapter_is_listed_in_the_independence_contract() -> None:
         and (entry.suffix == ".py" or (entry / "__init__.py").is_file())
     }
     assert present == set(listed)
+
+
+def network_imports(tree: ast.Module) -> Iterator[str]:
+    """`from urllib import request` da yakalanır; ImportFrom'un adları da modül sayılır."""
+    for node in ast.walk(tree):
+        names: list[str] = []
+        if isinstance(node, ast.Import):
+            names = [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.module is not None and node.level == 0:
+            names = [node.module, *(f"{node.module}.{alias.name}" for alias in node.names)]
+        for name in names:
+            if any(name == m or name.startswith(f"{m}.") for m in NETWORK_MODULES):
+                yield name
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("import urllib.request", ["urllib.request"]),
+        ("from urllib import request", ["urllib.request"]),
+        ("from urllib.request import urlopen", ["urllib.request", "urllib.request.urlopen"]),
+        ("import http.client as hc", ["http.client"]),
+        ("from http import server", ["http.server"]),
+        ("from urllib.parse import parse_qsl", []),
+        ("from http import HTTPStatus", []),
+        ("import xmlrpc.client", ["xmlrpc.client"]),
+    ],
+)
+def test_network_import_detector(source: str, expected: list[str]) -> None:
+    assert list(network_imports(ast.parse(source))) == expected
+
+
+def test_network_modules_only_in_adapters() -> None:
+    files = [
+        path
+        for entry in NETWORK_FREE
+        for path in ([SRC / entry] if entry.endswith(".py") else _python_files(SRC / entry))
+    ]
+    assert len(files) > 10
+    violations = [
+        f"{_relative(path)}: {module}" for path in files for module in network_imports(_parse(path))
+    ]
+    assert violations == []
