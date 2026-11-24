@@ -117,6 +117,7 @@ Python 3.13 ve SQLite üzerine, az bağımlılıklı ve ORM'siz bir yığın se�
 | XIRR | Kendi uygulaması (Newton-Raphson ve bisection yedeği) | Yaklaşık 40 satır, bağımlılık yok, test edilebilir | pyxirr: Rust bağımlılığı |
 | Test | pytest, hypothesis, syrupy, respx; saat için enjekte FixedClock; ağ conftest ile kapalı | Özellik tabanlı, snapshot, HTTP mock | time-machine: saat zaten Clock port'uyla enjekte ediliyor |
 | Kalite | ruff, mypy --strict, import-linter, AST tabanlı mimari testleri, pre-commit, pip-audit, CI | Katman kurallarını ve yasakları (float, duvar saati) otomatik zorlama | — |
+| Web arayüzü (W1) | Starlette, Jinja2, uvicorn (Unix soketi); JavaScript yok (K-103) | Küçük ve tipli; test istemcisi zaten bağımlı olunan httpx ile; form, oturum ve CSRF standart kütüphaneyle | FastAPI: gereksiz OpenAPI katmanı; Flask: ayrı WSGI sunucusu ve daha çok paket; HTMX: JavaScript |
 
 ## Proje yapısı
 
@@ -136,7 +137,8 @@ finance-tracker/
 │   │   ├── reconcile.py         # ekstre mutabakatı ve fiyat günü teşhisi
 │   │   ├── returns.py           # basit getiri, fon TWR'ı, XIRR, reel getiri
 │   │   ├── inflation.py         # endeks oranları, referans ay kuralı, baz yılı zincirleme
-│   │   └── allocation.py        # dağılım, sapma, histerezis, dengeleme
+│   │   ├── allocation.py        # dağılım, sapma, histerezis, dengeleme
+│   │   └── orders.py            # tutardan pay adedi (K-109)
 │   ├── contracts/               # pydantic DTO'lar: Report, ajan çıktıları; JSON Schema kaynağı
 │   ├── ports/                   # typing.Protocol arayüzleri
 │   │   ├── sources.py           # PriceSource, CpiSource (FetchResult döndürür)
@@ -150,7 +152,9 @@ finance-tracker/
 │   │   ├── build_report.py      # Report modeli üretir, render etmez
 │   │   ├── evaluate_alerts.py
 │   │   ├── export_snapshot.py   # ajan için JSON anlık görüntüleri
-│   │   └── jobs.py              # iş kaydı, kilit, idempotency
+│   │   ├── jobs.py              # iş kaydı, kilit, idempotency
+│   │   ├── inputs.py            # CLI ve web için ortak girdi ayrıştırma (K-104)
+│   │   └── paper.py             # sanal profilde tutarla işlem (K-109)
 │   ├── adapters/
 │   │   ├── _http.py             # ortak httpx istemcisi, retry, kibarlık (bağımsızlık kuralı dışında)
 │   │   ├── _csv.py              # CSV satırı için ortak tarih ve Decimal ayrıştırma (bağımsızlık kuralı dışında)
@@ -167,16 +171,21 @@ finance-tracker/
 │   ├── cli/
 │   │   ├── main.py              # ft: insan arayüzü (okuma ve yazma)
 │   │   └── agent.py             # ft-agent: yalnızca anlık görüntüleri okur, OpenClaw için
+│   ├── web/                     # finans-web: tailnet içi arayüz, cli ile aynı katman (K-101…K-106)
+│   │   ├── app.py, pages.py, security.py, forms.py, __main__.py
+│   │   └── templates/, static/site.css
 │   ├── bootstrap.py             # composition root: bağımlılıkları bağlar
 │   └── settings.py
 ├── skills/finans-takip/SKILL.md
 ├── deploy/systemd/finans-job@.service, finans-<iş>.timer   # şablon `ft job run %i` çağırır (K-80, K-97)
+├── deploy/systemd/finans-web.service                     # web arayüzü, ağsız ve sertleştirilmiş (K-106)
+├── deploy/systemd/finans-sanal-job@.service, finans-sanal-<iş>.timer   # sanal portföyün işleri (K-111)
 ├── deploy/ft-finans, finans.env.example, check-units.sh     # elle komut, ayar örneği, CI denetimi
 ├── docs/DESIGN.md, docs/ROADMAP.md, docs/agent-output.schema.json
 └── tests/unit, arch, contract, repo, snapshots, live, fixtures, fakes
 ```
 
-Katman kuralları (yukarıdan aşağıya: cli → bootstrap → settings → application | adapters → ports → contracts → domain):
+Katman kuralları (yukarıdan aşağıya: cli | web → bootstrap → settings → application | adapters → ports → contracts → domain):
 
 - domain hiçbir iç modülü import etmez; standart kütüphane dışında bağımlılığı yoktur.
 - contracts yalnızca domain'i ve pydantic'i import eder.
@@ -184,6 +193,7 @@ Katman kuralları (yukarıdan aşağıya: cli → bootstrap → settings → app
 - application domain, contracts ve ports'u import eder; somut adapter ve settings görmez.
 - adapters ports'u uygular; birbirini import etmez. İstisna alt çizgiyle başlayan ortak modüllerdir (`adapters/_http.py`, `adapters/_csv.py`). Adapter'lar application'ı ve settings'i görmez; ayarlar onlara bootstrap'ta enjekte edilir.
 - cli somut adapter import etmez. Somut sınıflar yalnızca bootstrap.py içinde bağlanır; testler aynı noktadan sahte uygulamaları enjekte eder.
+- web, cli ile aynı kurallara uyar; cli ile web birbirini import etmez. Web'in ayrı giriş noktası `finans-web`'dir (K-104).
 - Ağ ve SQLite erişimi yalnızca adapters altında yapılabilir; testlerde gerçek ağ kapalıdır.
 - `float` kaynak kodun hiçbir yerinde kullanılmaz. Duvar saatine yalnızca `adapters/clock.py` erişir. Duvar saati sayılanlar: `datetime.now`, `datetime.utcnow`, `datetime.today`, `date.today`, `time.time`, `time.time_ns`, `time.localtime`, `time.gmtime`, `time.ctime` ve zaman argümanı verilmeden çağrılan `time.strftime`.
 
@@ -799,6 +809,28 @@ SKILL.md şunları içerir: portföy, fon, enflasyon ve faiz sorularında tetikl
 
 Maliyet: özetler küçük ve ucuz bir modelle yapılır; LLM sağlayıcısında aylık harcama limiti tanımlanır. Rakamları LLM üretmez. PPK özetindeki oranlar da kodla çıkarılır ve sayı kontrolünden geçer.
 
+## Web arayüzü (W0–W2)
+
+Pi'de çalışan, yalnızca tailnet'ten erişilen ve sayfaları sunucu tarafında üreten bir arayüz (K-101…K-106). OpenClaw'ın yerine değil, yanındadır: web arayüzü insanın görüntüleme ve (W2'de) işlem girişi kanalıdır; doğal dil soruları ve PPK özetleri M5'te OpenClaw'da kalır. Ajan web arayüzüne erişmez; tailnet politikası OpenClaw makinesinin Pi'nin 443 portuna erişimine izin vermez.
+
+- **Erişim ve kimlik.** `tailscale serve` HTTPS'i sonlandırır ve isteği bir Unix soketine iletir; uygulama TCP dinlemez (K-101). Uygulama `Tailscale-User-Login` başlığını `FT_WEB_ALLOWED_LOGIN` ile karşılaştırır (K-102). Pi tailnet'te etiketlidir; cihazın kendisinden gelen istek kimliksizdir ve reddedilir. Kurulumda cihazdan yapılan bir istekle bu doğrulanır.
+- **Sayfalar (W1, salt okuma).** Özet; varlıklar ve lotlar; dağılım ve sapma; getiri (reel XIRR, dağılım dışı basit reel getiri); raporlar (haftalık, aylık, maaş günü; Telegram'la aynı `Report` nesnesi); alarmlar; işlem listesi; sistem (doctor, iş denemeleri, yedek özetleri). W1'de yalnız GET vardır ve veritabanı salt okunur açılır.
+- **Yazma (W2).** İşlem girişi ve iptali; CLI'daki kontroller aynen geçerlidir, çünkü aynı application fonksiyonları çağrılır (K-105). Config arayüzden okunmaz ve değiştirilmez (K-104).
+- **Servis.** `finans-web.service`, `finans-web` giriş noktasını çalıştırır; ağsızdır ve işlerin sırlarını görmez (K-106).
+- **Kendi alan adı (ileride).** `tailscale serve` yalnızca `ts.net` adları için sertifika alır. Kendi alan adı için şunlar gerekir: Pi'nin Tailscale adresine işaret eden bir DNS kaydı, DNS-01 ile sertifika (sunucuda DNS sağlayıcısı anahtarı), yalnızca Tailscale arayüzünde dinleyen bir TLS sonlandırıcı ve kimlik için tailscaled'in whois sorgusu. Sertifika şeffaflık kayıtları alt alan adını herkese açık yapar. Şimdilik `ts.net` adı kullanılır; arayüz hiçbir durumda internete açılmaz.
+
+## Sanal portföy
+
+Gerçek fonlar, gerçek tarihler ve o günün gerçek fiyatıyla yapılmış gibi kaydedilen sanal alımlarla portföyü gerçeği gibi izlemek için ayrı bir profil (paper trading; K-107…K-113). Sanal işlemler gerçek veritabanına hiçbir yoldan girmez.
+
+- **Seçim ve ayrım.** `FT_PROFILE=sanal` (varsayılan `real`). Sanal profil kendi veritabanını (`FT_SANAL_DB_PATH`; verilmezse gerçek veritabanının dizininde `sanal.db`) ve ayrı bir kilit dizinini kullanır. Config varsayılan olarak gerçek `portfolio.toml`'dur (aynı fonlar, hedefler, katkı, maaş günü); `FT_SANAL_PORTFOLIO_PATH` ile ayrı bir dosya verilebilir. Sanal veritabanı SQLite başlığında `application_id` ile işaretlenir; bağlantı fabrikası her açılışta işareti profille karşılaştırır. `ft sanal init` yalnızca yeni dosya oluşturur; `ft sanal reset` yalnızca işaretli dosyayı siler.
+- **Piyasa verisi.** Fiyat ve TÜFE gerçektir; sanal veritabanına gerçek profildeki komutlarla yazılır (`ft sync prices`, gerekirse `ft price set`, `ft sync cpi`). Fiyat verisinin kaynağı kullanıcının kararıdır ve sanal portföyün ön koşuludur. Sentetik fiyat üretilmez; testler hayali fixture'larla çalışır.
+- **Tutarla işlem.** `ft tx add buy KOD --amount TUTAR --date GÜN`, yalnızca sanal profilde. Girilen gün fiyat günüdür (K-11); fiyat yalnızca o günün kaydından alınır. Kayıt yoksa işlem reddedilir ve en yakın fiyatlı günler gösterilir; gün kaydırılmaz, fiyat uydurulmaz. Adet tutarın fiyata bölümünün tam sayı kısmıdır; artan tutar gösterilir, saklanmaz. Pay yuvarlama kuralı tek bir yerde tanımlıdır ve yalnızca oradan değişir. Satış adetle girilir, fiyat yine o günün kaydından alınır. Sanal profilde işlem fiyatı elle yazılamaz.
+- **Gerçeğiyle aynı akış.** Raporlar, maaş günü mesajı, alarmlar ve dengeleme gerçek portföydeki kodla çalışır. Her çıktının ilk satırı "SANAL — gerçek alım değil"; Telegram'da "🧪 SANAL" öneki; web'de her sayfada bant. Healthchecks ping'i gönderilmez. Sanal veritabanı gece yedeğine ayrı ve şifreli bir dosya olarak girer; gerçek yedekle karışmaz (K-110).
+- **Maaş günü uygulaması.** `ft sanal maas-gunu-uygula` maaş günü planını sanal alımlara çevirir: önce önizleme (fon, tutar, fiyat günü, adet, artan), onaylanınca kayıt. Fiyatı olmayan fon için işlem yapılmaz ve bu açıkça söylenir. Zamanlayıcıyla çalışmaz (K-113).
+- **Zamanlanmış işler.** Ayrı şablon `finans-sanal-job@.service` ve timer'lar: sync-cpi, weekly-report, monthly-report, payday, backup; sync-prices fiyat kaynağı kararından sonra eklenir (K-111). Gerçek profilin işleri ve kilitleri etkilenmez.
+- **Kabul kapıları.** M4 kabulü sanal portföyle şartlı geçilebilir; M3 mutabakatı gerçek ekstre gerektirir (K-112).
+
 ## Güvenlik ve tehdit modeli
 
 En değerli varlık finansal hesaplar değil, çünkü sistem onlara hiç erişmez; korunan şeyler sırlar, veri bütünlüğü ve LLM ajanının yetkisidir. Ana ilke, ajanın ele geçirilmesi durumunda bile zararın "yanlış bir mesaj" ile sınırlı kalmasıdır.
@@ -813,6 +845,8 @@ En değerli varlık finansal hesaplar değil, çünkü sistem onlara hiç erişm
 | Veri bütünlüğü | Yanlış fiyat yanlış karara yol açar | Şema doğrulama, kalite kontrolleri, provenance, raporda veri sorunları bölümü |
 | Maliyet patlaması | Ajan döngüye girip token yakar | Sağlayıcıda harcama limiti, cron sıklık sınırı |
 | Veri kaybı | Disk arızası | Gece yedeği; age ile şifreli; Mac SSH ile çeker, sunucu hedefe kimlik bilgisi tutmaz; aylık geri yükleme testi Mac'te (K-82) |
+| Web üzerinden yetkisiz erişim | Sahte kimlik başlığı (yerel süreç, tinyproxy, Pi'nin kendisinden istek), CSRF, kilidi açık çalıntı cihaz | Unix soketi (0600), etiketli Pi, tam login eşleşmesi, yazma için şifre ve CSRF, ağsız servis (K-101, K-102, K-105, K-106) |
+| Sanal işlemin gerçeğe karışması | Yanlış profil ya da yol | Veritabanı başlığında işaret ve açılışta denetim, ayrı yol, `ft sanal init` yalnızca yeni dosyaya (K-107) |
 
 ### Dağıtım sertleştirmesi
 
@@ -943,6 +977,8 @@ Hesap doğruluğu bu projenin tek vazgeçilmez kalitesidir; test ağırlığı d
 | Ajan kontratı | jsonschema | ft-agent çıktısının yayımlanan şemaya uyması; iki bayatlık sinyalinin birbirinden bağımsız çalışması (taze snapshot ve eski fiyat; eski snapshot ve taze fiyat) |
 | Zamanlama birimleri | pytest ve CI'da systemd-analyze | Birim dosyaları ayrıştırılır: her timer'da Persistent=true ve Europe/Istanbul; ExecStart'taki iş adları `ft job run`'da tanımlı; LoadCredential adları ayarlarla eşleşir; sertleştirme ayarları servis ve `deploy/ft-finans`'ta aynı, yazılan her yol ReadWritePaths altında (K-98). CI'da `systemd-analyze calendar` ve `verify` (K-80) |
 | Canlı smoke | `make live` (pytest -m live, CI dışı) | Gerçek uç noktaların hâlâ beklenen biçimde yanıt vermesi; haftada bir timer ile (M4). EVDS: referans ay değeri (2025-01 = 88,578291) ve serinin son iki ay içinde yayımlanmış olması. Anahtar `.env`'den ya da LoadCredential'dan okunur, yoksa test atlanır. TEFAS canlı testi yok; istekleri kullanıcı çalıştırır (K-71) |
+| Web | Starlette test istemcisi, syrupy | Kimlik başlığı, güvenlik başlıkları, salt okuma (W1), CSRF ve CLI ile eşlik (W2), HTML kaçışı, birim sertleştirmesi; sayfa rakamları metin raporuyla aynı `Report` nesnesinden (K-101…K-106) |
+| Sanal portföy | pytest, FixedClock, kayıtlı TEFAS ve EVDS yanıtları | Profil ayrımı (sanal işlem gerçek veritabanına giremez, gerçek profil sanal veritabanını açmaz), tutarla işlem (fiyat günü, yuvarlama, fiyat yoksa red), maaş günü uygulaması (önizleme yazmaz, fiyatsız fon atlanır, ikinci uygulama reddedilir), SANAL işaretleri, ping'in kapalılığı, sanal yedeğin ayrı dosyası (K-107…K-113) |
 
 Hedefler: domain katmanında %95+ satır kapsamı, mypy --strict temiz, CI süresi 2 dakikanın altında.
 
@@ -994,7 +1030,8 @@ Açık sorular:
   - Kanıt (2026-11-24): saat 11:39'da 24.11 tarihli YAT ve EMK fiyatları yayımlanmıştı. Bu yalnızca yayın zamanını gösterir; fiyatın hangi gün verilen emirlere uygulandığını göstermez. Çoğu fonda emir, verildikten sonra açıklanan ilk fiyattan gerçekleşir. Soru açık.
   - Kanıt yolu: `ft reconcile`'ın fiyat tarihi bölümü, ekstrenin kullandığı fiyatın ekstre gününe göre kaç işlem günü kaydığını gösterir (K-78). İşlem tarihli ekstre satırlarında bu, emrin hangi günün fiyatından gerçekleştiğini doğrudan verir.
 - [ ] Elle değerlenen varlıklar için v2'de otomatik fiyat kaynağı istenecek mi?
-- [ ] Paylaşılan cihazın sertleştirmesi (SSH parola girişi, container portlarının bağlanması, IPv6 erişimi): gerçek işlemler girilmeden önce değerlendirilecek. Birim sertleştirmesi root seviyesindeki bir saldırıya karşı korumaz (K-98).
+- [ ] Paylaşılan cihazın sertleştirmesi (SSH parola girişi, container portlarının bağlanması, IPv6 erişimi): gerçek işlemler girilmeden önce değerlendirilecek. Birim sertleştirmesi root seviyesindeki bir saldırıya karşı korumaz (K-98). Kapsama eklenenler: Tailscale adresindeki tinyproxy, giriş kullanıcısının lxd grubu ve Pi'nin etiketlenmesi. Pi etiketlenmeden ve Tailscale politikası yazılmadan önce cihaza Tailscale üzerinden yapılan bütün erişimler (diğer projelerin portları, tinyproxy, CI) listelenir, her birine açık izin verilir ve liste kullanıcı onayından geçer (K-102).
+- [ ] TEFAS fonlarında pay adedi tam sayı mı? İlk gerçek dekontla doğrulanacak (K-109).
 - [x] GVK geçici 67 stopajında maliyetin FIFO ile bulunduğunun birincil kaynakla doğrulanması: doğrulandı (K-54).
 - [x] EVDS3'te API anahtarı başlıkta mı, parametrede mi? Başlıkta (`key`); kılavuz ve canlı 403 ile doğrulandı (K-61).
 - [x] Anlık görüntülerin OpenClaw makinesine aktarım yöntemi: ayrı anahtar ve rrsync ile, yalnızca çekirdekten dışarı (K-27).
@@ -1105,6 +1142,19 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-98 | K-92'ye ek: cihaz başka projelerle paylaşıldığı için M5 sertleştirmesinin bir kısmı M4 birimlerine çekilir: `NoNewPrivileges=yes`, `PrivateTmp=yes`, `ProtectSystem=strict`, `ReadWritePaths=/var/lib/finans`, `ProtectHome=yes`. `deploy/ft-finans` aynı ayarlarla çalışır. Yazılan her yol (veritabanı, kilitler, yedekler, şifresiz geçici kopya, migration yedeği) `/var/lib/finans` altındadır; `/etc/finans` ve `/opt/finans` yalnızca okunur. `finans` kullanıcısı docker grubunda olmaz. Kalan risk: birim sertleştirmesi root seviyesindeki bir saldırıya karşı korumaz; cihazdaki finans.db'nin güvenliği aynı cihazdaki diğer projelerin sertleştirmesine (docker grubu, CI anahtarı, Chromium) bağlıdır; bkz. açık soru "Paylaşılan cihazın sertleştirmesi". Çıkış allowlist'i ve diğer ayarlar M5'te kalır | Bizim işimiz kötüye kullanılırsa zarar sınırlansın; beş ayar ucuz ve işlerin davranışını değiştirmiyor. Kalan risk açıkça yazılmazsa birim ayarları yanlış bir güven verir | Güvenlik |
 | K-99 | Sistem saat dilimi değiştirilmez; kurulumda yalnızca NTP açılır (Kurulum'daki `timedatectl set-timezone` adımı kaldırıldı). Timer'lar Europe/Istanbul'u açıkça yazar (K-80); uygulama UTC anı alıp mantıksal tarihi ve gösterilen saatleri İstanbul saatine çevirerek hesaplar. Sistem saat dilimi UTC, +14 ya da −8 iken `ft job run`'ın mantıksal tarihi ve `ft job list`'in saatleri değişmez; test bunu kanıtlar | Sistem saat dilimini değiştirmek gereksiz ve aynı cihazdaki diğer projeleri etkiler | Zamanlama, Test |
 | K-100 | K-82 ve K-97'ye ek: Mac yedekleri GNU rsync ile çeker (Homebrew, `/opt/homebrew/bin/rsync`); launchd işinde rsync tam yoluyla yazılır. macOS'un `/usr/bin/rsync`'i (openrsync) kullanılmaz | Kurulumda openrsync'in komutu rrsync tarafından reddedildi ("invalid rsync-command syntax or options"); SSH girişi çalıştığı halde çekme başarısız oluyordu. Homebrew rsync ile çekme ve `shasum -c` doğrulaması geçti | Kurulum, Yedek |
+| K-101 | Web arayüzü yalnızca tailnet'ten: `tailscale serve` HTTPS 443 kök yol → Unix soketi `/run/finans-web/web.sock` (0600, finans). Uygulama TCP dinlemez; Funnel, Cloudflare Tunnel ve internete açık port yok | 127.0.0.1'deki bir TCP portuna her yerel süreç ve Tailscale adresindeki tinyproxy üzerinden tailnet erişebilir; kimlik başlığı sahtelenebilir. Unix soketine yalnızca finans ve root bağlanır | Güvenlik, Web |
+| K-102 | Kimlik: `Tailscale-User-Login` başlığı `FT_WEB_ALLOWED_LOGIN` ile tam eşleşmeli; eksik, boş, farklı ya da birden çok değer 403; ayar boşsa uygulama başlamaz. Pi tailnet'te etiketlenir; cihazın kendisinden gelen istekler kimliksiz kalır. Etiketlemeden ve politika yazılmadan önce cihaza Tailscale üzerinden yapılan bütün erişimler (diğer projelerin portları, tinyproxy, CI) listelenir, her birine açık izin verilir ve liste kullanıcı onayından geçer | Serve gelen kimlik başlıklarını siler ve etiketli cihazlara eklemez; etiketsiz Pi'den gelen istek Pi sahibinin kimliğini taşırdı. Diğer projeler bozulmamalı | Güvenlik, Web |
+| K-103 | Web teknolojisi: Starlette, Jinja2 (autoescape), uvicorn (Unix soketi). JavaScript yok; tek CSS dosyası; sıkı CSP. Form, oturum, CSRF ve şifre standart kütüphaneyle (`urllib.parse`, `hmac`, `secrets`, `hashlib.scrypt`). Yeni bağımlılıklar: starlette, jinja2, uvicorn (click ve markupsafe ile) | Küçük ve tipli; test istemcisi zaten bağımlı olunan httpx ile; ek güvenlik paketi gerekmiyor | Web, Bağımlılık |
+| K-104 | `finans.web` cli ile aynı katmandadır (ikisi de bootstrap'ın üstünde): application fonksiyonlarını bootstrap üzerinden kullanır, somut adapter import etmez, domain'e dokunmaz; cli ile web birbirini import etmez; ayrı giriş noktası `finans-web`. CLI'daki girdi ayrıştırması (ondalık ayırıcı, girilen basamak) ve Türkçe sayı biçimi ortak modüllere taşınır (W0). Config arayüzden okunmaz ve değiştirilmez | Web ve CLI aynı kuralları aynı kodla uygulasın; arayüz yeni iş mantığı taşımasın | Proje yapısı, Web |
+| K-105 | Yazma (W2): işlem girişi önizleme → onay; iptal gerekçeyle; ikisi de CLI'daki application fonksiyonlarıyla (fazla satış, K-51, K-58, K-64). CSRF: `__Host-` çerez (Secure, HttpOnly, SameSite=Strict), oturuma bağlı HMAC belirteci, `Origin` = `FT_WEB_ORIGIN` ve `Sec-Fetch-Site: same-origin`; yazma yalnızca POST, form nonce'u çift gönderimi engeller. Yazma için şifre kilidi: doğru şifre 15 dakika açar; scrypt özeti credstore'da; 5 hatada 15 dakika kilit; özet yoksa yazma kapalı. Okuma için şifre istenmez. W2, paylaşılan cihazın sertleştirmesi açık sorusu kapanınca açılır | Kilidi açık, tailnet'e bağlı bir cihazın çalınması okumayla sınırlı kalsın; başlık temizleme açıkları (ör. TS-2023-008) yazmaya izin vermesin | Güvenlik, Web |
+| K-106 | `finans-web.service`: finans kullanıcısı, K-98'in beş ayarı ve ek olarak `PrivateNetwork=yes`, `RestrictAddressFamilies=AF_UNIX`, boş `CapabilityBoundingSet`, `PrivateDevices`, `ProtectKernelTunables`, `ProtectKernelModules`, `ProtectKernelLogs`, `ProtectControlGroups`, `ProtectProc=invisible`, `SystemCallFilter=@system-service`, `MemoryDenyWriteExecute`, `RuntimeDirectory=finans-web`, `UMask=0077`. İşlerin sırları (EVDS, Telegram, ping) yüklenmez; yalnızca oturum anahtarı ve W2'de şifre özeti. CI'da `systemd-analyze security --offline` eşiği | Ağa açık tek servis; ele geçirilse bile dışarı bağlantı kuramasın ve işlerin sırlarına erişemesin | Güvenlik, Web |
+| K-107 | Sanal portföy profili: `FT_PROFILE=sanal` (varsayılan `real`). Kendi veritabanı (`FT_SANAL_DB_PATH`; verilmezse gerçek veritabanının dizininde `sanal.db`) ve kilit dizini; config varsayılan olarak gerçek `portfolio.toml`, istenirse `FT_SANAL_PORTFOLIO_PATH`. Sanal veritabanı SQLite başlığında `application_id` ile işaretlenir; bağlantı fabrikası her açılışta işareti profille karşılaştırır: sanal profil yalnızca işaretli dosyayı açar, gerçek profil işaretli dosyayı açmaz. `ft sanal init` yalnızca yeni dosya oluşturur, `ft sanal reset` yalnızca işaretli dosyayı siler; sanal yol gerçek yolla aynıysa ayar hatası | Sanal işlemler gerçek veritabanına hiçbir yoldan girmesin; ayrım şema değişikliği gerektirmesin | Veri modeli, Sanal |
+| K-108 | Sanal profilde piyasa verisi gerçektir: fiyat ve TÜFE sanal veritabanına gerçek profildeki komutlarla yazılır (`ft sync prices`, `ft price set`, `ft sync cpi`). Fiyat verisinin kaynağı kullanıcının kararıdır ve sanal portföyün ön koşuludur. Sentetik fiyat üretilmez; testler hayali fixture'larla çalışır | Sanal portföy gerçek piyasayı izlesin; veritabanı kendi içinde tam olsun, iki veritabanı arasında okuma gerekmesin | Veri toplama, Sanal |
+| K-109 | Tutarla sanal işlem: `ft tx add buy KOD --amount TUTAR --date GÜN`, yalnızca sanal profilde. Girilen gün fiyat günüdür (K-11) ve fiyat yalnızca o günün kaydından alınır; kayıt yoksa işlem reddedilir, en yakın fiyatlı günler gösterilir, gün kaydırılmaz. Adet = ⌊tutar / fiyat⌋, tam sayı pay (TEFAS_YAT, TEFAS_BYF); adet 0 ise red; harcanan = adet × fiyat; artan tutar gösterilir, saklanmaz; komisyon varsa `--fee` ile ayrıca. Satış adetle, fiyat yine o günün kaydından. Sanal profilde işlem fiyatı elle yazılamaz. TEFAS_EMK ve MANUAL için tutarla giriş ilk sürümde yok. Pay yuvarlama kuralı (fon türüne göre pay basamağı) `domain/orders.py`'de tek bir yerde tanımlıdır; kural değişirse yalnızca orası ve testleri değişir (açık soru: TEFAS fonlarında pay adedi tam sayı mı?) | Fiyat uydurulmasın; sanal işlemin fiyatı yayımlanmış gerçek bir fiyat olsun. Pay tam sayıdır, artan para fona girmez | Hesap motoru, Sanal |
+| K-110 | Sanal profilde çıktılar ve yan etkiler: her çıktının ilk satırı "SANAL — gerçek alım değil" (metin raporlar ve CLI; JSON'da `"profile": "sanal"`); Telegram'a giden her mesaj (raporlar, maaş günü, alarmlar) "🧪 SANAL" önekiyle; web'de her sayfada bant. Healthchecks ping'i gönderilmez. Sanal veritabanı gece yedeğine ayrı ve şifreli bir dosya olarak girer: sanal profilin kendi backup işi, `sanal-<zaman>.db.age` ve `.sha256`, gerçek yedekle aynı age alıcıları ve yedek dizini (Mac aynı çekmeyle alır), ayrı saklama sayısı. Gerçek ve sanal yedek hiçbir zaman aynı dosyaya yazılmaz; budama ve doğrulama dosya önekiyle ayrılır | Sanal çıktı gerçeğiyle karıştırılmasın; ping'ler yalnızca gerçek sistemin sağlığını göstersin; SD kart arızasında sanal kayıtlar da kaybolmasın | Raporlama, Yedek, Sanal |
+| K-111 | Sanal zamanlanmış işler: ayrı şablon `finans-sanal-job@.service` (`Environment=FT_PROFILE=sanal`, K-98 sertleştirmesi, LoadCredential'da yalnızca EVDS anahtarı ve Telegram token'ı) ve timer'lar: sync-cpi, weekly-report, monthly-report, payday ve backup (03:15, gerçek yedekten sonra); sync-prices fiyat kaynağı kararından sonra eklenir. Ping yok. Gerçek profilin işleri, kilitleri ve timer'ları değişmez | Sanal portföy gerçeği gibi izlensin, raporlar zamanında gelsin; iki profilin işleri birbirini kilitlemesin | Zamanlama, Sanal |
+| K-112 | Kabul kapıları ve sanal portföy: M4 kabulü ("iki hafta kesintisiz ve doğru rapor") sanal portföyle şu şartlarla geçilebilir: sanal timer'lar iki hafta açık ve her rapor zamanında gelmiş; raporlar aynı sanal işlemlerle elle tutulan tabloyla ±0,01 TL/kalem mutabık; gerçek profilin yedek ping'i bu sürede hiç kaçmamış. Rapor ping'inin yolu sanal profilde çalışmadığı için gerçek işlemler başlayınca ilk rapor ping'i ayrıca doğrulanır. M3 kabulündeki "bir ay canlı veri" fiyat ve TÜFE akışıyla izlenebilir; elle tutulan tabloyla mutabakat ve geçmiş dönem mutabakatı gerçek aracı kurum ekstresi gerektirir, sanal portföyle geçilmez | Hesap ve zamanlama yolları sanal portföyde de aynı kodla çalışır; aracı kurum gerçekliği (adet, komisyon, valör) yalnızca gerçek ekstreyle sınanır | Test, Kabul |
+| K-113 | `ft sanal maas-gunu-uygula [--maas-gunu GÜN]`: zamanlayıcıyla değil, yalnızca kullanıcı çalıştırır; maaş günü verilmezse son maaş günüdür. Plan `payday_plan` (K-83) ile maaş gününün değerlemesinden hesaplanır; plan eksik fiyat yüzünden atlanırsa (K-95) hiçbir işlem yapılmaz ve nedeni yazılır. Her fon için fiyat günü, maaş gününden başlayarak en fazla 3 gün içindeki (K-97'deki pencere) ilk fiyatlı gündür. Bu pencerede fiyatı olmayan fon için işlem yapılmaz, bu açıkça söylenir ve o fonun tutarı başka fona aktarılmaz. Adet K-109'daki kuralla hesaplanır. Önce önizleme gösterilir (fon, tutar, fiyat günü, adet, artan); kayıt yalnızca kullanıcı onaylayınca yapılır. Aynı maaş günü ikinci kez uygulanamaz: işlemler dış referansla işaretlenir | Maaş günü stratejisi tek tek giriş yapmadan sanal olarak izlenebilsin; hiçbir fon için fiyat uydurulmasın, plan sessizce değişmesin | Dağılım, Sanal |
 
 ## Planı kodlama ajanıyla uygulama
 
