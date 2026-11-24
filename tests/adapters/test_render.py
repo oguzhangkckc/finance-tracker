@@ -1,9 +1,11 @@
+import json
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
+from finans.adapters.render.json import JsonRenderer
 from finans.adapters.render.text import TextRenderer
 from finans.contracts.report import (
     DataIssueLine,
@@ -81,3 +83,15 @@ def test_sanal_report_and_payday_open_with_the_notice_in_text_only(monthly: Repo
     assert TextRenderer().payday(plan).splitlines()[0] == "SANAL — gerçek alım değil"
     assert "SANAL" not in TextRenderer(html=True).report(sanal)
     assert "SANAL" not in TextRenderer().report(monthly)
+
+
+def test_manual_price_is_labelled_in_text_and_kept_as_manual_in_json(monthly: Report) -> None:
+    first = monthly.holdings[0].model_copy(update={"source": "manual"})
+    manual = monthly.model_copy(update={"holdings": [first, *monthly.holdings[1:]]})
+
+    text = TextRenderer().report(manual)
+    body = json.loads(JsonRenderer().report(manual))
+
+    assert f"fiyat {first.price_date} (elle)" in text
+    assert "(manual)" not in text
+    assert body["holdings"][0]["source"] == "manual"

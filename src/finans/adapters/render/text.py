@@ -36,6 +36,8 @@ _SAME_PERIOD_NOTE = (
     "Alımlar ve değerleme aynı TÜFE dönemine düştüğü için reel getiri henüz nominalle aynı."
 )
 _CODE = re.compile(r"`([^`]+)`")
+# K-117: elle girilen fiyat gözden kaçmasın; TEFAS kaynağının yazımı değişmez.
+_SOURCE_LABELS = {"manual": "elle"}
 
 
 def _local(moment: datetime | None) -> str:
@@ -172,7 +174,8 @@ class TextRenderer:
         else:
             worth = money(holding.value)
         parts = [] if worth is None else [worth]
-        parts.append(f"fiyat {holding.price_date} ({holding.source})")
+        source = _SOURCE_LABELS.get(holding.source or "", holding.source)
+        parts.append(f"fiyat {holding.price_date} ({source})")
         if holding.simple_return is not None:
             parts.append(f"basit getiri {percent(holding.simple_return)}")
         if holding.real_return is not None:
