@@ -42,7 +42,7 @@ Geliştirme kapısı: Snapshot ve iş testleri yeşil; zamanlayıcılar test ort
 Kapının kanıtı: uçtan uca rapor snapshot'ları `tests/e2e`; iş yürütücü `tests/application/test_jobs.py`; birim dosyaları `tests/deploy` ve CI'daki `units` işi (`deploy/check-units.sh`, systemd-analyze calendar ve verify).
 Kabul kapısı: İki hafta kesintisiz ve doğru rapor; süre, cihazda bütün zamanlayıcıların açıldığı gün başlar.
 Kurulum durumu (2026-11-24): cihaz kuruldu; `ft doctor` fiyatlar dışında yeşil; `backup` ve `sync-cpi` zamanlayıcıları açık; ilk yedek Mac'e çekildi ve geri yükleme testi geçti.
-Bekleyen adım: fiyat konusu (ilk `ft sync prices`) ele alındığı gün `sync-prices`, `weekly-report`, `monthly-report` ve `payday` zamanlayıcıları açılır; M3 (bir ay canlı veri) ve M4 (iki hafta rapor) kabul süreleri o gün başlar ve başlangıç ile bitiş tarihleri buraya yazılır.
+Bekleyen adım: fiyat kaynağı kararı verildi (K-121). Gerçek işlem yokken yalnızca sanal `sync-prices` çalışır; gerçek `sync-prices`, `weekly-report`, `monthly-report` ve `payday` gerçek alımlar başlayınca açılır. M4 kabulü sanal portföyle (K-112): sanal rapor zamanlayıcıları ilk sanal alım günü açılır ve başlangıç ile bitiş tarihleri buraya yazılır. M3'ün "bir ay canlı veri" süresi sanal `sync-prices`'ın ilk zamanlanmış çalışmasıyla başlar.
 Not: M4 kabulü sanal portföyle şartlı geçilebilir: sanal timer'lar iki hafta açık ve raporlar zamanında, raporlar aynı sanal işlemlerle elle tutulan tabloyla mutabık, gerçek profilin yedek ping'i hiç kaçmamış; gerçek işlemler başlayınca ilk rapor ping'i ayrıca doğrulanır (K-112).
 İlk commit (M3 düzeltmeleri): mutabakatta adet farkı son 5 işlem gününde girilmiş tek bir işlemle eşleşiyorsa "olası valör farkı" gösterilir (K-79).
 Not: Para ağırlıklı getirinin kökü [−0,99; 10] dışındaysa (alt ya da üst) rapor basit getiriyi ve "Zamanlama nedeniyle para ağırlıklı getiri anlamlı değil." notunu gösterir; domain sonuç türü bu durumu "hesaplanamadı"dan ayırır (K-44).
@@ -68,7 +68,7 @@ Geliştirme kapısı: `make check` yeşil; CLI çıktıları ve snapshot'lar de�
 
 ## S · Sanal portföy
 `FT_PROFILE=sanal`: ayrı ve işaretli veritabanı; gerçek fonlar, fiyatlar ve TÜFE; tutarla işlem girişi (fiyat yalnızca o günün kaydından, tam sayı pay); raporlar, maaş günü mesajı, alarmlar ve dengeleme gerçek kodla; `ft sanal maas-gunu-uygula` (önizleme ve onay); SANAL işaretleri; ping yok; sanal yedek ayrı ve şifreli dosya; ayrı timer şablonu (K-107…K-113).
-Ön koşul: fiyat verisinin kaynağı kullanıcı tarafından belirlenmiş ve sanal işlemlerin tarihleri için fiyatlar sanal veritabanında var; bu ön koşul yalnızca sanal `sync-prices` timer'ını ve geçmiş tarihli işlemleri bekletir.
+Ön koşul: fiyat kaynağı kararı verildi (K-121, TEFAS JSON API'si, sistem istek atar); geçmiş tarihli işlemler için fiyatlar `ft sync prices --from` ile sanal veritabanına çekilir. Sanal `sync-prices` hafta içi 21:45'te.
 Komutlar (K-116): `ft sanal init|reset|al|sat|maas-gunu-uygula`; sunucuda `deploy/ft-sanal`; kurulum DESIGN Kurulum adım 10. Elle fiyat raporda "elle" etiketiyle (K-117); JSON'da her raporda `profile` (K-118).
 Geliştirme kapısı: profil ayrımı testleri yeşil (sanal işlem gerçek veritabanına giremez, gerçek profil sanal veritabanını açmaz); tutarla işlem testleri (fiyat günü, yuvarlama, fiyat yoksa red); maaş günü uygulaması testleri (önizleme yazmaz, fiyatsız fon atlanır, ikinci uygulama reddedilir); sanal profilde ping çağrılmıyor; sanal yedek ayrı dosyada ve gerçek yedeğin budamasından etkilenmiyor.
 
