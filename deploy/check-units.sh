@@ -5,9 +5,10 @@ set -euo pipefail
 units="$(cd "$(dirname "$0")/systemd" && pwd)"
 
 for timer in "$units"/*.timer; do
-  expression="$(sed -n 's/^OnCalendar=//p' "$timer")"
-  echo "$(basename "$timer"): $expression"
-  systemd-analyze calendar "$expression" > /dev/null
+  while IFS= read -r expression; do
+    echo "$(basename "$timer"): $expression"
+    systemd-analyze calendar "$expression" > /dev/null
+  done < <(sed -n 's/^OnCalendar=//p' "$timer")
 done
 
 # Şablon doğrudan doğrulanamaz; her iş için kendi şablonundan (gerçek ya da sanal) bir örnek kurulur. ExecStart ve
