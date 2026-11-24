@@ -688,7 +688,7 @@ def report_payday(
             else _parse_decimal("--contribution", contribution)
         )
         with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
-            plan = payday_plan(uow, config, on=day, contribution=amount)
+            plan = payday_plan(uow, config, on=day, contribution=amount, profile=settings.profile)
     renderer = bootstrap.report_renderer(fmt.value, payday_amounts=not hide_amounts)
     typer.echo(renderer.payday(plan))
 
@@ -719,6 +719,7 @@ def _show_report(
                 contribution=amount,
                 now=clock.now(),
                 cpi_series=settings.cpi_series,
+                profile=settings.profile,
             )
     typer.echo(bootstrap.report_renderer(fmt.value, hide_amounts=hide).report(report))
 

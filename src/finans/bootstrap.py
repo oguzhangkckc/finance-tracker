@@ -253,6 +253,7 @@ def run_scheduled_job(settings: Settings, clock: Clock, job: str, logical_date: 
         renderer=telegram_renderer(settings),
         weekly_enabled=settings.weekly_report_enabled,
         backup=_backup_factory(settings),
+        profile=settings.profile,
     )
     urls = {
         check: url.get_secret_value()
