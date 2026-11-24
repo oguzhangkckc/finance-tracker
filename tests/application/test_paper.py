@@ -15,7 +15,7 @@ from finans.application.paper import (
     plan_payday_purchases,
     record_payday_purchases,
 )
-from finans.application.transactions import add_transaction
+from finans.application.transactions import add_transaction, void_transaction
 from finans.domain.models import (
     DomainError,
     Instrument,
@@ -182,3 +182,24 @@ def test_plan_is_skipped_when_a_held_fund_has_no_price_by_payday(migrated_db: Pa
         plan = plan_payday_purchases(work, CONFIG, payday=PAYDAY, today=date(2026, 6, 17))
 
     assert (plan.missing_prices, plan.lines) == (["XPP"], [])
+
+
+def test_a_voided_payday_purchase_counts_as_applied_unless_asked_explicitly(
+    payday_uow: SqliteUnitOfWork,
+) -> None:
+    first = plan_payday_purchases(payday_uow, CONFIG, payday=PAYDAY, today=date(2026, 6, 17))
+    [trade] = record_payday_purchases(payday_uow, first, now=NOW)
+    void_transaction(payday_uow, trade.txn_id, reason="yanlış fon", now=NOW)
+
+    again = plan_payday_purchases(payday_uow, CONFIG, payday=PAYDAY, today=date(2026, 6, 17))
+    assert _statuses(again) == {"XHT": "voided", "XPP": "pending"}
+    assert record_payday_purchases(payday_uow, again, now=NOW) == []
+
+    asked = plan_payday_purchases(
+        payday_uow, CONFIG, payday=PAYDAY, today=date(2026, 6, 17), reapply_voided=True
+    )
+    assert _statuses(asked) == {"XHT": "ready", "XPP": "pending"}
+    [redone] = record_payday_purchases(payday_uow, asked, now=NOW)
+    assert (redone.code, redone.units) == ("XHT", trade.units)
+    after = plan_payday_purchases(payday_uow, CONFIG, payday=PAYDAY, today=date(2026, 6, 17))
+    assert _statuses(after) == {"XHT": "applied", "XPP": "pending"}

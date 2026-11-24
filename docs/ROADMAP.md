@@ -73,7 +73,7 @@ Komutlar (K-116): `ft sanal init|reset|al|sat|maas-gunu-uygula`; sunucuda `deplo
 Geliştirme kapısı: profil ayrımı testleri yeşil (sanal işlem gerçek veritabanına giremez, gerçek profil sanal veritabanını açmaz); tutarla işlem testleri (fiyat günü, yuvarlama, fiyat yoksa red); maaş günü uygulaması testleri (önizleme yazmaz, fiyatsız fon atlanır, ikinci uygulama reddedilir); sanal profilde ping çağrılmıyor; sanal yedek ayrı dosyada ve gerçek yedeğin budamasından etkilenmiyor.
 
 ## W1 · Web arayüzü, salt okuma
-`finans.web` (Starlette, Jinja2, uvicorn), Unix soketi ve `tailscale serve`, kimlik başlığı denetimi, sayfalar (özet, varlıklar, dağılım, getiri, raporlar, alarmlar, işlemler, sistem), `finans-web.service` (K-101…K-104, K-106). Sanal portföyle geliştirilir; testlerde hayali fixture'lar kullanılır.
+`finans.web` (Starlette, Jinja2, uvicorn), Unix soketi ve `tailscale serve`, kimlik başlığı denetimi, sayfalar (özet, varlıklar, dağılım, getiri, raporlar, alarmlar, işlemler, sistem), `finans-web.service` (K-101…K-104, K-106). Sanal portföyle geliştirilir; testlerde hayali fixture'lar kullanılır. Fiyatlar açıklandığı günle ve bayatlık uyarısıyla gösterilir; arayüz fiyat çekmez, "şimdi güncelle" yok (K-120).
 Ön koşul: cihaza Tailscale üzerinden yapılan bütün erişimlerin listesi kullanıcı onayından geçer; Pi etiketlenir ve politika her mevcut erişime açık izin verir (K-102).
 Geliştirme kapısı: kimlik, güvenlik başlıkları, salt okuma, HTML kaçışı ve birim testleri yeşil; cihazda kendi cihazından 200, Pi'nin kendisinden ve `tag:ci`'dan 403, Funnel kapalı.
 Not: kabul süresi başlamadan cihaza alınması önerilir; kabul süresince `/opt/finans` güncellemesi kabul edilen sistemi değiştirir.

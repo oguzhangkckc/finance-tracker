@@ -75,7 +75,7 @@ def _price_on(uow: UnitOfWork, code: str, day: date) -> PricePoint:
     )
 
 
-PaydayStatus = Literal["ready", "pending", "expired", "applied", "skipped"]
+PaydayStatus = Literal["ready", "pending", "expired", "applied", "voided", "skipped"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,14 +103,24 @@ class PaydayPurchasePlan:
 
 
 def plan_payday_purchases(
-    uow: UnitOfWork, config: PortfolioConfig, *, payday: date, today: date
+    uow: UnitOfWork,
+    config: PortfolioConfig,
+    *,
+    payday: date,
+    today: date,
+    reapply_voided: bool = False,
 ) -> PaydayPurchasePlan:
     """Plan maaş gününün değerlemesinden; tekrar çalıştırmada değişmez (K-113)."""
     plan = payday_plan(uow, config, on=payday, contribution=config.monthly_contribution)
     window_end = payday_window_end(payday)
-    applied = {s.external_ref for s in uow.transactions.list()}
+    stored = uow.transactions.list(include_voided=True)
+    applied = {s.external_ref for s in stored if not s.is_voided}
+    # K-119: iptal bilinçli bir karardır; yalnızca açıkça istenirse yeniden önerilir.
+    voided = set() if reapply_voided else {s.external_ref for s in stored if s.is_voided}
     lines = [
-        _purchase(uow, line.asset_class, line.instrument, line.amount, payday, today, applied)
+        _purchase(
+            uow, line.asset_class, line.instrument, line.amount, payday, today, applied, voided
+        )
         for line in plan.lines
         if line.amount > 0
     ]
@@ -145,11 +155,14 @@ def _purchase(
     payday: date,
     today: date,
     applied: set[str | None],
+    voided: set[str | None],
 ) -> PaydayPurchase:
     ref = f"sanal-maas-gunu:{payday.isoformat()}:{code}"
     base = PaydayPurchase(asset_class, code, amount, "applied", ref)
     if ref in applied:
         return base
+    if ref in voided:
+        return PaydayPurchase(asset_class, code, amount, "voided", ref)
     _, after = uow.prices.around(code, payday)
     day = payday_price_day(payday, [] if after is None else [after.price_date])
     if day is None or after is None:
