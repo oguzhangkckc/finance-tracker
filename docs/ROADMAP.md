@@ -24,6 +24,7 @@ Not: Bekleyen migration varsa önce SQLite backup API'siyle yerel kopya alınır
 ## M3 · Veri kaynakları
 TEFAS ve EVDS3 adapter'ları (ilk iş: EVDS3 anahtar iletimi), backfill, veri kalitesi kontrolleri; kayıtlı fixture'larla kontrat testleri, haftalık canlı smoke testi.
 Geliştirme kapısı: Kontrat testleri yeşil; backfill ile geçmiş dönem mutabakatı ±0,01 TL/kalem.
+İlk commit (M2 düzeltmeleri): migration atomikliğinin grup bazında olduğu açıkça yazıldı; yedeklemede eski `.partial` artıkları temizlenir (K-57); alış iptali reddedilince önce iptal edilecek satışlar listelenir (K-58).
 Not: JSON her yerde `json.loads(..., parse_float=Decimal)` ile ayrıştırılır; `response.json()` kullanılmaz; çok basamaklı fiyatla kontrat testi yazılır (K-32).
 Not: TÜFE 2025=100 serisi tüm geçmişiyle doğrudan çekilir; ilk işlerden biri EVDS3'te bu geçmişin bulunduğunu doğrulamak. `chain_link` yedek olarak kalır (K-43).
 Not: Migration 0002: cpi, raw_payload (K-49). TEFAS fiyatları gelince her işlemin birim fiyatı o günün TEFAS fiyatıyla karşılaştırılır; uyuşmazlık büyük olasılıkla yanlış tarih (K-53).
@@ -35,6 +36,7 @@ Geliştirme kapısı: Snapshot ve iş testleri yeşil; zamanlayıcılar test ort
 Kabul kapısı: İki hafta kesintisiz ve doğru rapor.
 Not: Para ağırlıklı getirinin kökü [−0,99; 10] dışındaysa (alt ya da üst) rapor basit getiriyi ve "Zamanlama nedeniyle para ağırlıklı getiri anlamlı değil." notunu gösterir; domain sonuç türü bu durumu "hesaplanamadı"dan ayırır (K-44).
 Not: Katkı tanımlı değilse aylık raporun dengeleme bölümü "Katkı tanımlı değil." yazar, sıfırlarla dolu öneri göstermez; eksik `[contribution]` 0 yerine "tanımlı değil" okunur (K-56).
+Not: Katkı açıkça 0 ise dengeleme bölümü "Bu ay katkı 0." yazar; sıfırlarla dolu öneri gösterilmez (K-59).
 
 ## M5 · OpenClaw ve güvenlik sertleştirmesi
 JSON anlık görüntüleri ve rrsync ile aktarımı (yalnızca çekirdekten dışarı), ft-agent (boru hattı ve veri tazeliği için iki ayrı bayatlık sinyali), JSON Schema kontratı, SKILL.md, PPK özeti akışı (oranlar kodla çıkarılır), asistan botu; iki makine, ayrı OS kullanıcıları, systemd sertleştirme, LoadCredential, makine bazında egress allowlist.

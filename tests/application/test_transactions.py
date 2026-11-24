@@ -86,9 +86,38 @@ class TestVoid:
 
     def test_void_that_would_break_a_later_sell_is_rejected(self, uow: SqliteUnitOfWork) -> None:
         buy = _add(uow, tx("2026-01-05"))
-        _add(uow, tx("2026-02-05", Side.SELL))
-        with pytest.raises(DomainError, match="iptal edilemez"):
+        sell = _add(uow, tx("2026-02-05", Side.SELL))
+        with pytest.raises(DomainError) as failure:
             void_transaction(uow, buy, reason="yanlış", now=NOW)
+        assert str(failure.value) == (
+            f"{buy} numaralı işlem iptal edilemez; sonraki satışlar elde olmayan payı satmış "
+            f"olur. Önce şu satışları `ft tx void` ile iptal et: #{sell} (2026-02-05 TTE 10 adet)."
+        )
+
+    def test_rejected_void_lists_every_sell_to_void_first(self, uow: SqliteUnitOfWork) -> None:
+        _add(uow, tx("2026-01-05", units="10"))
+        wrong = _add(uow, tx("2026-01-10", units="10"))
+        _add(uow, tx("2026-01-20", Side.SELL, units="8"))
+        first = _add(uow, tx("2026-02-05", Side.SELL, units="5"))
+        second = _add(uow, tx("2026-02-05", Side.SELL, units="1"))
+        _add(uow, tx("2026-02-01", units="1", price="3000", code="ALTIN_GR"))
+        _add(uow, tx("2026-02-05", Side.SELL, units="1", price="3100", code="ALTIN_GR"))
+        _add(uow, tx("2026-03-01", Side.SELL, units="2"))
+        third = _add(uow, tx("2026-03-02", Side.SELL, units="1.5"))
+
+        # İptal sonrası elde 10 kalır; 01-20'de 2'ye iner. 02-05'in 6 adedi karşılanamaz ve
+        # yok sayılır; 03-01 elde kalan 2'yi bitirir, 03-02'nin 1.5 adedi de karşılanamaz.
+        with pytest.raises(DomainError, match="ile iptal et: #") as failure:
+            void_transaction(uow, wrong, reason="yanlış", now=NOW)
+        assert str(failure.value).endswith(
+            f"#{first} (2026-02-05 TTE 5 adet), #{second} (2026-02-05 TTE 1 adet), "
+            f"#{third} (2026-03-02 TTE 1.5 adet)."
+        )
+
+        for sell in (first, second, third):
+            void_transaction(uow, sell, reason="alış yanlış", now=NOW)
+        void_transaction(uow, wrong, reason="yanlış", now=NOW)
+        assert uow.transactions.get(wrong).is_voided  # type: ignore[union-attr]
 
 
 def _parsed(

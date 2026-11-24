@@ -204,6 +204,8 @@ Varlık tanımlarının kaynağı `portfolio.toml`'dur. `ft config apply` komutu
 - `voided_at` ve `void_reason` birlikte dolar; gerekçe zorunludur. İptal edilen işlem pozisyon hesabında yok sayılır, kaydı ve gerekçesi kalır.
 - `external_ref` tekilliği yalnızca iptal edilmemiş işlemler arasındadır (kısmi index). Böylece iptal edilen bir kaydın doğrusu aynı ref ile yeniden içe aktarılabilir.
 - Bir iptal, sonraki satışları geçersiz kılıyorsa reddedilir. Örneğin bir alışın iptali sonraki satışları fazla satışa düşürüyorsa. Kontrol, iptal sonrası bütün geçmişle domain'de yapılır.
+  - Ret mesajı, önce iptal edilmesi gereken satışları numarası, tarihi, kodu ve adediyle listeler (K-58). Örnek: "5 numaralı işlem iptal edilemez; sonraki satışlar elde olmayan payı satmış olur. Önce şu satışları `ft tx void` ile iptal et: #7 (2026-02-05 TTE 5 adet), #9 (2026-03-02 TTE 1.5 adet)."
+  - Liste tarih sırasıyla bulunur: eldeki payın yetmediği ilk günün satışları listeye alınır ve yok sayılarak devam edilir. Aynı günün satışları domain'de birlikte işlendiği için o günün bütün satışları listelenir. Listelenenler iptal edilince alışın iptali kabul edilir.
 - `ft tx list` iptal edilen işlemleri varsayılan olarak göstermez; `--all` ile gösterir.
 
 **İşlem içe aktarma (M2, K-50).** CSV biçimi: `date,code,side,units,price,fee,ref,note`; UTF-8, ondalık nokta, başlık zorunlu. Ya bütün satırlar yazılır ya hiçbiri; hatalar satır numarasıyla birlikte toplanır.
@@ -328,7 +330,10 @@ CREATE TABLE alert_event (               -- olay günlüğü; yalnızca eklenir
 
 Migration dosyaları paketin içinde (`src/finans/adapters/sqlite/migrations/`) durur ve `importlib.resources` ile okunur; böylece systemd kurulu paketten çalışırken de bulunur. Uygulama kuralları:
 
-- Yazan süreç (ft), bekleyen migration'ları `BEGIN IMMEDIATE` ile tek transaction içinde uygular. Aynı anda açılan iki süreç yarışmaz. Bekleyenler arasında tablo yeniden kuran bir migration varsa gruplar o migration'da bölünür (aşağıda).
+- **Atomiklik grup bazındadır, migration dizisinin tamamı için değil.** Yazan süreç (ft) bekleyen migration'ları gruplara böler. Tablo yeniden kuran (`-- finans: foreign_keys=off` başlıklı) her migration tek başına bir gruptur, çünkü foreign key ayarı transaction içinde değiştirilemez ve kendi transaction'ına ihtiyaç duyar. Aralarındaki diğer migration'lar birlikte bir grup olur. Her grup kendi `BEGIN IMMEDIATE` transaction'ında ya tamamen uygulanır ya hiç uygulanmaz.
+  - Bir grup başarısız olursa önceki gruplar kalıcıdır: veritabanı ara bir sürümde kalır ve sonraki çalıştırma kaldığı yerden devam eder. Eski şemaya dönmenin yolu migration öncesi yedektir (K-55).
+  - Bekleyenler arasında tablo yeniden kuran migration yoksa hepsi tek grup, yani tek transaction'dır.
+  - Aynı anda açılan iki süreç yarışmaz; her grup başlarken veritabanı sürümünün beklenen değerde olduğu doğrulanır.
 - Sürüm PRAGMA user_version ile izlenir. Her dosyanın sha256 özeti `_migration` tablosuna yazılır; uygulanmış bir dosya sonradan değişirse çalıştırıcı hata verir.
 - Veritabanı kodun bildiğinden yeni bir sürümdeyse çalıştırıcı reddeder.
 - Migration'lara yalnızca ekleme yapılır. Geri alma yerine ileri yönlü düzeltme migration'ı yazılır.
@@ -338,7 +343,7 @@ Migration dosyaları paketin içinde (`src/finans/adapters/sqlite/migrations/`) 
   3. COMMIT'ten önce `PRAGMA foreign_key_check` çalışır. Tek bir ihlal bile varsa migration geri alınır ve ihlaller hata mesajında listelenir.
   4. COMMIT. Ardından, başarıda da hatada da `PRAGMA foreign_keys = ON` yapılır.
 
-  Tanınmayan bir `-- finans:` başlığı hata verir; böylece yazım hatası sessizce yok sayılmaz. Bu durumda atomiklik grup bazındadır: bekleyen migration'lar işaretli migration'larda gruplara bölünür ve her grup kendi transaction'ında atomiktir. Sonraki bir grup başarısız olursa önceki gruplar uygulanmış kalır.
+  Tanınmayan bir `-- finans:` başlığı hata verir; böylece yazım hatası sessizce yok sayılmaz. Böyle bir migration'ın bulunması, atomikliğin neden grup bazında olduğunu açıklar (yukarıda).
 
   Ayrıntılar (M2):
   - Başlık yalnızca dosyanın ilk satırında geçerlidir. `-- finans:` ile başlayan bir satır dosyanın başka bir yerindeyse çalıştırıcı hata verir; yanlış yere yazılmış bir başlık sessizce etkisiz kalmasın.
@@ -348,6 +353,7 @@ Migration dosyaları paketin içinde (`src/finans/adapters/sqlite/migrations/`) 
   - Yer ve ad: veritabanının yanındaki `backups/` dizini; ad `finans-20261124T120000Z-v1.db` biçimindedir (UTC zaman damgası ve kopyanın şema sürümü). Zaman Clock port'undan gelir.
   - Kopya önce gizli, geçici bir adla yazılır ve bitince yeniden adlandırılır; yarım kalan kopya yedek gibi görünmez. Dosya 600 izinle oluşur. Kopyanın journal kipi `DELETE`'e çevrilir; böylece yedek tek bir dosyadır. Var olan bir yedeğin üzerine yazılmaz.
   - Son 5 kopya tutulur; daha eskileri yeni kopya alındıktan sonra silinir. Yalnızca bu ad kalıbına uyan dosyalar silinir.
+  - Yedek alınırken aynı dizindeki, bu veritabanına ait ve 1 saatten eski `.partial` artıkları (ve SQLite'ın `-journal` dosyaları) silinir; bunlar yarıda kesilmiş eski yedeklemelerden kalır. Daha yeni olanlara dokunulmaz, çünkü aynı anda yedek alan başka bir sürecin olabilir (K-57).
   - Yedek alınamazsa migration uygulanmaz. Migration başarısız olursa hata mesajı yedeğin yolunu verir; `ft db migrate` başarıda da yolu yazar.
   - Yeni (sürüm 0) veritabanında yedek alınmaz; yedeklenecek veri yoktur.
   - Geri dönüş: ft ve zamanlanmış işler durdurulur; `finans.db-wal` ile `finans.db-shm` silinir ve yedek `finans.db` yerine kopyalanır.
@@ -524,6 +530,7 @@ T_c = h_c (V + K), \quad d_c = \max(0,\, T_c - V_c)
 
 - Σ_c (T_c − V_c) = K'dır ve d_c bu farkların yalnızca pozitif kısmını alır. Bu yüzden Σd ≥ K her zaman geçerlidir; eşitlik yalnızca hiçbir sınıf hedefin üstünde değilken olur. Tek kural vardır: **a_c = K × d_c / Σd**. K = 0 ise tüm a_c = 0'dır (o durumda Σd = 0 olabilir).
 - Katkı tanımlı değilse (`[contribution]` yok ve `--contribution` verilmemiş) aylık raporun dengeleme bölümü öneri göstermez, "Katkı tanımlı değil." yazar; sıfırlarla dolu bir öneri gösterilmez (M4, K-56). M2'de eksik `[contribution]` 0 olarak okunuyor; M4'te "tanımlı değil" ile açıkça yazılmış 0 ayrılır ve `PortfolioConfig.monthly_contribution` `Decimal | None` olur.
+- Katkı açıkça 0 ise (`[contribution]` içinde 0 ya da `--contribution 0`) dengeleme bölümü "Bu ay katkı 0." yazar; sıfırlarla dolu öneri bu durumda da gösterilmez (M4, K-59).
 - a_c tam hassasiyetle hesaplanır. Kuruşa yuvarlama sunum katmanında, toplamı K'ya eşit tutan en büyük kalan (Hamilton) yöntemiyle yapılır (M4).
 - Özellik testleri: Σa = K; a_c ≥ 0; a_c ≤ d_c. Decimal bölmesinin artığı için bu koşullar 1e−20 göreli toleransla sınanır.
   - a_c ≤ d_c, hedefin altındaki sınıflar için V_c + a_c ≤ T_c demektir.
@@ -543,7 +550,7 @@ class Report(BaseModel):
     summary: Summary              # toplam değer, basit getiri, XIRR, reel XIRR (annualized bayrağıyla)
     holdings: list[HoldingLine]   # değer, haftalık değişim, fiyat tarihi, kaynak; lotlarda alım TÜFE dönemi
     allocation: list[AllocationLine]
-    rebalance: RebalancePlan | None  # katkı tanımlı değilse None (K-56)
+    rebalance: RebalancePlan | None  # katkı tanımlı değilse None (K-56); katkı 0 ise satırsız (K-59)
     alerts: list[Alert]
     data_issues: list[DataIssue]
     provenance: Provenance        # fiyat tarihleri, değerleme TÜFE dönemi, çekilme zamanları
@@ -553,7 +560,7 @@ Report ve ajan çıktıları `finans.contracts` içindeki pydantic modelleridir.
 
 Haftalık rapor: toplam değer ve haftalık değişim, varlık satırları, dağılım ve sapma, açık uyarılar, veri sorunları, tek satırlık sistem sağlığı.
 
-Aylık rapor: haftalık içeriğe ek olarak kullanılan TÜFE dönemleri ve yıllık enflasyon, lot bazlı reel getiri, nominal ve reel XIRR (bir yıldan kısa dönemde "Dönem getirisi (para ağırlıklı, yıllık değil)" etiketiyle), bu ayki katkı için yalnızca katkıyla dengeleme önerisi (katkı tanımlı değilse yalnızca "Katkı tanımlı değil." notu, K-56). Para birimi biçimi (1.234,56 TL) `locale` modülüyle değil, kendi biçimlendiricimizle üretilir.
+Aylık rapor: haftalık içeriğe ek olarak kullanılan TÜFE dönemleri ve yıllık enflasyon, lot bazlı reel getiri, nominal ve reel XIRR (bir yıldan kısa dönemde "Dönem getirisi (para ağırlıklı, yıllık değil)" etiketiyle), bu ayki katkı için yalnızca katkıyla dengeleme önerisi (katkı tanımlı değilse yalnızca "Katkı tanımlı değil.", açıkça 0 ise yalnızca "Bu ay katkı 0." notu; K-56, K-59). Para birimi biçimi (1.234,56 TL) `locale` modülüyle değil, kendi biçimlendiricimizle üretilir.
 
 ### Telegram
 
@@ -818,6 +825,9 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-54 | K-18'i günceller: GVK geçici 67/1 ikinci paragraf FIFO'yu kanunla belirliyor; fon paylarına uygulanması kapsam hükümlerinin birlikte okunmasıyla (kanunun istisna cümlesi, GİB rehberi 2026 §20, 258 seri tebliğ §1.1.2). Aynı paragraftaki "aynı gün ağırlıklı ortalama" K-42 ile uyumlu | Birincil kaynakla doğrulama istendi; hiçbir cümle fon paylarını ve FIFO'yu birlikte anmadığı için bu ayrım açıkça yazıldı | Hesap motoru |
 | K-55 | Bekleyen migration varsa ve veritabanı sürümü 1 ya da üstüyse migration'dan önce SQLite backup API'siyle kopya alınır: veritabanının yanındaki `backups/`, `<ad>-<UTC zaman damgası>-v<sürüm>.db`, 600 izin, geçici adla yazılıp yeniden adlandırılır, journal kipi `DELETE`; son 5 kopya tutulur. Yedek alınamazsa migration uygulanmaz; başarısızlıkta hata mesajı yedeğin yolunu verir (M2) | Tablo yeniden kuran migration'larda atomiklik grup bazında; sonraki grup başarısız olursa veritabanı ara sürümde kalır. Eski şemaya dönüşün tek yolu migration öncesi kopya; dosya kopyalama WAL'daki değişiklikleri kaçırabilir | Veri modeli |
 | K-56 | Katkı tanımlı değilse (`[contribution]` yok, `--contribution` verilmemiş) aylık raporun dengeleme bölümü "Katkı tanımlı değil." yazar; sıfırlarla dolu öneri gösterilmez. `Report.rebalance` bu durumda None; M4'te eksik `[contribution]` 0 yerine "tanımlı değil" okunur (M4) | Sıfırlardan oluşan bir öneri, dengelemenin gerekmediği izlenimini verir | Raporlama, Dağılım |
+| K-57 | K-55'e ek: yedek alınırken aynı dizindeki, bu veritabanına ait ve 1 saatten eski `.partial` ve `.partial-journal` artıkları silinir; `.gitignore`'da `*.partial` ve `*.partial-journal` | Yarıda kesilen yedeklemeden kalan dosyalar birikmesin. 1 saat eşiği, aynı anda yedek alan başka bir sürecin dosyasını silmemek için | Veri modeli |
+| K-58 | K-48'e ek: alış iptali reddedilirse mesaj önce iptal edilmesi gereken satışları numara, tarih, kod ve adetle listeler; liste tarih sırasıyla, eldeki payın yetmediği günün satışları yok sayılarak bulunur. `OversellError` enstrümanı ve günü taşır | Kullanıcı hangi satışları iptal edeceğini tahmin etmek zorunda kalmasın; listelenenler iptal edilince alış iptali kabul edilir | Veri modeli |
+| K-59 | K-56'ya ek: katkı açıkça 0 ise aylık raporun dengeleme bölümü "Bu ay katkı 0." yazar; sıfırlarla dolu öneri gösterilmez (M4) | Açıkça yazılmış 0 da sıfırlardan oluşan bir tablo üretir; tanımsız katkıdan ayrı bir mesajla gösterilir | Raporlama, Dağılım |
 
 ## Planı kodlama ajanıyla uygulama
 

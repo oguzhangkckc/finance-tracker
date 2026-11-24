@@ -1,3 +1,4 @@
+import os
 import sqlite3
 import stat
 from contextlib import closing
@@ -202,3 +203,27 @@ def test_interrupted_copy_leaves_no_partial_file(tmp_path: Path, backups: Path) 
         write_backup(source, backups / FIRST_BACKUP)
 
     assert list(backups.iterdir()) == []
+
+
+def test_stale_partial_files_of_this_database_are_removed(
+    migrated_db: Path, tmp_path: Path, backups: Path, clock: FixedClock
+) -> None:
+    backups.mkdir()
+    stale = [
+        ".finans-20261101T090000Z-v1.db.k3j9x2ab.partial",
+        ".finans-20261101T090000Z-v1.db.k3j9x2ab.partial-journal",
+    ]
+    in_progress = ".finans-20261123T115500Z-v1.db.q8w7e6r5.partial"
+    unrelated = [".baska-20261101T090000Z-v1.db.k3j9x2ab.partial", "notlar.partial"]
+    for name in [*stale, in_progress, *unrelated]:
+        age = timedelta(minutes=5) if name == in_progress else timedelta(hours=2)
+        stamp = (clock.now() - age).timestamp()
+        (backups / name).touch()
+        os.utime(backups / name, (stamp, stamp))
+    migrations = _migrations(tmp_path / "migrations", ("0002_b.sql", CREATE_B))
+
+    migrate(migrated_db, migrations, clock=clock, backup_dir=backups, keep_backups=5)
+
+    assert sorted(path.name for path in backups.iterdir()) == sorted(
+        [in_progress, *unrelated, FIRST_BACKUP]
+    )

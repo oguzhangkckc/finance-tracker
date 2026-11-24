@@ -8,7 +8,12 @@ from importlib.resources import files
 from importlib.resources.abc import Traversable
 from pathlib import Path
 
-from finans.adapters.sqlite.backup import backup_name, prune_backups, write_backup
+from finans.adapters.sqlite.backup import (
+    backup_name,
+    prune_backups,
+    remove_stale_partials,
+    write_backup,
+)
 from finans.adapters.sqlite.codec import encode_timestamp
 from finans.adapters.sqlite.connection import connect, transaction
 from finans.ports.clock import Clock
@@ -111,9 +116,11 @@ def migrate(
 def _backup(
     conn: sqlite3.Connection, path: Path, version: int, clock: Clock, directory: Path, keep: int
 ) -> Path:
-    target = directory / backup_name(path, version=version, at=clock.now())
+    at = clock.now()
+    target = directory / backup_name(path, version=version, at=at)
     try:
         directory.mkdir(parents=True, exist_ok=True)
+        remove_stale_partials(directory, path, now=at)
         write_backup(conn, target)
         prune_backups(directory, path, keep=keep)
     except (OSError, sqlite3.Error) as exc:

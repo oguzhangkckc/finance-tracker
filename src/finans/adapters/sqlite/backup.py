@@ -3,10 +3,12 @@ import re
 import sqlite3
 import tempfile
 from contextlib import closing
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 _STAMP = "%Y%m%dT%H%M%SZ"
+# Daha yeni bir .partial, aynı anda yedek alan başka bir sürecin olabilir.
+STALE_PARTIAL_AGE = timedelta(hours=1)
 
 
 def backup_name(database: Path, *, version: int, at: datetime) -> str:
@@ -39,9 +41,7 @@ def write_backup(source: sqlite3.Connection, target: Path) -> None:
 def prune_backups(directory: Path, database: Path, *, keep: int) -> list[Path]:
     if keep < 1:
         raise ValueError("en az bir yedek tutulmalı")
-    pattern = re.compile(
-        rf"{re.escape(database.stem)}-\d{{8}}T\d{{6}}Z-v\d+{re.escape(database.suffix)}"
-    )
+    pattern = re.compile(_backup_pattern(database))
     # Zaman damgası sabit genişlikte ve addaki ilk değişken alan; ada göre sıra zaman sırasıdır.
     found = sorted(
         path for path in directory.iterdir() if path.is_file() and pattern.fullmatch(path.name)
@@ -50,3 +50,20 @@ def prune_backups(directory: Path, database: Path, *, keep: int) -> list[Path]:
     for path in removed:
         path.unlink()
     return removed
+
+
+def remove_stale_partials(directory: Path, database: Path, *, now: datetime) -> list[Path]:
+    pattern = re.compile(rf"\.{_backup_pattern(database)}\.[a-z0-9_]+\.partial(-journal)?")
+    cutoff = (now - STALE_PARTIAL_AGE).timestamp()
+    stale = [
+        path
+        for path in directory.iterdir()
+        if path.is_file() and pattern.fullmatch(path.name) and path.stat().st_mtime < cutoff
+    ]
+    for path in stale:
+        path.unlink(missing_ok=True)
+    return stale
+
+
+def _backup_pattern(database: Path) -> str:
+    return rf"{re.escape(database.stem)}-\d{{8}}T\d{{6}}Z-v\d+{re.escape(database.suffix)}"

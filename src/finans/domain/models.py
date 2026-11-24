@@ -15,7 +15,10 @@ class DomainError(ValueError):
 
 
 class OversellError(DomainError):
-    pass
+    def __init__(self, instrument: str, day: date, sold: Decimal, held: Decimal) -> None:
+        super().__init__(f"{instrument} {day}: {sold} adet satılmak isteniyor, eldeki {held}")
+        self.instrument = instrument
+        self.day = day
 
 
 class InstrumentKind(StrEnum):

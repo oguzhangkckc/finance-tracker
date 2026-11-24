@@ -103,7 +103,7 @@ def _sell(
     sold = sum((tx.units for tx in sells), ZERO)
     held = sum((lot.units for lot in lots), ZERO)
     if sold > held:
-        raise OversellError(f"{instrument} {day}: {sold} adet satılmak isteniyor, eldeki {held}")
+        raise OversellError(instrument, day, sold, held)
     consumed = _consume_fifo(lots, sold)
     return [
         RealizedSale(
