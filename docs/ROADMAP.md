@@ -45,6 +45,11 @@ Not: Katkı açıkça 0 ise dengeleme bölümü "Bu ay katkı 0." yazar; sıfır
 Not: Kadans (K-73, K-69'u değiştirir): TEFAS fiyatları hafta içi her gün 21:30'da `ft sync prices` ile; dağılım sapması her başarılı senkronizasyondan sonra. Haftalık rapor isteğe bağlı, kabul süresince açık; EVDS otomatik.
 Not: Dağılım dışı varlık (ör. acil durum fonu): takip edilir, dağılım, sapma ve dengelemeye girmez; rapor dağılım içi, dışı ve toplam değeri ayrı gösterir; XIRR yalnızca dağılım içi, dağılım dışı varlıklar basit reel getiriyle (K-74).
 Not: Dağılım içi değer 3 aylık katkıya ulaşana kadar sapma alarmları sessiz; katkı tanımlı değilse eşik 0; sessiz dönem bir kez biter ve tarihiyle kaydedilir, geri dönmez; eşik çevresinde titreşme testi (K-75).
+Not: Her zaman açık Linux makine ve systemd; her iş `ft job run <iş>` ile; birim dosyaları testte ve CI'da systemd-analyze ile doğrulanır (K-80). Snapshot testleri syrupy ile; log standart `logging` ile JSON (K-81).
+Not: Gece yedeği age ile yalnızca açık anahtara şifreli, sunucuda yerel dizinde; Mac SSH ile çeker; gizli anahtar sunucuda durmaz (K-82). Dead man's switch: rapor ve günlük yedek ping'i (K-84).
+Not: Maaş günü mesajı katkının sınıf ve fon bazında dağılım önerisi ve `ft tx add` hatırlatması (K-83). Telegram'da TL tutarları varsayılan gizli (K-90).
+Not: Fiyatlar eksikken alarm değerlendirilmez (K-85); mantıksal tarihler K-86; sessiz dönem `allocation_state`'te (K-87); haftalık değişim önceki Pazar'a göre (K-88).
+Not: Kurulumda ilk iş `ft doctor` ve `ft sync cpi` (K-91); Telegram kurulumu ve `ft notify test` kullanıcıda (K-89); M4 birimlerinde LoadCredential, sertleştirme M5'te (K-92).
 
 ## M5 · OpenClaw ve güvenlik sertleştirmesi
 JSON anlık görüntüleri ve rrsync ile aktarımı (yalnızca çekirdekten dışarı), ft-agent (boru hattı ve veri tazeliği için iki ayrı bayatlık sinyali), JSON Schema kontratı, SKILL.md, PPK özeti akışı (oranlar kodla çıkarılır), asistan botu; iki makine, ayrı OS kullanıcıları, systemd sertleştirme, LoadCredential, makine bazında egress allowlist.
