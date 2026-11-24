@@ -1,5 +1,5 @@
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 
 from finans.domain.models import ZERO, DomainError, Instrument
@@ -15,12 +15,32 @@ class AlertThresholds:
     reminder_days: int = 7
 
 
+# Varsayılan günlük sıçrama eşikleri (K-66); [quality.jump] bunlara eklenir ya da üzerine yazar.
+_DEFAULT_JUMP = (("para_piyasasi", Decimal("0.01")), ("default", Decimal("0.10")))
+
+
+@dataclass(frozen=True, slots=True)
+class QualityThresholds:
+    jump: Mapping[str, Decimal] = field(default_factory=lambda: dict(_DEFAULT_JUMP))
+
+    @classmethod
+    def with_overrides(cls, jump: Mapping[str, Decimal]) -> "QualityThresholds":
+        return cls({**dict(_DEFAULT_JUMP), **jump})
+
+    def jump_for(self, instrument: Instrument) -> Decimal:
+        for key in (instrument.category, instrument.asset_class):
+            if key is not None and key in self.jump:
+                return self.jump[key]
+        return self.jump["default"]
+
+
 @dataclass(frozen=True, slots=True)
 class PortfolioConfig:
     instruments: tuple[Instrument, ...]
     targets: Mapping[str, Decimal]
     monthly_contribution: Decimal
     alerts: AlertThresholds
+    quality: QualityThresholds = field(default_factory=QualityThresholds)
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,3 +171,16 @@ def _alert_issues(alerts: AlertThresholds | None) -> list[ConfigIssue]:
             ConfigIssue("alerts.reminder_days", f"en az 1 olmalı; {alerts.reminder_days} verildi.")
         )
     return issues
+
+
+@in_domain_context
+def validate_quality(jump: Mapping[str, Decimal | None]) -> list[ConfigIssue]:
+    """Değeri ayrıştırılamayan eşik None gelir; yapısal hatası raporlanmış sayılır."""
+    return [
+        ConfigIssue(
+            f"quality.jump.{name}",
+            f"0 ile 1 arasında olmalı (0.15 = %15); {_show(value)} verildi.",
+        )
+        for name, value in jump.items()
+        if value is not None and not ZERO < value <= ONE
+    ]

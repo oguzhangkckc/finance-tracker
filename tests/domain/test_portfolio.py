@@ -1,6 +1,11 @@
 from decimal import Decimal
 
-from finans.domain.portfolio import AlertThresholds, InstrumentEntry, validate_portfolio
+from finans.domain.portfolio import (
+    AlertThresholds,
+    InstrumentEntry,
+    validate_portfolio,
+    validate_quality,
+)
 
 D = Decimal
 ENTRIES = [
@@ -93,4 +98,14 @@ def test_empty_sections_are_reported() -> None:
     assert _messages(entries=[], targets={}) == [
         "instruments: en az bir varlık tanımlanmalı.",
         "targets: en az bir hedef sınıf tanımlanmalı.",
+    ]
+
+
+def test_jump_thresholds_must_lie_in_zero_one_and_unparsed_values_are_skipped() -> None:
+    issues = validate_quality(
+        {"hisse": Decimal("0.15"), "altin": Decimal(0), "kripto": Decimal("1.5"), "x": None}
+    )
+    assert [str(issue) for issue in issues] == [
+        "quality.jump.altin: 0 ile 1 arasında olmalı (0.15 = %15); 0 verildi.",
+        "quality.jump.kripto: 0 ile 1 arasında olmalı (0.15 = %15); 1.5 verildi.",
     ]
