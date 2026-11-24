@@ -257,6 +257,8 @@ CREATE TABLE txn (                      -- silinmez; düzeltme iptal (void) ile 
   void_reason   TEXT,
   CHECK ((voided_at IS NULL) = (void_reason IS NULL))
 ) STRICT;
+-- 0003 (M3) ekler: unit_price_scale INTEGER CHECK (0–28): girilen birim fiyatın ondalık basamak
+-- sayısı; kanonik metin sondaki sıfırları attığı için ayrıca tutulur (K-76). Boşsa kayıtlı hal geçerli.
 
 CREATE UNIQUE INDEX txn_external_ref ON txn (external_ref) WHERE voided_at IS NULL;
 
@@ -305,7 +307,7 @@ CREATE TABLE raw_payload (               -- hata ayıklama için ham yanıt; 30 
   body        BLOB NOT NULL
 ) STRICT;
 
--- 0003 (M4): job_run, alert, alert_event
+-- 0004 (M4): job_run, alert, alert_event (K-76 ile 0003'ten kaydı)
 CREATE TABLE job_run (                  -- her deneme ayrı satır
   id            INTEGER PRIMARY KEY,
   job           TEXT NOT NULL,
@@ -477,8 +479,8 @@ Uygulama ayrıntıları (M3):
 - Bayatlık (elle): MANUAL varlığın son fiyatı 14 takvim gününden eskiyse ya da hiç fiyatı yoksa.
 - Sıçrama: fonun kendi serisindeki ardışık iki fiyat arasındaki değişim eşikten büyükse. Varsayılan eşikler `para_piyasasi` %1 ve `default` %10; `[quality.jump]` bunlara eklenir ya da üzerine yazar.
 - Boşluk: fonun ilk ve son fiyatı arasında, diğer fonlarda olup bu fonda olmayan işlem günleri; fon başına tek satırda listelenir.
-- İşlem fiyatı (K-64): girilen fiyatın basamak sayısı, kayıtlı haliyle (sondaki sıfırlar saklanmaz) değerlendirilir. İşlem gününün 7 takvim günü çevresinde hiç fiyat yoksa "kontrol edilemedi" bilgisi verilir. Tarih önerisi için işlem gününün iki yanındaki 5'er işlem günü taranır ve en yakın eşleşen gün önerilir.
-- Sonuçlar "uyarı" ya da "bilgi" düzeyindedir; `ft data check` her durumda 0 ile çıkar, sorun sayısını yazar.
+- İşlem fiyatı (K-64): girilen fiyatın basamak sayısı girildiği haliyle değerlendirilir. `ft tx add` ve `ft tx import` bunu `txn.unit_price_scale`'e yazar; repository fiyatı okurken bu basamak sayısına geri getirir (1.72 → 1.7200; değer değişmez). Sütun boşsa kayıtlı hal (sondaki sıfırlar atılmış) kullanılır (K-76). İşlem gününün 7 takvim günü çevresinde hiç fiyat yoksa "kontrol edilemedi" bilgisi verilir. Tarih önerisi için işlem gününün iki yanındaki 5'er işlem günü taranır ve en yakın eşleşen gün önerilir.
+- Sonuçlar "uyarı" ya da "bilgi" düzeyindedir; `ft data check` varsayılan olarak her durumda 0 ile çıkar ve sorun sayısını yazar. `--strict` ile en az bir uyarı varsa 1 ile çıkar; bilgi notları çıkış kodunu etkilemez. M4'teki zamanlanmış işler bunu kullanır (K-77).
 
 | Kontrol | Kural | Eylem |
 | --- | --- | --- |
@@ -593,7 +595,7 @@ Reel XIRR'da her akış E[ref(t)] / E[ref(t_i)] ile çarpılır. Son akışta t_
 - **Başlangıçta sessiz sapma alarmları (M4, K-75).** Portföy birkaç aylık katkı büyüklüğüne ulaşana kadar sapma alarmları açılmaz ve bildirilmez; küçük bir portföyde tek bir alım ağırlıkları onlarca puan oynatır.
   - Kural: dağılım içi toplam değer `3 × aylık katkı`nın altındaysa sapma alarmı değerlendirilmez (N = 3). Raporda sapma değerleri ve katkıyla dengeleme önerisi yine gösterilir; alarm bölümünde "Portföy henüz küçük; sapma alarmları 3 aylık katkıya ulaşınca başlar." yazar.
   - Katkı tanımlı değilse (K-56) eşik 0'dır; alarmlar baştan çalışır.
-  - Sessiz dönem tek yönlüdür: eşik bir kez aşıldığında kalıcı olarak biter ve bittiği tarih kaydedilir (0003'te). Portföy sonradan eşiğin altına inse de alarmlar susmaz. Değerlendirme sessiz dönem bittiğinde açık alarm yokmuş gibi başlar (açılma eşiği 5 puan).
+  - Sessiz dönem tek yönlüdür: eşik bir kez aşıldığında kalıcı olarak biter ve bittiği tarih kaydedilir (M4 migration'ında). Portföy sonradan eşiğin altına inse de alarmlar susmaz. Değerlendirme sessiz dönem bittiğinde açık alarm yokmuş gibi başlar (açılma eşiği 5 puan).
   - Test: eşiğin etrafında gidip gelen değerlerde alarm durumu titreşmez; sessiz dönem bir kez biter ve geri dönmez.
 - Dengeleme yalnızca yeni birikimle yapılır, çünkü satış komisyon ve stopaj doğurur. K bu ayki katkı, V toplam değer, h hedef ağırlıktır. K, `portfolio.toml` içinde `[contribution]` bölümünde tanımlanır ve `ft report monthly --contribution` ile geçersiz kılınabilir.
 
@@ -925,6 +927,8 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-73 | K-69'u değiştirir: TEFAS fiyatları hafta içi her gün 21:30'da `ft sync prices` ile senkronize edilir (systemd, Persistent=true ile telafi; kullanıcının sunucusunda). Dağılım sapması her başarılı senkronizasyondan sonra değerlendirilir. Haftalık rapor isteğe bağlı (varsayılan kapalı, M4 kabul süresince açık). K-28'deki bayatlık eşikleri geçerli. Takasbank'tan izin istenmez (kullanıcı kararı) | API ile günlük veri fon başına tek istekle alınabiliyor; aylık ritüel yalnızca elle indirme için gerekliydi | Zamanlama, Veri toplama |
 | K-74 | M4: dağılım dışı varlık desteği (ör. acil durum fonu): takip edilir, değerlemede görünür; ağırlık, sapma, alarm ve dengeleme hesabına girmez (önerilen biçim `allocation = false`). Rapor dağılım içi, dağılım dışı ve toplam değeri ayrı gösterir. Nominal ve reel XIRR yalnızca dağılım içi portföy için; dağılım dışı varlıklar kendi satırında basit reel getiriyle | Takip edilen her varlık hedef dağılımın parçası değil; acil durum fonunun getirisi yatırım performansını bulandırmamalı | Dağılım, Veri modeli, Raporlama |
 | K-75 | M4: dağılım içi toplam değer 3 aylık katkının altındayken sapma alarmları açılmaz ve bildirilmez (N = 3); sapma ve dengeleme önerisi raporda yine görünür. Katkı tanımlı değilse eşik 0. Sessiz dönem eşik bir kez aşılınca kalıcı olarak biter, tarihi kaydedilir; değer sonradan düşse de alarmlar susmaz. Test: eşik etrafında gidip gelen değerlerde titreşme yok | Küçük portföyde tek alım ağırlıkları onlarca puan oynatır; tek yönlü bitiş eşik çevresinde alarmların açılıp kapanmasını önler | Dağılım, Bildirim |
+| K-76 | `txn.unit_price_scale` (migration 0003, M3): girilen birim fiyatın ondalık basamak sayısı; `ft tx add` ve `ft tx import` girilen metinden doldurur, repository okurken fiyatı bu basamağa geri getirir. Boşsa kayıtlı hal geçerli; geriye dönük doldurma yok. K-49'u günceller: M4 tabloları (job_run, alert, alert_event) 0004'e kayar | Kanonik metin sondaki sıfırları atıyor; 1.7200 olarak girilen fiyat K-64'te 2 basamaklı sayılıp kontrol dışı kalıyordu | Veri modeli, Veri kalitesi |
+| K-77 | `ft data check --strict`: en az bir uyarı varsa 1 ile çıkar; bilgi notları etkilemez. Varsayılan davranış (her durumda 0) değişmez | M4'teki zamanlanmış işler veri sorununu çıkış koduyla algılamalı | Veri kalitesi, Zamanlama |
 
 ## Planı kodlama ajanıyla uygulama
 
