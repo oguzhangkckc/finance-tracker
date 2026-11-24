@@ -11,7 +11,7 @@ from typing import Self
 import httpx
 
 from finans.ports.clock import Clock
-from finans.ports.sources import SourceError
+from finans.ports.sources import SourceBlocked, SourceError
 
 USER_AGENT = f"finans-takip/{version('finans-takip')} (kisisel kullanim)"
 MAX_ATTEMPTS = 3
@@ -28,9 +28,11 @@ class JsonResponse:
 
 
 class _Retryable(Exception):
-    def __init__(self, reason: str, wait: int) -> None:
+    def __init__(self, reason: str, wait: int, *, blocking: bool = False) -> None:
         super().__init__(reason)
         self.wait = wait
+        # Denemeler bu nedenle tükenirse kaynak engellemiş sayılır.
+        self.blocking = blocking
 
 
 class HttpClient:
@@ -80,15 +82,16 @@ class HttpClient:
     def _send(
         self, method: str, url: str, headers: Mapping[str, str], payload: object
     ) -> JsonResponse:
-        reason = ""
+        last = _Retryable("", 0)
         for attempt in range(1, MAX_ATTEMPTS + 1):
             try:
                 return self._attempt(method, url, headers, payload, backoff=2**attempt)
             except _Retryable as retry:
-                reason = str(retry)
+                last = retry
                 if attempt < MAX_ATTEMPTS:
                     self._clock.sleep(retry.wait)
-        raise SourceError(self._redact(f"{url}: {MAX_ATTEMPTS} denemede alınamadı: {reason}"))
+        error = SourceBlocked if last.blocking else SourceError
+        raise error(self._redact(f"{url}: {MAX_ATTEMPTS} denemede alınamadı: {last}"))
 
     def _attempt(
         self, method: str, url: str, headers: Mapping[str, str], payload: object, *, backoff: int
@@ -105,19 +108,20 @@ class HttpClient:
         if status == 429:
             wait = self._retry_after(response)
             if wait > MAX_RETRY_AFTER:
-                raise SourceError(
+                raise SourceBlocked(
                     self._redact(
                         f"{url}: HTTP 429; sunucu {wait} sn beklenmesini istedi; beklenmedi"
                     )
                 )
-            raise _Retryable("HTTP 429", wait)
+            raise _Retryable("HTTP 429", wait, blocking=True)
         if status >= 500:
             raise _Retryable(f"HTTP {status}", backoff)
         if not response.is_success:
-            raise SourceError(self._redact(f"{url}: HTTP {status}: {_server_message(response)}"))
+            error = SourceBlocked if status in (401, 403) else SourceError
+            raise error(self._redact(f"{url}: HTTP {status}: {_server_message(response)}"))
         body = response.content
         if not body.strip() or "html" in response.headers.get("Content-Type", "").lower():
-            raise _Retryable("boş ya da HTML gövde", backoff)
+            raise _Retryable("boş ya da HTML gövde", backoff, blocking=True)
         try:
             data = json.loads(body, parse_float=Decimal)
         except ValueError as exc:

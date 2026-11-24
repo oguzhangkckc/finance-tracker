@@ -1,3 +1,4 @@
+import secrets
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -16,6 +17,7 @@ from finans.adapters.sqlite.migrate import (
     schema_status,
 )
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
+from finans.adapters.tefas import TefasPriceSource
 from finans.application.doctor import (
     Check,
     cpi_check,
@@ -24,7 +26,13 @@ from finans.application.doctor import (
 )
 from finans.domain.portfolio import ConfigError, PortfolioConfig
 from finans.ports.clock import Clock
-from finans.ports.sources import CpiSource, PortfolioConfigSource, SourceError, TransactionFile
+from finans.ports.sources import (
+    CpiSource,
+    PortfolioConfigSource,
+    PriceSource,
+    SourceError,
+    TransactionFile,
+)
 from finans.ports.unit_of_work import UnitOfWork
 from finans.settings import Settings
 
@@ -37,6 +45,7 @@ __all__ = [
     "migrate_database",
     "open_unit_of_work",
     "portfolio_source",
+    "price_source",
     "run_doctor",
     "system_clock",
     "transaction_file",
@@ -82,6 +91,18 @@ def cpi_source(settings: Settings, clock: Clock) -> Iterator[CpiSource]:
     key = settings.evds_api_key.get_secret_value()
     with HttpClient(clock, secrets=[key]) as http:
         yield EvdsCpiSource(http, api_key=key, base_url=settings.evds_base_url, clock=clock)
+
+
+@contextmanager
+def price_source(settings: Settings, clock: Clock) -> Iterator[PriceSource]:
+    with HttpClient(
+        clock, min_interval=settings.tefas_min_interval_s, jitter=_tefas_jitter
+    ) as http:
+        yield TefasPriceSource(http, base_url=settings.tefas_base_url, clock=clock)
+
+
+def _tefas_jitter() -> int:
+    return secrets.randbelow(3)
 
 
 def portfolio_source() -> PortfolioConfigSource:

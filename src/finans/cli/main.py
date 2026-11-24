@@ -13,6 +13,7 @@ from finans import bootstrap
 from finans.application.cpi import CPI_HISTORY_START, CpiSyncReport, sync_cpi
 from finans.application.portfolio_config import ApplyReport, apply_portfolio
 from finans.application.portfolio_view import portfolio_as_of
+from finans.application.price_sync import PriceSyncReport, sync_prices
 from finans.application.prices import set_manual_price
 from finans.application.transactions import (
     add_transaction,
@@ -261,6 +262,72 @@ def sync_cpi_command(
             now=clock.now(),
         )
     _print_cpi_sync(report)
+
+
+@sync_app.command("prices")
+def sync_prices_command(
+    codes: Annotated[
+        list[str] | None,
+        typer.Option("--code", help="Yalnızca bu fon; birden çok kez verilebilir."),
+    ] = None,
+    start: Annotated[
+        str | None,
+        typer.Option("--from", help="YYYY-AA-GG; verilmezse fon başına otomatik seçilir."),
+    ] = None,
+    end: Annotated[str | None, typer.Option("--to", help="YYYY-AA-GG; verilmezse bugün.")] = None,
+    backfill: Annotated[
+        bool,
+        typer.Option("--backfill", help="Kayıtlı fiyatları yok sayıp ilk işlemden başlar."),
+    ] = False,
+) -> None:
+    """TEFAS fon fiyatlarını çeker (K-71); engel gelirse durur, aşmaya çalışmaz."""
+    settings = _load_settings_or_exit()
+    first = None if start is None else _parse_date(start)
+    clock = bootstrap.system_clock()
+    last = clock.today() if end is None else _parse_date(end)
+    typer.echo(
+        f"TEFAS fiyatları isteniyor; istekler arası en az {settings.tefas_min_interval_s} sn."
+    )
+    with _user_errors(), bootstrap.price_source(settings, clock) as source:
+        report = sync_prices(
+            source,
+            lambda: bootstrap.open_unit_of_work(settings),
+            codes=codes,
+            start=first,
+            end=last,
+            backfill=backfill,
+            now=clock.now(),
+        )
+    _print_price_sync(report)
+    if not report.ok:
+        raise typer.Exit(code=1)
+
+
+def _print_price_sync(report: PriceSyncReport) -> None:
+    if not report.funds:
+        typer.echo(
+            "Senkronize edilecek TEFAS fonu yok; portfolio.toml'a fon ekleyip "
+            "`ft config apply` çalıştır."
+        )
+        return
+    for fund in report.funds:
+        if fund.error is not None:
+            typer.echo(f"✗ {fund.code}: {fund.error}")
+            continue
+        typer.echo(
+            f"✓ {fund.code} ({fund.start} ile {fund.end} arası): {fund.received} gün alındı; "
+            f"eklenen {fund.inserted}, değişmeyen {fund.unchanged}, revize {len(fund.revised)}"
+        )
+        for revision in fund.revised:
+            typer.echo(
+                f"  revize {revision.day}: {canonical_text(revision.old)} → "
+                f"{canonical_text(revision.new)}"
+            )
+    if report.stopped is not None:
+        typer.echo("Durduruldu: TEFAS isteği reddetti ya da sınırladı; engel aşılmaya çalışılmadı.")
+        if report.skipped:
+            typer.echo(f"Denenmeyen fonlar: {', '.join(report.skipped)}")
+    typer.echo(f"Sonuç: {'tamam' if report.ok else 'kısmi'}")
 
 
 def _print_cpi_sync(report: CpiSyncReport) -> None:

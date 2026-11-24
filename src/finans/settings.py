@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     evds_base_url: str = "https://evds3.tcmb.gov.tr/igmevdsms-dis/"
     cpi_series: str = "TP.TUKFIY2025.GENEL"
     cpi_base: str = "2025=100"
+    tefas_base_url: str = "https://www.tefas.gov.tr/api/funds/"
+    # K-71: istekler arası en az 10 sn; daha kısası kabul edilmez.
+    tefas_min_interval_s: int = Field(default=10, ge=10)
 
     @field_validator("evds_api_key", mode="before")
     @classmethod

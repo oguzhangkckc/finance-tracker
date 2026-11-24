@@ -1,9 +1,9 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Protocol
 
-from finans.domain.models import CpiPoint, Transaction, YearMonth
+from finans.domain.models import CpiPoint, Instrument, PricePoint, Transaction, YearMonth
 from finans.domain.portfolio import PortfolioConfig
 
 
@@ -54,6 +54,10 @@ class SourceError(Exception):
     """Dış kaynaktan veri alınamadı; mesaj sır içermez."""
 
 
+class SourceBlocked(SourceError):
+    """Kaynak isteği reddetti ya da sınırladı; aynı kaynağa başka istek atılmaz (K-71)."""
+
+
 @dataclass(frozen=True, slots=True)
 class FetchResult[T]:
     points: list[T]
@@ -62,3 +66,9 @@ class FetchResult[T]:
 
 class CpiSource(Protocol):
     def fetch(self, series: str, start: YearMonth, end: YearMonth) -> FetchResult[CpiPoint]: ...
+
+
+class PriceSource(Protocol):
+    name: str
+
+    def fetch(self, inst: Instrument, start: date, end: date) -> FetchResult[PricePoint]: ...

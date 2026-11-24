@@ -72,3 +72,16 @@ def test_empty_evds_key_counts_as_undefined(
     monkeypatch.setenv("FT_DB_PATH", str(tmp_path / "finans.db"))
     monkeypatch.setenv("FT_EVDS_API_KEY", "  ")
     assert load_settings().evds_api_key is None
+
+
+def test_tefas_settings_default_to_a_polite_interval(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("FT_DB_PATH", str(tmp_path / "finans.db"))
+    settings = load_settings()
+    assert settings.tefas_base_url == "https://www.tefas.gov.tr/api/funds/"
+    assert settings.tefas_min_interval_s == 10
+
+    monkeypatch.setenv("FT_TEFAS_MIN_INTERVAL_S", "3")
+    with pytest.raises(ValidationError, match="tefas_min_interval_s"):
+        load_settings()

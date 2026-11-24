@@ -10,7 +10,7 @@ import pytest
 import respx
 
 from finans.adapters._http import HttpClient
-from finans.ports.sources import SourceError
+from finans.ports.sources import SourceBlocked, SourceError
 from tests.fakes.clock import FixedClock
 
 URL = "https://veri.example/series=TP.X&type=json"
@@ -192,3 +192,37 @@ def test_jitter_is_added_to_the_interval(clock: FixedClock) -> None:
         client.post_json(URL, {})
         client.post_json(URL, {})
     assert clock.slept == [12, 10]
+
+
+@pytest.mark.parametrize("status", [401, 403])
+@respx.mock
+def test_refusals_mean_the_source_is_blocked(client: HttpClient, status: int) -> None:
+    respx.get(URL).respond(status, text="Access denied")
+    with pytest.raises(SourceBlocked, match=f"HTTP {status}"):
+        client.get_json(URL)
+
+
+@respx.mock
+def test_html_on_every_attempt_means_blocked(client: HttpClient) -> None:
+    page = httpx.Response(200, text="<html>WAF</html>", headers={"Content-Type": "text/html"})
+    respx.get(URL).mock(return_value=page)
+    with pytest.raises(SourceBlocked, match="HTML"):
+        client.get_json(URL)
+
+
+@respx.mock
+def test_sustained_or_long_rate_limits_mean_blocked(client: HttpClient) -> None:
+    respx.get(URL).respond(429, headers={"Retry-After": "301"})
+    with pytest.raises(SourceBlocked, match="beklenmedi"):
+        client.get_json(URL)
+    respx.get(URL).respond(429, headers={"Retry-After": "1"})
+    with pytest.raises(SourceBlocked, match="HTTP 429"):
+        client.get_json(URL)
+
+
+@respx.mock
+def test_server_errors_are_not_a_block(client: HttpClient) -> None:
+    respx.get(URL).respond(500)
+    with pytest.raises(SourceError) as failure:
+        client.get_json(URL)
+    assert not isinstance(failure.value, SourceBlocked)
