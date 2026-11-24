@@ -801,11 +801,11 @@ Hesap doğruluğu bu projenin tek vazgeçilmez kalitesidir; test ağırlığı d
 | Domain özellik | hypothesis | Dağılım toplamı 1; dengeleme dağıtımı katkıyı aşmaz; XIRR çözümünde NPV ≈ 0; histerezis titreşmez |
 | Takvim ve zaman | pytest ve FixedClock | Hafta sonu ve bayram as-of'u, ay sonu, artık yıl, TÜFE yayın gecikmesi ve referans ay kuralı, 2003=100'den 2025=100'e zincirleme |
 | Mimari | import-linter ve AST testleri | Katman kuralları; domain'in yalnızca standart kütüphaneyi kullanması; float yasağı; duvar saati yasağı (`time.localtime`, `time.gmtime`, `time.ctime` ve zaman argümansız `time.strftime` dahil); her adapter'ın bağımsızlık kuralında listelenmesi |
-| Adapter kontratı | respx ve kayıtlı fixture'lar | EVDS ayrıştırma (TEFAS kaynağı kararı bekliyor, K-60), retry, `Retry-After`, hata kodları, 200 ile dönen HTML ve bozuk yanıt |
+| Adapter kontratı | respx ve kayıtlı fixture'lar | EVDS ve TEFAS ayrıştırma (gerçek yanıt kayıtları, K-70, K-71), retry, `Retry-After`, hata kodları, 200 ile dönen HTML ve bozuk yanıt |
 | Repository | Geçici SQLite | Migration'lar ve öncesindeki yedek, upsert idempotency, Decimal gidiş-dönüş, revizyon kaydı |
 | Rapor | syrupy snapshot | Metin ve JSON çıktının bilinçsiz değişmemesi |
 | Ajan kontratı | jsonschema | ft-agent çıktısının yayımlanan şemaya uyması; iki bayatlık sinyalinin birbirinden bağımsız çalışması (taze snapshot ve eski fiyat; eski snapshot ve taze fiyat) |
-| Canlı smoke | pytest -m live (CI dışı) | Gerçek uç noktaların hâlâ beklenen biçimde yanıt vermesi; haftada bir timer ile |
+| Canlı smoke | `make live` (pytest -m live, CI dışı) | Gerçek uç noktaların hâlâ beklenen biçimde yanıt vermesi; haftada bir timer ile (M4). EVDS: referans ay değeri (2025-01 = 88,578291) ve serinin son iki ay içinde yayımlanmış olması. Anahtar `.env`'den ya da LoadCredential'dan okunur, yoksa test atlanır. TEFAS canlı testi yok; istekleri kullanıcı çalıştırır (K-71) |
 
 Hedefler: domain katmanında %95+ satır kapsamı, mypy --strict temiz, CI süresi 2 dakikanın altında.
 

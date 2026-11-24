@@ -32,6 +32,7 @@ Not: Canlı deneme (2026-11-24): TEFAS robots.txt `/api/`'yi otomatik erişime k
 Not: TEFAS JSON API'si kullanılır (K-71): `fonFiyatBilgiGetir` (periyod) ve `fonGnlBlgSiraliGetir` (≤28 gün); BYF birim pay değeri ikincisinden (K-72). Kayıtlar `tests/fixtures/tefas/`.
 Not: HTTP istemci kuralları: dürüst User-Agent, robots.txt kontrolü, `Retry-After` (K-62). Mutabakat için `ft reconcile` (K-67): adet, fiyat ve değer ayrı karşılaştırılır, fiyat farkında ekstrenin kullandığı fiyat günü gösterilir (K-78).
 Not: `txn.unit_price_scale` (migration 0003): girilen fiyatın basamak sayısı K-64 için korunur; M4 tabloları 0004'e kayar (K-76). `ft data check --strict` uyarıda 1 ile çıkar (K-77).
+Not: `make live` EVDS canlı smoke testini çalıştırır; haftalık timer M4'te. `ft doctor` son fiyat tarihlerini ve bayatlığı gösterir.
 Kabul kapısı: Bir ay canlı veri; elle tutulan tabloyla mutabakat ±0,01 TL/kalem.
 
 ## M4 · Rapor ve bildirim (ilk kullanılabilir sürüm)
