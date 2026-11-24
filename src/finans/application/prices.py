@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
+from finans.application.codes import unknown_code_message
 from finans.domain.models import DomainError, InstrumentKind, PricePoint
 from finans.domain.numeric import canonical_text
 from finans.ports.repositories import PriceWrite
@@ -12,9 +13,7 @@ def set_manual_price(
 ) -> PriceWrite:
     stored = uow.instruments.get(code)
     if stored is None:
-        raise DomainError(
-            f"{code} tanımlı değil; portfolio.toml'a ekleyip `ft config apply` çalıştır."
-        )
+        raise DomainError(unknown_code_message(uow, code))
     if stored.instrument.kind is not InstrumentKind.MANUAL:
         existing = uow.prices.on(code, on)
         if existing is not None and existing.source == "tefas":

@@ -865,6 +865,8 @@ def _payday_line(line: PaydayPurchase, plan: PaydayPurchasePlan) -> str:
             f"{canonical_text(line.price)} = {canonical_text(line.spent or Decimal(0))} TL; "
             f"artan {leftover} TL"
         )
+    if line.status == "nothing":
+        return f"{head} → bu ay alım yok; katkı hedefin altında kalan sınıflara gitti."
     if line.status == "pending":
         return (
             f"{head} → fiyat henüz açıklanmadı; {plan.retry_after.isoformat()} tarihinden "

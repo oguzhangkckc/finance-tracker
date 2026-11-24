@@ -42,6 +42,17 @@ class TestAdd:
         with pytest.raises(DomainError, match=r"YOK tanımlı değil.*ft config apply"):
             _add(uow, tx("2026-01-05", code="YOK"))
 
+    def test_unknown_instrument_message_lists_the_defined_codes(
+        self, uow: SqliteUnitOfWork
+    ) -> None:
+        with pytest.raises(DomainError) as caught:
+            _add(uow, tx("2026-01-05", code="TEE"))
+
+        assert str(caught.value) == (
+            "TEE tanımlı değil. Tanımlı kodlar: ALTIN_GR, TTE. "
+            "Yeni bir varlık için portfolio.toml'a ekleyip `ft config apply` çalıştır."
+        )
+
     def test_inactive_instrument_accepts_sells_but_not_buys(self, uow: SqliteUnitOfWork) -> None:
         _add(uow, tx("2026-01-05"))
         uow.instruments.sync([ALTIN])

@@ -75,7 +75,7 @@ def test_amount_entry_is_refused_for_pension_funds(uow: SqliteUnitOfWork) -> Non
 
 
 def test_unknown_code_is_refused(uow: SqliteUnitOfWork) -> None:
-    with pytest.raises(DomainError, match="XZZ tanımlı değil"):
+    with pytest.raises(DomainError, match=r"XZZ tanımlı değil\. Tanımlı kodlar: XBE, XHT\."):
         paper_buy(uow, code="XZZ", amount=D(5000), day=date(2026, 6, 15), fee=D(0), now=NOW)
 
 
@@ -203,3 +203,17 @@ def test_a_voided_payday_purchase_counts_as_applied_unless_asked_explicitly(
     assert (redone.code, redone.units) == ("XHT", trade.units)
     after = plan_payday_purchases(payday_uow, CONFIG, payday=PAYDAY, today=date(2026, 6, 17))
     assert _statuses(after) == {"XHT": "applied", "XPP": "pending"}
+
+
+def test_a_fund_with_no_share_this_month_is_shown_with_zero(
+    payday_uow: SqliteUnitOfWork,
+) -> None:
+    paper_buy(payday_uow, code="XHT", amount=D(5000), day=date(2026, 6, 12), fee=D(0), now=NOW)
+
+    plan = plan_payday_purchases(payday_uow, CONFIG, payday=PAYDAY, today=date(2026, 6, 17))
+
+    assert {line.instrument: (line.amount, line.status) for line in plan.lines} == {
+        "XHT": (D("0.00"), "nothing"),
+        "XPP": (D("1000.00"), "pending"),
+    }
+    assert record_payday_purchases(payday_uow, plan, now=NOW) == []
