@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 
 from finans.ports.clock import BUSINESS_TZ
@@ -7,6 +7,7 @@ from finans.ports.clock import BUSINESS_TZ
 @dataclass
 class FixedClock:
     current: datetime
+    slept: list[int] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.current.tzinfo is None:
@@ -20,3 +21,7 @@ class FixedClock:
 
     def advance(self, delta: timedelta) -> None:
         self.current += delta
+
+    def sleep(self, seconds: int) -> None:
+        self.slept.append(seconds)
+        self.current += timedelta(seconds=seconds)

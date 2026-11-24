@@ -1,9 +1,13 @@
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
+from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.cli.main import app
+from finans.domain.models import PricePoint
 
 runner = CliRunner()
 PORTFOLIO = """
@@ -55,13 +59,17 @@ def test_m2_gate_transactions_in_and_value_on_any_date() -> None:
     assert "Pozisyon yok." in _ok("value", "--on", "2026-01-04")
 
 
-def test_price_set_reports_revision_and_rejects_tefas() -> None:
+def test_price_set_reports_revision_and_yields_to_tefas(tmp_path: Path) -> None:
     _ok("config", "apply")
     _ok("price", "set", "ALTIN_GR", "2026-03-01", "3300")
     assert "Fiyat aynı; değişiklik yok." in _ok("price", "set", "ALTIN_GR", "2026-03-01", "3300.0")
     assert "Fiyat güncellendi; önceki değer 3300." in _ok(
         "price", "set", "ALTIN_GR", "2026-03-01", "3310"
     )
-    rejected = runner.invoke(app, ["price", "set", "TTE", "2026-03-01", "1"])
+    assert "TEFAS fiyatı gelince yerini alır" in _ok("price", "set", "TTE", "2026-03-02", "1.5")
+    with SqliteUnitOfWork(tmp_path / "var" / "finans.db") as uow:
+        point = PricePoint("TTE", date(2026, 3, 3), Decimal("1.51"), "tefas")
+        uow.prices.upsert(point, fetched_at=datetime(2026, 3, 3, tzinfo=UTC))
+    rejected = runner.invoke(app, ["price", "set", "TTE", "2026-03-03", "1.5"])
     assert rejected.exit_code == 1
-    assert "elle girilemez" in rejected.output
+    assert "TEFAS fiyatı var (1.51)" in rejected.output

@@ -22,11 +22,17 @@ Not: 0001 yalnızca instrument, txn, price, price_revision (K-49). İşlem iptal
 Not: Bekleyen migration varsa önce SQLite backup API'siyle yerel kopya alınır; son 5 kopya tutulur, yedek alınamazsa migration uygulanmaz (K-55).
 
 ## M3 · Veri kaynakları
-TEFAS ve EVDS3 adapter'ları (ilk iş: EVDS3 anahtar iletimi), backfill, veri kalitesi kontrolleri; kayıtlı fixture'larla kontrat testleri, haftalık canlı smoke testi.
-Geliştirme kapısı: Kontrat testleri yeşil; backfill ile geçmiş dönem mutabakatı ±0,01 TL/kalem.
+EVDS3 ve TEFAS adapter'ları (TEFAS isteklerini kullanıcı çalıştırır, K-71), TEFAS fonlarına elle fiyat, veri kalitesi kontrolleri; kayıtlı fixture'larla kontrat testleri, haftalık canlı smoke testi.
+Geliştirme kapısı: Kontrat testleri yeşil; TEFAS'tan çekilen fiyat geçmişiyle geçmiş dönem mutabakatı ±0,01 TL/kalem (`ft reconcile`).
+İlk commit (M2 düzeltmeleri): migration atomikliğinin grup bazında olduğu açıkça yazıldı; yedeklemede eski `.partial` artıkları temizlenir (K-57); alış iptali reddedilince önce iptal edilecek satışlar listelenir (K-58).
 Not: JSON her yerde `json.loads(..., parse_float=Decimal)` ile ayrıştırılır; `response.json()` kullanılmaz; çok basamaklı fiyatla kontrat testi yazılır (K-32).
-Not: TÜFE 2025=100 serisi tüm geçmişiyle doğrudan çekilir; ilk işlerden biri EVDS3'te bu geçmişin bulunduğunu doğrulamak. `chain_link` yedek olarak kalır (K-43).
-Not: Migration 0002: cpi, raw_payload (K-49). TEFAS fiyatları gelince her işlemin birim fiyatı o günün TEFAS fiyatıyla karşılaştırılır; uyuşmazlık büyük olasılıkla yanlış tarih (K-53).
+Not: TÜFE 2025=100 serisi tüm geçmişiyle doğrudan çekilir; EVDS3'te 2005-01'den itibaren bulunduğu ve eski seriyle oranın sabit olduğu canlı doğrulandı (K-43, K-70). `chain_link` yedek olarak kalır.
+Not: Migration 0002: cpi, cpi_revision, raw_payload; price_revision'a kaynak kolonları (K-49, K-65). TEFAS fiyatları gelince her işlemin birim fiyatı o günün TEFAS fiyatıyla karşılaştırılır; uyuşmazlık büyük olasılıkla yanlış tarih (K-53, eşik K-64).
+Not: Canlı deneme (2026-11-24): TEFAS robots.txt `/api/`'yi otomatik erişime kapatıyor; kullanıcı API'yi kendi makinesinde çalıştırmaya karar verdi, tarayıcı otomasyonu yok, engel aşılmaz (K-60, K-71); Takasbank'tan izin istenmedi (K-73). EVDS3 anahtarı başlıkta, varsayılan TLS yeterli (K-61).
+Not: TEFAS JSON API'si kullanılır (K-71): `fonFiyatBilgiGetir` (periyod) ve `fonGnlBlgSiraliGetir` (≤28 gün); BYF birim pay değeri ikincisinden (K-72). Kayıtlar `tests/fixtures/tefas/`.
+Not: HTTP istemci kuralları: dürüst User-Agent, robots.txt kontrolü, `Retry-After` (K-62). Mutabakat için `ft reconcile` (K-67): adet, fiyat ve değer ayrı karşılaştırılır, fiyat farkında ekstrenin kullandığı fiyat günü gösterilir (K-78).
+Not: `txn.unit_price_scale` (migration 0003): girilen fiyatın basamak sayısı K-64 için korunur; M4 tabloları 0004'e kayar (K-76). `ft data check --strict` uyarıda 1 ile çıkar (K-77).
+Not: `make live` EVDS canlı smoke testini çalıştırır; haftalık timer M4'te. `ft doctor` son fiyat tarihlerini ve bayatlığı gösterir.
 Kabul kapısı: Bir ay canlı veri; elle tutulan tabloyla mutabakat ±0,01 TL/kalem.
 
 ## M4 · Rapor ve bildirim (ilk kullanılabilir sürüm)
@@ -35,6 +41,10 @@ Geliştirme kapısı: Snapshot ve iş testleri yeşil; zamanlayıcılar test ort
 Kabul kapısı: İki hafta kesintisiz ve doğru rapor.
 Not: Para ağırlıklı getirinin kökü [−0,99; 10] dışındaysa (alt ya da üst) rapor basit getiriyi ve "Zamanlama nedeniyle para ağırlıklı getiri anlamlı değil." notunu gösterir; domain sonuç türü bu durumu "hesaplanamadı"dan ayırır (K-44).
 Not: Katkı tanımlı değilse aylık raporun dengeleme bölümü "Katkı tanımlı değil." yazar, sıfırlarla dolu öneri göstermez; eksik `[contribution]` 0 yerine "tanımlı değil" okunur (K-56).
+Not: Katkı açıkça 0 ise dengeleme bölümü "Bu ay katkı 0." yazar; sıfırlarla dolu öneri gösterilmez (K-59).
+Not: Kadans (K-73, K-69'u değiştirir): TEFAS fiyatları hafta içi her gün 21:30'da `ft sync prices` ile; dağılım sapması her başarılı senkronizasyondan sonra. Haftalık rapor isteğe bağlı, kabul süresince açık; EVDS otomatik.
+Not: Dağılım dışı varlık (ör. acil durum fonu): takip edilir, dağılım, sapma ve dengelemeye girmez; rapor dağılım içi, dışı ve toplam değeri ayrı gösterir; XIRR yalnızca dağılım içi, dağılım dışı varlıklar basit reel getiriyle (K-74).
+Not: Dağılım içi değer 3 aylık katkıya ulaşana kadar sapma alarmları sessiz; katkı tanımlı değilse eşik 0; sessiz dönem bir kez biter ve tarihiyle kaydedilir, geri dönmez; eşik çevresinde titreşme testi (K-75).
 
 ## M5 · OpenClaw ve güvenlik sertleştirmesi
 JSON anlık görüntüleri ve rrsync ile aktarımı (yalnızca çekirdekten dışarı), ft-agent (boru hattı ve veri tazeliği için iki ayrı bayatlık sinyali), JSON Schema kontratı, SKILL.md, PPK özeti akışı (oranlar kodla çıkarılır), asistan botu; iki makine, ayrı OS kullanıcıları, systemd sertleştirme, LoadCredential, makine bazında egress allowlist.

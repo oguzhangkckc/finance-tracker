@@ -10,18 +10,24 @@ import typer
 from pydantic import ValidationError
 
 from finans import bootstrap
+from finans.application.cpi import CPI_HISTORY_START, CpiSyncReport, sync_cpi
+from finans.application.data_check import DEFAULT_WINDOW, check_data, trade_price_issues
 from finans.application.portfolio_config import ApplyReport, apply_portfolio
 from finans.application.portfolio_view import portfolio_as_of
+from finans.application.price_sync import PriceSyncReport, sync_prices
 from finans.application.prices import set_manual_price
+from finans.application.reconcile import reconcile_statement
 from finans.application.transactions import (
     add_transaction,
     import_transactions,
     void_transaction,
 )
 from finans.cli._common import VersionOption
-from finans.domain.models import DomainError, Side, Transaction
+from finans.domain.models import DomainError, InstrumentKind, Side, Transaction, YearMonth
 from finans.domain.numeric import canonical_text
-from finans.domain.portfolio import ConfigError
+from finans.domain.portfolio import ConfigError, QualityThresholds
+from finans.domain.quality import DataIssue
+from finans.domain.reconcile import PriceDateEvidence
 from finans.ports.repositories import StoredTransaction
 from finans.settings import Settings, load_settings
 
@@ -32,12 +38,17 @@ db_app = typer.Typer(no_args_is_help=True, help="Veritabanı işlemleri.")
 config_app = typer.Typer(no_args_is_help=True, help="Portföy tanımı (portfolio.toml).")
 tx_app = typer.Typer(no_args_is_help=True, help="İşlemler.")
 price_app = typer.Typer(
-    no_args_is_help=True, help="Elle girilen fiyatlar (yalnızca MANUAL varlıklar)."
+    no_args_is_help=True,
+    help="Elle girilen fiyatlar; TEFAS fonlarında TEFAS fiyatı gelince yerini alır (K-63).",
 )
 app.add_typer(db_app, name="db")
 app.add_typer(config_app, name="config")
 app.add_typer(tx_app, name="tx")
+sync_app = typer.Typer(no_args_is_help=True, help="Dış kaynaklardan veri çekme.")
+data_app = typer.Typer(no_args_is_help=True, help="Veri kalitesi.")
 app.add_typer(price_app, name="price")
+app.add_typer(sync_app, name="sync")
+app.add_typer(data_app, name="data")
 
 
 class SideChoice(StrEnum):
@@ -115,11 +126,12 @@ def tx_add(
         transaction = Transaction(
             code, parsed_date, Side(side.value.upper()), amounts[0], amounts[1], parsed_fee
         )
+        clock = bootstrap.system_clock()
         with bootstrap.open_unit_of_work(settings) as uow:
-            txn_id = add_transaction(
-                uow, transaction, ref=ref, note=note, now=bootstrap.system_clock().now()
-            )
+            txn_id = add_transaction(uow, transaction, ref=ref, note=note, now=clock.now())
+            warnings = trade_price_issues(uow, [(f"#{txn_id}", transaction)], today=clock.today())
     typer.echo(f"İşlem eklendi: #{txn_id}")
+    _print_warnings(warnings)
 
 
 @tx_app.command("list")
@@ -163,10 +175,11 @@ def tx_import(
     """CSV'den işlem içe aktarır; ya bütün satırlar yazılır ya hiçbiri."""
     settings = _load_settings_or_exit()
     parsed = bootstrap.transaction_file().read(path)
+    clock = bootstrap.system_clock()
     with _user_errors(), bootstrap.open_unit_of_work(settings) as uow:
-        report = import_transactions(
-            uow, parsed, now=bootstrap.system_clock().now(), dry_run=dry_run
-        )
+        report = import_transactions(uow, parsed, now=clock.now(), dry_run=dry_run)
+        added = [(f"satır {row.line}", row.transaction) for row in report.added]
+        warnings = [] if report.issues else trade_price_issues(uow, added, today=clock.today())
     if report.issues:
         typer.echo(
             f"İçe aktarma durduruldu; hiçbir işlem yazılmadı. {len(report.issues)} sorun:",
@@ -177,6 +190,7 @@ def tx_import(
         raise typer.Exit(code=1)
     verb, skip = ("Eklenecek", "atlanacak") if dry_run else ("Eklendi", "atlandı")
     typer.echo(f"{verb}: {len(report.added)}, {skip} (zaten var): {len(report.skipped)}")
+    _print_warnings(warnings)
 
 
 @price_app.command("set")
@@ -185,11 +199,13 @@ def price_set(
     on: Annotated[str, typer.Argument(help="Fiyat günü (YYYY-AA-GG)")],
     price: Annotated[str, typer.Argument(help="Birim fiyat (TL)")],
 ) -> None:
-    """MANUAL bir varlığın o günkü birim fiyatını kaydeder."""
+    """Bir varlığın o günkü birim fiyatını elle kaydeder; TEFAS fiyatı varsa reddeder."""
     settings = _load_settings_or_exit()
     day, amount = _parse_date(on), _parse_decimal("price", price)
     with _user_errors(), bootstrap.open_unit_of_work(settings) as uow:
         write = set_manual_price(uow, code, day, amount, now=bootstrap.system_clock().now())
+        stored = uow.instruments.get(code)
+    is_fund = stored is not None and stored.instrument.kind is not InstrumentKind.MANUAL
     if write.status == "inserted":
         typer.echo("Fiyat kaydedildi.")
     elif write.status == "unchanged":
@@ -197,6 +213,8 @@ def price_set(
     else:
         previous = "?" if write.previous is None else canonical_text(write.previous)
         typer.echo(f"Fiyat güncellendi; önceki değer {previous}.")
+    if is_fund:
+        typer.echo("Not: TEFAS fonu; o günün TEFAS fiyatı gelince yerini alır (K-63).")
 
 
 @app.command("value")
@@ -234,6 +252,235 @@ def value(
     typer.echo(f"Gerçekleşmiş K/Z: {canonical_text(view.realized_pnl)}")
     if valuation.missing_prices:
         typer.echo(f"Fiyatı eksik: {', '.join(valuation.missing_prices)}")
+
+
+@sync_app.command("cpi")
+def sync_cpi_command(
+    start: Annotated[
+        str | None,
+        typer.Option("--from", help="İlk dönem, YYYY-AA; verilmezse bütün geçmiş (2005-01)."),
+    ] = None,
+) -> None:
+    """TÜFE'yi EVDS3'ten çeker; değişen dönemler revizyon olarak yazılır."""
+    settings = _load_settings_or_exit()
+    first = CPI_HISTORY_START if start is None else _parse_period(start)
+    clock = bootstrap.system_clock()
+    with _user_errors(), bootstrap.cpi_source(settings, clock) as source:
+        report = sync_cpi(
+            source,
+            lambda: bootstrap.open_unit_of_work(settings),
+            series=settings.cpi_series,
+            base=settings.cpi_base,
+            start=first,
+            end=YearMonth.of(clock.today()),
+            now=clock.now(),
+        )
+    _print_cpi_sync(report)
+
+
+@sync_app.command("prices")
+def sync_prices_command(
+    codes: Annotated[
+        list[str] | None,
+        typer.Option("--code", help="Yalnızca bu fon; birden çok kez verilebilir."),
+    ] = None,
+    start: Annotated[
+        str | None,
+        typer.Option("--from", help="YYYY-AA-GG; verilmezse fon başına otomatik seçilir."),
+    ] = None,
+    end: Annotated[str | None, typer.Option("--to", help="YYYY-AA-GG; verilmezse bugün.")] = None,
+    backfill: Annotated[
+        bool,
+        typer.Option("--backfill", help="Kayıtlı fiyatları yok sayıp ilk işlemden başlar."),
+    ] = False,
+) -> None:
+    """TEFAS fon fiyatlarını çeker (K-71); engel gelirse durur, aşmaya çalışmaz."""
+    settings = _load_settings_or_exit()
+    first = None if start is None else _parse_date(start)
+    clock = bootstrap.system_clock()
+    last = clock.today() if end is None else _parse_date(end)
+
+    def announce(count: int) -> None:
+        typer.echo(
+            f"TEFAS fiyatları isteniyor ({count} fon); istekler arası en az "
+            f"{settings.tefas_min_interval_s} sn."
+        )
+
+    with _user_errors(), bootstrap.price_source(settings, clock) as source:
+        report = sync_prices(
+            source,
+            lambda: bootstrap.open_unit_of_work(settings),
+            codes=codes,
+            start=first,
+            end=last,
+            backfill=backfill,
+            now=clock.now(),
+            on_start=announce,
+        )
+    _print_price_sync(report)
+    if report.funds:
+        since = min(fund.start for fund in report.funds)
+        with _user_errors(), bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+            issues = check_data(uow, quality=_quality(settings), today=last, since=since)
+        typer.echo("Veri kalitesi:")
+        _print_issues(issues)
+    if not report.ok:
+        raise typer.Exit(code=1)
+
+
+def _print_price_sync(report: PriceSyncReport) -> None:
+    if not report.funds:
+        typer.echo(
+            "Senkronize edilecek TEFAS fonu yok; portfolio.toml'a fon ekleyip "
+            "`ft config apply` çalıştır."
+        )
+        return
+    for fund in report.funds:
+        if fund.error is not None:
+            typer.echo(f"✗ {fund.code}: {fund.error}")
+            continue
+        typer.echo(
+            f"✓ {fund.code} ({fund.start} ile {fund.end} arası): {fund.received} gün alındı; "
+            f"eklenen {fund.inserted}, değişmeyen {fund.unchanged}, revize {len(fund.revised)}"
+        )
+        for revision in fund.revised:
+            typer.echo(
+                f"  revize {revision.day}: {canonical_text(revision.old)} → "
+                f"{canonical_text(revision.new)}"
+            )
+        for item in fund.replaced:
+            typer.echo(
+                f"  elle fiyat yerine TEFAS {item.day}: {canonical_text(item.manual)} → "
+                f"{canonical_text(item.tefas)}"
+            )
+            if not item.matches:
+                typer.echo(
+                    f"Uyarı: [elle ve TEFAS fiyatı] {fund.code} {item.day}: elle girilen "
+                    f"{canonical_text(item.manual)} TEFAS fiyatıyla ({canonical_text(item.tefas)}) "
+                    "uyuşmuyor"
+                )
+    if report.stopped is not None:
+        typer.echo("Durduruldu: TEFAS isteği reddetti ya da sınırladı; engel aşılmaya çalışılmadı.")
+        if report.skipped:
+            typer.echo(f"Denenmeyen fonlar: {', '.join(report.skipped)}")
+    typer.echo(f"Sonuç: {'tamam' if report.ok else 'kısmi'}")
+
+
+def _print_cpi_sync(report: CpiSyncReport) -> None:
+    typer.echo(
+        f"TÜFE {report.series}: {report.received} dönem alındı; eklenen {report.inserted}, "
+        f"değişmeyen {report.unchanged}, revize {len(report.revised)}"
+    )
+    for revision in report.revised:
+        typer.echo(
+            f"Revize {revision.period}: {canonical_text(revision.old)} → "
+            f"{canonical_text(revision.new)}"
+        )
+    typer.echo(f"Son dönem: {report.latest or 'yok'}")
+
+
+@app.command("reconcile")
+def reconcile_command(
+    path: Annotated[
+        Path, typer.Argument(help="Ekstre CSV'si: date,code,units,price,value (price isteğe bağlı)")
+    ],
+) -> None:
+    """Aracı kurum ekstresini kayıtlarla karşılaştırır; kalem başına ±0,01 TL (K-67, K-78)."""
+    settings = _load_settings_or_exit()
+    parsed = bootstrap.statement_file().read(path)
+    if parsed.issues:
+        typer.echo(f"Ekstre okunamadı; {len(parsed.issues)} sorun:", err=True)
+        for issue in parsed.issues:
+            typer.echo(f"  - {issue}", err=True)
+        raise typer.Exit(code=1)
+    if not parsed.lines:
+        typer.echo("Ekstrede satır yok.", err=True)
+        raise typer.Exit(code=1)
+    with _user_errors(), bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+        report = reconcile_statement(uow, parsed.lines)
+    for item in report.items:
+        where = f"{item.day} {item.code}" + ("" if item.line is None else f" (satır {item.line})")
+        typer.echo(f"{'✓' if item.ok else '✗'} {where}: {item.message}")
+    _print_price_evidence(report.evidence)
+    total = len(report.items)
+    if report.passed:
+        typer.echo(f"Mutabakat: geçti ({total} kalem, hepsi ±0,01 TL içinde).")
+        return
+    failed = sum(1 for item in report.items if not item.ok)
+    typer.echo(f"Mutabakat: kaldı ({failed}/{total} kalem uyumsuz).")
+    raise typer.Exit(code=1)
+
+
+def _print_price_evidence(evidence: tuple[PriceDateEvidence, ...]) -> None:
+    if not evidence:
+        return
+    typer.echo("Fiyat tarihi kanıtı (açık soru: D tarihli fiyat hangi emirlere uygulanıyor):")
+    for offset in sorted({e.offset for e in evidence}):
+        group = [e for e in evidence if e.offset == offset]
+        typer.echo(f"  {_offset_label(offset)}: {len(group)} kalem")
+        for e in group:
+            typer.echo(
+                f"    {e.code}: ekstre {e.statement_day}, TEFAS fiyatı {e.price_day} ({e.basis})"
+            )
+
+
+def _offset_label(offset: int) -> str:
+    if offset == 0:
+        return "ekstre gününün fiyatı"
+    direction = "önceki" if offset < 0 else "sonraki"
+    return f"{abs(offset)} işlem günü {direction} fiyat"
+
+
+@data_app.command("check")
+def data_check(
+    since: Annotated[
+        str | None,
+        typer.Option("--since", help="YYYY-AA-GG; sıçrama ve boşluk penceresi, varsayılan 30 gün."),
+    ] = None,
+    strict: Annotated[
+        bool, typer.Option("--strict", help="Uyarı varsa 1 ile çık (zamanlanmış işler için).")
+    ] = False,
+) -> None:
+    """Fiyat verisini ve işlem fiyatlarını denetler; varsayılan olarak her durumda 0 ile çıkar."""
+    settings = _load_settings_or_exit()
+    first = None if since is None else _parse_date(since)
+    today = bootstrap.system_clock().today()
+    quality = _quality(settings)
+    with _user_errors(), bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+        issues = check_data(
+            uow, quality=quality, today=today, since=first or today - DEFAULT_WINDOW
+        )
+    _print_issues(issues)
+    if strict and any(issue.level == "warn" for issue in issues):
+        raise typer.Exit(code=1)
+
+
+def _quality(settings: Settings) -> QualityThresholds:
+    if settings.portfolio_path is None:
+        return QualityThresholds()
+    try:
+        return bootstrap.portfolio_source().load(settings.portfolio_path).quality
+    except ConfigError:
+        typer.echo(
+            "Not: portfolio.toml okunamadı; varsayılan eşikler kullanıldı (`ft config check`).",
+            err=True,
+        )
+        return QualityThresholds()
+
+
+def _print_issues(issues: list[DataIssue]) -> None:
+    if not issues:
+        typer.echo("Veri sorunu yok.")
+        return
+    for issue in issues:
+        typer.echo(f"{'!' if issue.level == 'warn' else '·'} {issue}")
+    warnings = sum(1 for issue in issues if issue.level == "warn")
+    typer.echo(f"{warnings} uyarı, {len(issues) - warnings} bilgi")
+
+
+def _print_warnings(issues: list[DataIssue]) -> None:
+    for issue in issues:
+        typer.echo(f"{'Uyarı' if issue.level == 'warn' else 'Bilgi'}: {issue}")
 
 
 _SYMBOLS = {"ok": "✓", "warn": "!", "fail": "✗"}
@@ -280,6 +527,14 @@ def _parse_date(text: str) -> date:
     return value
 
 
+def _parse_period(text: str) -> YearMonth:
+    try:
+        return YearMonth.parse(text)
+    except DomainError:
+        typer.echo(f"Dönem YYYY-AA biçiminde geçerli bir ay olmalı, {text!r} verildi.", err=True)
+        raise typer.Exit(code=2) from None
+
+
 def _parse_decimal(name: str, text: str) -> Decimal:
     if text.count(",") == 1 and "." not in text:
         typer.echo(
@@ -323,7 +578,12 @@ def _user_errors() -> Iterator[None]:
         for issue in exc.issues:
             typer.echo(f"  - {issue}", err=True)
         raise typer.Exit(code=1) from exc
-    except (DomainError, bootstrap.MigrationError, bootstrap.SetupError) as exc:
+    except (
+        DomainError,
+        bootstrap.MigrationError,
+        bootstrap.SetupError,
+        bootstrap.SourceError,
+    ) as exc:
         typer.echo(f"Hata: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 

@@ -1,6 +1,6 @@
 RUN := uv run --frozen
 
-.PHONY: sync fmt lint typecheck imports test audit check
+.PHONY: sync fmt lint typecheck imports test live audit check
 
 sync:
 	uv sync --locked
@@ -22,6 +22,9 @@ imports:
 test:
 	$(RUN) pytest --cov --cov-report=term-missing
 	$(RUN) coverage report --include='src/finans/domain/*' --fail-under=95 --skip-covered
+
+live:
+	$(RUN) pytest -m live
 
 audit:
 	@tmp=$$(mktemp) && trap 'rm -f "$$tmp"' EXIT && \

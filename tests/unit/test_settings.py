@@ -49,3 +49,39 @@ def test_settings_are_immutable(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     settings = load_settings()
     with pytest.raises(ValidationError):
         settings.log_level = "DEBUG"  # type: ignore[misc]
+
+
+def test_evds_settings_have_defaults_and_the_key_stays_secret(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("FT_DB_PATH", str(tmp_path / "finans.db"))
+    assert load_settings().evds_api_key is None
+
+    monkeypatch.setenv("FT_EVDS_API_KEY", "gizli-deger")
+    settings = load_settings()
+    assert settings.evds_api_key is not None
+    assert settings.evds_api_key.get_secret_value() == "gizli-deger"
+    assert "gizli-deger" not in repr(settings)
+    assert settings.evds_base_url == "https://evds3.tcmb.gov.tr/igmevdsms-dis/"
+    assert (settings.cpi_series, settings.cpi_base) == ("TP.TUKFIY2025.GENEL", "2025=100")
+
+
+def test_empty_evds_key_counts_as_undefined(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("FT_DB_PATH", str(tmp_path / "finans.db"))
+    monkeypatch.setenv("FT_EVDS_API_KEY", "  ")
+    assert load_settings().evds_api_key is None
+
+
+def test_tefas_settings_default_to_a_polite_interval(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("FT_DB_PATH", str(tmp_path / "finans.db"))
+    settings = load_settings()
+    assert settings.tefas_base_url == "https://www.tefas.gov.tr/api/funds/"
+    assert settings.tefas_min_interval_s == 10
+
+    monkeypatch.setenv("FT_TEFAS_MIN_INTERVAL_S", "3")
+    with pytest.raises(ValidationError, match="tefas_min_interval_s"):
+        load_settings()

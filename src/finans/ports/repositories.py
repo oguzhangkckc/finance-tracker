@@ -4,7 +4,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal, Protocol
 
-from finans.domain.models import Instrument, PricePoint, Transaction
+from finans.domain.models import CpiPoint, Instrument, PricePoint, Transaction
+from finans.ports.sources import RawPayload
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +41,13 @@ class StoredTransaction:
 class PriceWrite:
     status: Literal["inserted", "unchanged", "revised"]
     previous: Decimal | None = None
+    previous_source: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CpiWrite:
+    status: Literal["inserted", "unchanged", "revised"]
+    previous: Decimal | None = None
 
 
 class InstrumentRepo(Protocol):
@@ -67,3 +75,16 @@ class PriceRepo(Protocol):
     def upsert(self, point: PricePoint, *, fetched_at: datetime) -> PriceWrite: ...
     def history(self, *, until: date) -> list[PricePoint]: ...
     def latest(self, instrument: str) -> PricePoint | None: ...
+    def on(self, instrument: str, day: date) -> PricePoint | None: ...
+
+
+class CpiRepo(Protocol):
+    def upsert(
+        self, series: str, point: CpiPoint, *, base: str | None, fetched_at: datetime
+    ) -> CpiWrite: ...
+    def points(self, series: str) -> list[CpiPoint]: ...
+    def latest(self, series: str) -> CpiPoint | None: ...
+
+
+class RawPayloadRepo(Protocol):
+    def add(self, payload: RawPayload) -> int: ...

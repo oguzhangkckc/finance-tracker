@@ -83,9 +83,10 @@ def test_instruments_are_tracked_separately() -> None:
     assert book.open_cost() == D(1100)
 
 
-def test_overselling_is_rejected() -> None:
-    with pytest.raises(OversellError, match="AAA"):
+def test_overselling_is_rejected_with_the_failing_day() -> None:
+    with pytest.raises(OversellError, match="AAA") as failure:
         build_positions([buy(DAY_1, "5", "100"), sell(DAY_2, "6", "100")], as_of=AS_OF)
+    assert (failure.value.instrument, failure.value.day) == ("AAA", DAY_2)
 
 
 def test_transactions_after_as_of_are_ignored() -> None:

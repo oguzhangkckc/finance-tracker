@@ -10,9 +10,12 @@ repos:
       - id: check-toml
       - id: check-yaml
       - id: detect-private-key
+      # Kayıtlı kaynak yanıtları bayt bayt saklanır; biçim düzeltmesi uygulanmaz.
       - id: end-of-file-fixer
+        exclude: ^tests/fixtures/
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
+        exclude: ^tests/fixtures/
 
   # Araç sürümleri uv.lock'tan gelir; pre-commit'in ayrı ortamları sürüm kayması yaratmasın.
   - repo: local

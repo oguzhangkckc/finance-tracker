@@ -12,8 +12,17 @@ from hypothesis import strategies as st
 from finans.adapters.sqlite.connection import connect
 from finans.adapters.sqlite.migrate import apply, bundled
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
-from finans.domain.models import Instrument, InstrumentKind, PricePoint, Side, Transaction
-from finans.ports.repositories import InstrumentSync, PriceWrite
+from finans.domain.models import (
+    CpiPoint,
+    Instrument,
+    InstrumentKind,
+    PricePoint,
+    Side,
+    Transaction,
+    YearMonth,
+)
+from finans.ports.repositories import CpiWrite, InstrumentSync, PriceWrite
+from finans.ports.sources import RawPayload
 from tests.fakes.clock import FixedClock
 
 D = Decimal
@@ -152,7 +161,7 @@ class TestPrices:
         ) == PriceWrite("unchanged")
         assert uow.prices.upsert(
             PricePoint("TTE", day, D("10.5"), "tefas"), fetched_at=NOW
-        ) == PriceWrite("revised", previous=D(10))
+        ) == PriceWrite("revised", previous=D(10), previous_source="tefas")
         assert uow.prices.latest("TTE") == PricePoint("TTE", day, D("10.5"), "tefas")
 
     def test_history_until_date(self, uow: SqliteUnitOfWork) -> None:
@@ -168,13 +177,13 @@ class TestPrices:
 def test_revision_row_is_written(db: Path) -> None:
     with SqliteUnitOfWork(db) as work:
         work.instruments.sync([TTE])
-        work.prices.upsert(PricePoint("TTE", date(2026, 1, 5), D("10"), "tefas"), fetched_at=NOW)
+        work.prices.upsert(PricePoint("TTE", date(2026, 1, 5), D("10"), "manual"), fetched_at=NOW)
         work.prices.upsert(PricePoint("TTE", date(2026, 1, 5), D("10.5"), "tefas"), fetched_at=NOW)
     with closing(connect(db, readonly=True)) as conn:
         rows = conn.execute(
-            "SELECT price_date, old_price, new_price FROM price_revision"
+            "SELECT price_date, old_price, new_price, old_source, new_source FROM price_revision"
         ).fetchall()
-    assert rows == [("2026-01-05", "10", "10.5")]
+    assert rows == [("2026-01-05", "10", "10.5", "manual", "tefas")]
 
 
 def _sync_then_fail(db: Path) -> None:
@@ -193,3 +202,92 @@ def test_unit_of_work_rolls_back_on_error(db: Path) -> None:
 def test_read_only_unit_of_work_cannot_write(db: Path) -> None:
     with pytest.raises(sqlite3.OperationalError), SqliteUnitOfWork(db, readonly=True) as work:
         work.instruments.sync([TTE])
+
+
+SERIES = "TP.TUKFIY2025.GENEL"
+
+
+def _cpi(period: str, index: str) -> CpiPoint:
+    return CpiPoint(YearMonth.parse(period), D(index))
+
+
+class TestCpi:
+    def test_insert_unchanged_and_revision(self, db: Path) -> None:
+        with SqliteUnitOfWork(db) as work:
+            write = work.cpi.upsert
+            assert write(SERIES, _cpi("2026-01", "104.1"), base="2025=100", fetched_at=NOW) == (
+                CpiWrite("inserted")
+            )
+            assert write(SERIES, _cpi("2026-01", "104.10"), base="2025=100", fetched_at=NOW) == (
+                CpiWrite("unchanged")
+            )
+            assert write(SERIES, _cpi("2026-01", "104.2"), base="2025=100", fetched_at=NOW) == (
+                CpiWrite("revised", previous=D("104.1"))
+            )
+        with closing(connect(db, readonly=True)) as conn:
+            revisions = conn.execute(
+                "SELECT series_code, period, old_value, new_value FROM cpi_revision"
+            ).fetchall()
+        assert revisions == [(SERIES, "2026-01", "104.1", "104.2")]
+
+    def test_points_are_ordered_and_series_are_separate(self, db: Path) -> None:
+        with SqliteUnitOfWork(db) as work:
+            for period, index in [("2026-02", "105"), ("2025-12", "103.5"), ("2026-01", "104")]:
+                work.cpi.upsert(SERIES, _cpi(period, index), base="2025=100", fetched_at=NOW)
+            work.cpi.upsert("TP.FG.J0", _cpi("2025-12", "3000"), base=None, fetched_at=NOW)
+            assert work.cpi.points(SERIES) == [
+                _cpi("2025-12", "103.5"),
+                _cpi("2026-01", "104"),
+                _cpi("2026-02", "105"),
+            ]
+            assert work.cpi.latest(SERIES) == _cpi("2026-02", "105")
+            assert work.cpi.latest("TP.YOK") is None
+
+
+def test_raw_payload_is_stored_as_bytes(db: Path) -> None:
+    body = b'{"items": [{"Tarih": "2026-1"}]}'
+    with SqliteUnitOfWork(db) as work:
+        first = work.raw_payloads.add(RawPayload("evds", f"{SERIES}:2005-01", NOW, body))
+        second = work.raw_payloads.add(RawPayload("evds", f"{SERIES}:2026-01", NOW, b"{}"))
+    assert second == first + 1
+    with closing(connect(db, readonly=True)) as conn:
+        stored = conn.execute("SELECT source, body FROM raw_payload WHERE id = ?", (first,))
+        assert stored.fetchone() == ("evds", body)
+
+
+@pytest.mark.parametrize(("entered", "exponent"), [("1.7200", -4), ("12", 0), ("0.142216", -6)])
+def test_entered_price_digits_survive_the_database(
+    uow: SqliteUnitOfWork, entered: str, exponent: int
+) -> None:
+    tx = Transaction("TTE", date(2026, 1, 5), Side.BUY, D(1), D(entered))
+    txn_id = uow.transactions.add(tx, external_ref=None, note=None, created_at=NOW)
+
+    stored = uow.transactions.get(txn_id)
+
+    assert stored is not None
+    assert stored.transaction.unit_price == D(entered)
+    assert stored.transaction.unit_price.as_tuple().exponent == exponent
+
+
+def test_rows_without_a_scale_keep_the_stored_digits(db: Path) -> None:
+    with SqliteUnitOfWork(db) as work:
+        work.instruments.sync([TTE])
+    with closing(connect(db)) as conn:
+        conn.execute(
+            "INSERT INTO txn (instrument_id, trade_date, side, units, unit_price, created_at)"
+            " VALUES (1, '2026-01-05', 'BUY', '1', '1.72', '2026-01-05T00:00:00+00:00')"
+        )
+    with SqliteUnitOfWork(db, readonly=True) as work:
+        [stored] = work.transactions.list()
+    assert stored.transaction.unit_price.as_tuple().exponent == -2
+
+
+def test_tefas_price_replaces_a_manual_one_even_when_equal(uow: SqliteUnitOfWork) -> None:
+    day = date(2026, 1, 5)
+    uow.prices.upsert(PricePoint("TTE", day, D("10.5"), "manual"), fetched_at=NOW)
+
+    write = uow.prices.upsert(PricePoint("TTE", day, D("10.50"), "tefas"), fetched_at=NOW)
+
+    assert write == PriceWrite("revised", previous=D("10.5"), previous_source="manual")
+    assert uow.prices.on("TTE", day) == PricePoint("TTE", day, D("10.5"), "tefas")
+    assert uow.prices.on("TTE", date(2026, 1, 6)) is None

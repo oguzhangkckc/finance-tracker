@@ -1,4 +1,5 @@
 from contextlib import closing
+from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
 
@@ -8,9 +9,10 @@ from typer.testing import CliRunner
 
 from finans import bootstrap
 from finans.adapters.sqlite.connection import connect
-from finans.adapters.sqlite.migrate import Migration, bundled
+from finans.adapters.sqlite.migrate import Migration, apply, bundled
 from finans.cli.agent import app as agent_app
 from finans.cli.main import app as ft_app
+from tests.fakes.clock import FixedClock
 
 runner = CliRunner()
 
@@ -49,13 +51,16 @@ def test_db_migrate_prints_the_backup_taken_before_pending_migrations(
     first = runner.invoke(ft_app, ["db", "migrate"])
     assert first.exit_code == 0, first.output
     assert "yedek" not in first.output
-    second_migration = Migration(2, "0002_b.sql", "CREATE TABLE b (id INTEGER) STRICT;", "0" * 64)
+    version = len(bundled()) + 1
+    second_migration = Migration(
+        version, f"{version:04d}_b.sql", "CREATE TABLE b (id INTEGER) STRICT;", "0" * 64
+    )
     monkeypatch.setattr(bootstrap, "bundled", lambda: [*bundled(), second_migration])
 
     result = runner.invoke(ft_app, ["db", "migrate"])
 
     assert result.exit_code == 0, result.output
-    assert "Uygulanan migration'lar: 2" in result.output
+    assert f"Uygulanan migration'lar: {version}" in result.output
     assert f"Migration öncesi yedek: {tmp_path / 'backups' / 'finans-'}" in result.output
     assert len(list((tmp_path / "backups").iterdir())) == 1
 
@@ -86,3 +91,18 @@ def test_ft_agent_exposes_only_read_only_commands() -> None:
     command = typer.main.get_command(agent_app)
     subcommands = set(getattr(command, "commands", {}))
     assert subcommands <= AGENT_READ_ONLY_COMMANDS
+
+
+def test_read_only_commands_ask_for_a_migration_on_an_old_schema(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db = tmp_path / "finans.db"
+    with closing(connect(db)) as conn:
+        apply(conn, bundled()[:1], clock=FixedClock(datetime(2026, 11, 24, tzinfo=UTC)))
+    monkeypatch.setenv("FT_DB_PATH", str(db))
+
+    result = runner.invoke(ft_app, ["tx", "list"])
+
+    assert result.exit_code == 1
+    assert f"Veritabanı şeması güncel değil (sürüm 1, en son {len(bundled())})" in result.output
+    assert "`ft db migrate`" in result.output

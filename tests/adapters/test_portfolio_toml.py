@@ -5,7 +5,7 @@ import pytest
 
 from finans.adapters.portfolio_toml import TomlPortfolioSource
 from finans.domain.models import Instrument, InstrumentKind
-from finans.domain.portfolio import AlertThresholds, ConfigError
+from finans.domain.portfolio import AlertThresholds, ConfigError, QualityThresholds
 
 D = Decimal
 VALID = """
@@ -78,7 +78,8 @@ asset_class = "altin"
 x = 1
 """
     assert _issues(tmp_path, text) == [
-        "hedefler: tanınmayan bölüm; geçerli bölümler: alerts, contribution, instruments, targets.",
+        "hedefler: tanınmayan bölüm; geçerli bölümler: alerts, contribution, instruments, quality, "
+        "targets.",
         'instruments[0].kind: "TEFAS" geçersiz; '
         "TEFAS_YAT, TEFAS_EMK, TEFAS_BYF ya da MANUAL olmalı.",
         "instruments[0].renk: tanınmayan alan.",
@@ -105,6 +106,9 @@ BASE = (
             'alerts.open_above: sayı olmalı (tırnaksız), "x" verildi.',
         ),
         ("[alerts]\nsilence = 1\n", "alerts.silence: tanınmayan alan."),
+        ("[quality]\nstale = 3\n", "quality.stale: tanınmayan alan."),
+        ('[quality.jump]\nhisse = "0.1"\n', 'quality.jump.hisse: sayı olmalı (tırnaksız), "0.1"'),
+        ("[quality.jump]\nhisse = 0\n", "quality.jump.hisse: 0 ile 1 arasında olmalı"),
         (
             "[[instruments]]\ncode = 5\n",
             "instruments[1].code: boş olmayan metin olmalı, 5 verildi.",
@@ -122,6 +126,8 @@ def test_value_errors_name_the_field(tmp_path: Path, extra: str, expected: str) 
         ("instruments = 1\n[targets]\nhisse = 1\n", "instruments: [[instruments]] tabloları"),
         ("contribution = 1\n" + BASE, "contribution: [contribution] tablosu olmalı."),
         ("alerts = 1\n" + BASE, "alerts: [alerts] tablosu olmalı."),
+        ("quality = 1\n" + BASE, "quality: [quality] tablosu olmalı."),
+        ("[quality]\njump = 1\n" + BASE, "quality.jump: [quality.jump] tablosu olmalı."),
     ],
 )
 def test_wrong_section_shapes_are_reported(tmp_path: Path, text: str, expected: str) -> None:
@@ -133,3 +139,17 @@ def test_missing_file_and_invalid_toml(tmp_path: Path) -> None:
         TomlPortfolioSource().load(tmp_path / "yok.toml")
     (issue,) = _issues(tmp_path, "[targets\n")
     assert "TOML okunamadı" in issue
+
+
+def test_quality_thresholds_default_and_merge_with_overrides(tmp_path: Path) -> None:
+    assert TomlPortfolioSource().load(_write(tmp_path, BASE)).quality == QualityThresholds()
+
+    config = TomlPortfolioSource().load(
+        _write(tmp_path, BASE + "[quality.jump]\nhisse = 0.15\npara_piyasasi = 0.02\n")
+    )
+
+    assert config.quality.jump == {
+        "para_piyasasi": D("0.02"),
+        "default": D("0.10"),
+        "hisse": D("0.15"),
+    }

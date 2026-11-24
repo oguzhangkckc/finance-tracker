@@ -9,10 +9,12 @@ from finans.domain.portfolio import (
     ConfigIssue,
     InstrumentEntry,
     PortfolioConfig,
+    QualityThresholds,
     validate_portfolio,
+    validate_quality,
 )
 
-_SECTIONS = ("alerts", "contribution", "instruments", "targets")
+_SECTIONS = ("alerts", "contribution", "instruments", "quality", "targets")
 _INSTRUMENT_FIELDS = ("code", "kind", "asset_class", "category", "name")
 _ALERT_FIELDS = ("open_above", "close_below", "reminder_days")
 _KIND_HINT = "TEFAS_YAT, TEFAS_EMK, TEFAS_BYF ya da MANUAL olmalı."
@@ -30,7 +32,9 @@ class TomlPortfolioSource:
         targets = _targets(data.get("targets", {}), issues)
         contribution = _contribution(data.get("contribution", {}), issues)
         alerts = _alerts(data.get("alerts", {}), issues)
+        jump = _jump(data.get("quality", {}), issues)
         issues.extend(validate_portfolio(entries, targets, alerts, contribution))
+        issues.extend(validate_quality(jump))
         if issues or contribution is None or alerts is None:
             raise ConfigError(issues)
         return PortfolioConfig(
@@ -38,6 +42,9 @@ class TomlPortfolioSource:
             targets={name: value for name, value in targets.items() if value is not None},
             monthly_contribution=contribution,
             alerts=alerts,
+            quality=QualityThresholds.with_overrides(
+                {name: value for name, value in jump.items() if value is not None}
+            ),
         )
 
 
@@ -157,3 +164,14 @@ def _alerts(raw: object, issues: list[ConfigIssue]) -> AlertThresholds | None:
     if open_above is None or close_below is None:
         return None
     return AlertThresholds(open_above, close_below, reminder_days)
+
+
+def _jump(raw: object, issues: list[ConfigIssue]) -> dict[str, Decimal | None]:
+    quality = _table(raw, "quality", issues)
+    if quality is None:
+        return {}
+    _unknown_keys(quality, "quality", ("jump",), issues)
+    table = _table(quality.get("jump", {}), "quality.jump", issues)
+    if table is None:
+        return {}
+    return {name: _number(value, f"quality.jump.{name}", issues) for name, value in table.items()}

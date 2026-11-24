@@ -16,6 +16,8 @@ var/
 *.db
 *.db-wal
 *.db-shm
+*.partial
+*.partial-journal
 config/portfolio.toml
 
 .DS_Store

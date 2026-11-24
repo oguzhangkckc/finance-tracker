@@ -5,6 +5,7 @@ description = "Kişisel portföy takip servisi"
 readme = "docs/DESIGN.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+    "httpx>=0.28.1",
     "pydantic>=2.14.4",
     "pydantic-settings>=2.16.3",
     "typer>=0.29.2",
@@ -41,6 +42,7 @@ ban-relative-imports = "all"
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101"]
+"scripts/**" = ["T201"]
 
 [tool.mypy]
 strict = true
@@ -94,9 +96,12 @@ name = "Adapter'lar birbirinden bağımsız"
 type = "independence"
 modules = [
     "finans.adapters.clock",
+    "finans.adapters.csv_statement",
     "finans.adapters.csv_transactions",
+    "finans.adapters.evds",
     "finans.adapters.portfolio_toml",
     "finans.adapters.sqlite",
+    "finans.adapters.tefas",
 ]
 
 [[tool.importlinter.contracts]]
@@ -110,7 +115,7 @@ source_modules = [
     "finans.settings",
     "finans.cli",
 ]
-forbidden_modules = ["sqlite3", "socket", "urllib", "http"]
+forbidden_modules = ["sqlite3", "socket", "urllib", "http", "httpx"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
@@ -128,5 +133,6 @@ dev = [
     "pre-commit>=4.7.0",
     "pytest>=9.2.0",
     "pytest-cov>=7.1.0",
+    "respx>=0.23.1",
     "ruff>=0.17.6",
 ]

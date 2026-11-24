@@ -78,14 +78,39 @@ def void_transaction(uow: UnitOfWork, txn_id: int, *, reason: str, now: datetime
         raise DomainError(f"{txn_id} numaralı işlem yok.")
     if stored.is_voided:
         raise DomainError(f"{txn_id} numaralı işlem zaten iptal edilmiş.")
-    remaining = [s.transaction for s in uow.transactions.list() if s.id != txn_id]
-    issue = _oversell_issue(remaining)
-    if issue is not None:
+    blocking = _sells_to_void_first([s for s in uow.transactions.list() if s.id != txn_id])
+    if blocking:
+        listed = ", ".join(
+            f"#{s.id} ({s.transaction.trade_date} {s.transaction.instrument} "
+            f"{canonical_text(s.transaction.units)} adet)"
+            for s in blocking
+        )
         raise DomainError(
-            f"{txn_id} numaralı işlem iptal edilemez; sonraki satışlar elde olmayan payı "
-            f"satmış olur ({issue})."
+            f"{txn_id} numaralı işlem iptal edilemez; sonraki satışlar elde olmayan payı satmış "
+            f"olur. Önce şu satışları `ft tx void` ile iptal et: {listed}."
         )
     uow.transactions.void(txn_id, reason=reason.strip(), at=now)
+
+
+def _sells_to_void_first(remaining: Sequence[StoredTransaction]) -> list[StoredTransaction]:
+    """Eldeki payı aşan günlerin satışları; tarih sırasıyla, bulunanlar yok sayılarak (K-58)."""
+    kept = list(remaining)
+    blocking: list[StoredTransaction] = []
+    while True:
+        try:
+            build_positions([s.transaction for s in kept], as_of=date.max)
+        except OversellError as exc:
+            day_sells = {
+                s.id
+                for s in kept
+                if s.transaction.side is Side.SELL
+                and s.transaction.instrument == exc.instrument
+                and s.transaction.trade_date == exc.day
+            }
+            blocking.extend(s for s in kept if s.id in day_sells)
+            kept = [s for s in kept if s.id not in day_sells]
+        else:
+            return sorted(blocking, key=lambda s: (s.transaction.trade_date, s.id))
 
 
 def import_transactions(
