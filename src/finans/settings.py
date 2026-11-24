@@ -1,8 +1,8 @@
 import os
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -17,6 +17,10 @@ class Settings(BaseSettings):
 
     db_path: Path
     portfolio_path: Path | None = None
+    # K-107: sanal portföy ayrı ve işaretli veritabanında; profil yalnızca buradan seçilir.
+    profile: Literal["real", "sanal"] = "real"
+    sanal_db_path: Path | None = None
+    sanal_portfolio_path: Path | None = None
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     evds_api_key: SecretStr | None = None
     telegram_bot_token: SecretStr | None = None
@@ -64,10 +68,37 @@ class Settings(BaseSettings):
             return [part.strip() for part in value.split(",") if part.strip()]
         return value
 
+    @property
+    def sanal_database(self) -> Path:
+        return self.sanal_db_path or self.db_path.parent / "sanal.db"
+
+    @model_validator(mode="after")
+    def _sanal_database_is_separate(self) -> Self:
+        if self.sanal_database.resolve() == self.db_path.resolve():
+            raise ValueError(
+                "Sanal veritabanı gerçek veritabanıyla aynı dosya olamaz "
+                "(FT_SANAL_DB_PATH ve FT_DB_PATH)."
+            )
+        return self
+
+
+def resolve_profile(settings: Settings) -> Settings:
+    """Sanal profilde yollar sanal dosyalara çevrilir; kodun geri kalanı profili bilmez."""
+    if settings.profile == "real":
+        return settings
+    locks = settings.lock_dir or settings.db_path.parent / "locks"
+    return settings.model_copy(
+        update={
+            "db_path": settings.sanal_database,
+            "portfolio_path": settings.sanal_portfolio_path or settings.portfolio_path,
+            "lock_dir": locks / "sanal",
+        }
+    )
+
 
 def load_settings() -> Settings:
     # systemd LoadCredential sırları bu dizine, ayar adıyla dosya olarak koyar.
     credentials_dir = os.environ.get("CREDENTIALS_DIRECTORY")
     if credentials_dir:
-        return Settings(_secrets_dir=credentials_dir)
-    return Settings()
+        return resolve_profile(Settings(_secrets_dir=credentials_dir))
+    return resolve_profile(Settings())

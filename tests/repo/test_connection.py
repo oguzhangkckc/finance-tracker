@@ -4,7 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from finans.adapters.sqlite.connection import BUSY_TIMEOUT_MS, connect, transaction
+from finans.adapters.sqlite.connection import (
+    BUSY_TIMEOUT_MS,
+    SANAL_MARK,
+    ProfileError,
+    connect,
+    create_sanal,
+    is_sanal,
+    transaction,
+)
 
 
 def _pragma(conn: sqlite3.Connection, name: str) -> object:
@@ -95,3 +103,57 @@ def test_transaction_is_visible_to_other_connections_only_after_commit(tmp_path:
             writer.execute("INSERT INTO t VALUES (1)")
             assert other.execute("SELECT count(*) FROM t").fetchone()[0] == 0
         assert other.execute("SELECT count(*) FROM t").fetchone()[0] == 1
+
+
+def test_sanal_database_is_marked_before_anything_else(tmp_path: Path) -> None:
+    path = tmp_path / "sanal.db"
+    create_sanal(path)
+
+    assert is_sanal(path)
+    with closing(connect(path, sanal=True)) as conn:
+        assert _pragma(conn, "application_id") == SANAL_MARK
+        assert conn.execute("SELECT count(*) FROM sqlite_schema").fetchone()[0] == 0
+
+
+def test_sanal_database_is_only_created_in_a_new_file(tmp_path: Path) -> None:
+    path = tmp_path / "finans.db"
+    with closing(connect(path)) as conn:
+        conn.execute("CREATE TABLE t (x INTEGER) STRICT")
+    before = path.read_bytes()
+
+    with pytest.raises(ProfileError, match="zaten var"):
+        create_sanal(path)
+
+    assert path.read_bytes() == before
+    assert not is_sanal(path)
+
+
+@pytest.mark.parametrize("readonly", [False, True])
+def test_real_profile_never_opens_a_sanal_database(tmp_path: Path, readonly: bool) -> None:
+    path = tmp_path / "sanal.db"
+    create_sanal(path)
+
+    with pytest.raises(ProfileError, match="sanal portföye ait"):
+        connect(path, readonly=readonly)
+
+
+@pytest.mark.parametrize("readonly", [False, True])
+def test_sanal_profile_never_opens_an_unmarked_database(tmp_path: Path, readonly: bool) -> None:
+    path = tmp_path / "finans.db"
+    with closing(connect(path)) as conn:
+        conn.execute("CREATE TABLE t (x INTEGER) STRICT")
+    before = path.read_bytes()
+
+    with pytest.raises(ProfileError, match="sanal değil"):
+        connect(path, readonly=readonly, sanal=True)
+
+    assert path.read_bytes() == before
+
+
+def test_sanal_profile_never_creates_a_missing_database(tmp_path: Path) -> None:
+    path = tmp_path / "sanal.db"
+
+    with pytest.raises(ProfileError, match="ft sanal init"):
+        connect(path, sanal=True)
+
+    assert not path.exists()

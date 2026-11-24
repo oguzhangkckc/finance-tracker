@@ -63,6 +63,10 @@ job_app = typer.Typer(
 )
 app.add_typer(job_app, name="job")
 backup_app = typer.Typer(no_args_is_help=True, help="Gece yedeği (K-82).")
+sanal_app = typer.Typer(
+    no_args_is_help=True, help="Sanal portföy (K-107); yalnızca FT_PROFILE=sanal ile."
+)
+app.add_typer(sanal_app, name="sanal")
 app.add_typer(backup_app, name="backup")
 
 
@@ -90,6 +94,9 @@ def migrate() -> None:
         run = bootstrap.migrate_database(settings)
     except bootstrap.MigrationError as exc:
         typer.echo(f"Migration hatası: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    except bootstrap.ProfileError as exc:
+        typer.echo(f"Hata: {exc}", err=True)
         raise typer.Exit(code=1) from exc
     if run.applied:
         typer.echo(f"Uygulanan migration'lar: {', '.join(map(str, run.applied))}")
@@ -708,6 +715,39 @@ def _show_report(
     typer.echo(bootstrap.report_renderer(fmt.value, hide_amounts=hide).report(report))
 
 
+@sanal_app.command("init")
+def sanal_init_command() -> None:
+    """Sanal portföy veritabanını kurar ve portföy tanımını uygular (K-107)."""
+    settings = _load_settings_or_exit()
+    with _user_errors():
+        bootstrap.require_sanal(settings)
+        config = bootstrap.portfolio_source().load(_portfolio_path(settings, None))
+        bootstrap.sanal_init(settings)
+        with bootstrap.open_unit_of_work(settings) as uow:
+            report = apply_portfolio(uow, config)
+    typer.echo(f"Sanal veritabanı kuruldu: {settings.db_path}")
+    _print_apply(report)
+
+
+@sanal_app.command("reset")
+def sanal_reset_command(
+    confirmed: Annotated[bool, typer.Option("--evet", help="Silmeyi onaylar.")] = False,
+) -> None:
+    """Sanal veritabanını siler; yalnızca sanal olarak işaretli dosya silinir."""
+    settings = _load_settings_or_exit()
+    with _user_errors():
+        bootstrap.require_sanal(settings)
+    if not confirmed:
+        typer.echo(
+            "Sanal veritabanı ve bütün sanal işlemler silinir; onay için --evet ver.", err=True
+        )
+        raise typer.Exit(code=2)
+    with _user_errors():
+        removed = bootstrap.sanal_reset(settings)
+    for path in removed:
+        typer.echo(f"Silindi: {path}")
+
+
 @app.command("doctor")
 def doctor() -> None:
     """Kurulumu ve verinin tutarlılığını kontrol eder; yalnızca hatalar 1 ile çıkar."""
@@ -796,6 +836,7 @@ def _user_errors() -> Iterator[None]:
     except (
         DomainError,
         bootstrap.MigrationError,
+        bootstrap.ProfileError,
         bootstrap.SetupError,
         bootstrap.SourceError,
         bootstrap.NotifyError,
@@ -818,11 +859,17 @@ def _load_settings_or_exit() -> Settings:
     try:
         return load_settings()
     except ValidationError as exc:
-        # Yalnızca alan adları yazdırılır; değerler sır içerebilir.
-        fields = ", ".join(".".join(map(str, error["loc"])) for error in exc.errors())
-        typer.echo(
-            f"Ayarlar eksik ya da geçersiz: {fields}. "
-            "FT_ önekli ortam değişkenlerini ya da .env dosyasını kontrol et.",
-            err=True,
-        )
+        # Alan hatalarında yalnızca alan adı yazdırılır; değerler sır içerebilir. Alansız
+        # hatalar kendi doğrulayıcılarımızdandır ve değer içermez.
+        errors = exc.errors()
+        fields = ", ".join(".".join(map(str, e["loc"])) for e in errors if e["loc"])
+        rules = [str(e["msg"]).removeprefix("Value error, ") for e in errors if not e["loc"]]
+        for rule in rules:
+            typer.echo(f"Ayar hatası: {rule}", err=True)
+        if fields:
+            typer.echo(
+                f"Ayarlar eksik ya da geçersiz: {fields}. "
+                "FT_ önekli ortam değişkenlerini ya da .env dosyasını kontrol et.",
+                err=True,
+            )
         raise typer.Exit(code=2) from exc

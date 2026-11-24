@@ -20,10 +20,16 @@ from finans.adapters.lock import FlockJobLock
 from finans.adapters.portfolio_toml import TomlPortfolioSource
 from finans.adapters.render.json import JsonRenderer
 from finans.adapters.render.text import TextRenderer
-from finans.adapters.sqlite.connection import sqlite_version
+from finans.adapters.sqlite.connection import (
+    ProfileError,
+    create_sanal,
+    is_sanal,
+    sqlite_version,
+)
 from finans.adapters.sqlite.migrate import (
     MigrationError,
     MigrationRun,
+    SchemaStatus,
     bundled,
     migrate,
     schema_status,
@@ -65,6 +71,7 @@ __all__ = [
     "MigrationError",
     "MigrationRun",
     "NotifyError",
+    "ProfileError",
     "SetupError",
     "SourceError",
     "configure_logging",
@@ -75,8 +82,11 @@ __all__ = [
     "portfolio_source",
     "price_source",
     "report_renderer",
+    "require_sanal",
     "run_doctor",
     "run_scheduled_job",
+    "sanal_init",
+    "sanal_reset",
     "statement_file",
     "system_clock",
     "telegram_renderer",
@@ -91,6 +101,10 @@ class SetupError(Exception):
     pass
 
 
+def is_sanal_profile(settings: Settings) -> bool:
+    return settings.profile == "sanal"
+
+
 def migrate_database(settings: Settings, clock: Clock | None = None) -> MigrationRun:
     settings.db_path.parent.mkdir(parents=True, exist_ok=True)
     return migrate(
@@ -99,17 +113,20 @@ def migrate_database(settings: Settings, clock: Clock | None = None) -> Migratio
         clock=clock or SystemClock(),
         backup_dir=settings.db_path.parent / "backups",
         keep_backups=MIGRATION_BACKUPS_KEPT,
+        sanal=is_sanal_profile(settings),
     )
 
 
 def open_unit_of_work(settings: Settings, *, readonly: bool = False) -> UnitOfWork:
+    sanal = is_sanal_profile(settings)
     if readonly:
         if not settings.db_path.exists():
+            first = "ft sanal init" if sanal else "ft db migrate"
             raise SetupError(
-                f"Veritabanı bulunamadı ({settings.db_path}); önce `ft db migrate` çalıştır."
+                f"Veritabanı bulunamadı ({settings.db_path}); önce `{first}` çalıştır."
             )
         # Salt okunur açılış migration çalıştırmaz; eski şemada yeni sütunlar okunamaz.
-        status = schema_status(settings.db_path)
+        status = schema_status(settings.db_path, sanal=sanal)
         if status.current != status.latest:
             raise SetupError(
                 f"Veritabanı şeması güncel değil (sürüm {status.current}, en son "
@@ -117,7 +134,34 @@ def open_unit_of_work(settings: Settings, *, readonly: bool = False) -> UnitOfWo
             )
     else:
         migrate_database(settings)
-    return SqliteUnitOfWork(settings.db_path, readonly=readonly)
+    return SqliteUnitOfWork(settings.db_path, readonly=readonly, sanal=sanal)
+
+
+def require_sanal(settings: Settings) -> None:
+    if not is_sanal_profile(settings):
+        raise SetupError("Bu işlem yalnızca sanal profilde yapılır: FT_PROFILE=sanal.")
+
+
+def sanal_init(settings: Settings, clock: Clock | None = None) -> MigrationRun:
+    """İşaret şemadan önce yazılır; işaretsiz bir sanal dosya hiçbir anda oluşmaz (K-107)."""
+    require_sanal(settings)
+    create_sanal(settings.db_path)
+    return migrate_database(settings, clock)
+
+
+def sanal_reset(settings: Settings) -> list[Path]:
+    require_sanal(settings)
+    database = settings.db_path
+    if not database.exists():
+        raise SetupError(f"Sanal veritabanı yok ({database}); silinecek bir şey yok.")
+    if not is_sanal(database):
+        raise ProfileError(f"{database} sanal olarak işaretli değil; silinmedi.")
+    removed = []
+    for path in (database, Path(f"{database}-wal"), Path(f"{database}-shm")):
+        if path.exists():
+            path.unlink()
+            removed.append(path)
+    return removed
 
 
 @contextmanager
@@ -259,31 +303,18 @@ def run_doctor(settings: Settings) -> list[Check]:
     version, supported = sqlite_version()
     checks = [Check("SQLite", "ok" if supported else "fail", version)]
     schema_ok = False
+    sanal = is_sanal_profile(settings)
     if not settings.db_path.exists():
-        checks.append(
-            Check("Veritabanı şeması", "fail", "veritabanı yok; `ft db migrate` çalıştır")
-        )
+        first = "ft sanal init" if sanal else "ft db migrate"
+        checks.append(Check("Veritabanı şeması", "fail", f"veritabanı yok; `{first}` çalıştır"))
     else:
-        status = schema_status(settings.db_path)
-        if status.current == status.latest:
-            schema_ok = True
-            checks.append(Check("Veritabanı şeması", "ok", f"güncel (sürüm {status.current})"))
-        elif status.current < status.latest:
-            checks.append(
-                Check(
-                    "Veritabanı şeması",
-                    "warn",
-                    f"sürüm {status.current}, en son {status.latest}; `ft db migrate` çalıştır",
-                )
-            )
+        try:
+            status = schema_status(settings.db_path, sanal=sanal)
+        except ProfileError as exc:
+            checks.append(Check("Veritabanı profili", "fail", str(exc)))
         else:
-            checks.append(
-                Check(
-                    "Veritabanı şeması",
-                    "fail",
-                    f"veritabanı sürümü ({status.current}) koddan ({status.latest}) yeni",
-                )
-            )
+            checks.append(_schema_check(status))
+            schema_ok = checks[-1].status == "ok"
     config = _config_check(settings, checks)
     if schema_ok:
         with open_unit_of_work(settings, readonly=True) as uow:
@@ -299,6 +330,16 @@ def run_doctor(settings: Settings) -> list[Check]:
     checks.extend(_backup_checks(settings, Path(".env")))
     checks.append(_env_check(Path(".env")))
     return checks
+
+
+def _schema_check(status: SchemaStatus) -> Check:
+    if status.current == status.latest:
+        return Check("Veritabanı şeması", "ok", f"güncel (sürüm {status.current})")
+    if status.current < status.latest:
+        detail = f"sürüm {status.current}, en son {status.latest}; `ft db migrate` çalıştır"
+        return Check("Veritabanı şeması", "warn", detail)
+    detail = f"veritabanı sürümü ({status.current}) koddan ({status.latest}) yeni"
+    return Check("Veritabanı şeması", "fail", detail)
 
 
 def _config_check(settings: Settings, checks: list[Check]) -> PortfolioConfig | None:
@@ -344,7 +385,7 @@ def _backup_factory(settings: Settings) -> Callable[[datetime], BackupOutcome] |
 
     def backup(now: datetime) -> BackupOutcome:
         return create_backup(
-            copier=SqliteCopier(settings.db_path),
+            copier=SqliteCopier(settings.db_path, sanal=is_sanal_profile(settings)),
             encryptor=AgeEncryptor(settings.age_binary),
             recipients=settings.backup_age_recipients,
             directory=directory,

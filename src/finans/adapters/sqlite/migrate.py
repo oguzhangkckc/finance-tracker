@@ -80,8 +80,8 @@ class SchemaStatus:
     latest: int
 
 
-def schema_status(path: Path) -> SchemaStatus:
-    with closing(connect(path, readonly=True)) as conn:
+def schema_status(path: Path, *, sanal: bool = False) -> SchemaStatus:
+    with closing(connect(path, readonly=True, sanal=sanal)) as conn:
         return SchemaStatus(current=_user_version(conn), latest=len(bundled()))
 
 
@@ -98,9 +98,10 @@ def migrate(
     clock: Clock,
     backup_dir: Path,
     keep_backups: int,
+    sanal: bool = False,
 ) -> MigrationRun:
     """Bekleyen migration'ları uygular; uygulanmış bir şema varsa önce yedeğini alır."""
-    with closing(connect(path)) as conn:
+    with closing(connect(path, sanal=sanal)) as conn:
         current = _user_version(conn)
         backup = None
         if 0 < current < len(migrations):

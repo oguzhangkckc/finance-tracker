@@ -171,3 +171,5 @@ def test_environment_example_holds_no_secrets() -> None:
     }
     assert not keys & {name.upper() for name in SECRETS}
     assert "AGE-SECRET-KEY" not in example
+    # K-107: profil ortak ayar dosyasında seçilmez; sanal işler kendi birimlerinde seçer.
+    assert "FT_PROFILE" not in keys
