@@ -1,3 +1,4 @@
+import json
 from collections.abc import Iterator
 from datetime import timedelta
 from decimal import Decimal
@@ -168,3 +169,26 @@ def test_requests_keep_the_minimum_interval(clock: FixedClock) -> None:
         client.get_json(URL)
         client.get_json(URL)
     assert clock.slept == [6, 10]
+
+
+@respx.mock
+def test_post_sends_a_json_body(client: HttpClient) -> None:
+    route = respx.post(URL).mock(return_value=OK)
+
+    response = client.post_json(URL, {"fonKodu": "BCO", "basSira": 1, "sira": None})
+
+    request = route.calls.last.request
+    assert request.headers["Content-Type"] == "application/json"
+    assert json.loads(request.content) == {"fonKodu": "BCO", "basSira": 1, "sira": None}
+    assert response.data == {"items": []}
+
+
+@respx.mock
+def test_jitter_is_added_to_the_interval(clock: FixedClock) -> None:
+    respx.post(URL).mock(return_value=OK)
+    extra = iter([2, 0])
+    with HttpClient(clock, min_interval=10, jitter=lambda: next(extra)) as client:
+        client.post_json(URL, {})
+        client.post_json(URL, {})
+        client.post_json(URL, {})
+    assert clock.slept == [12, 10]

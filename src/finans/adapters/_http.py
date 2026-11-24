@@ -1,5 +1,5 @@
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -36,9 +36,17 @@ class _Retryable(Exception):
 class HttpClient:
     """K-62: dürüst User-Agent, sıralı istek, retry ve Retry-After; JSON'da float yok."""
 
-    def __init__(self, clock: Clock, *, min_interval: int = 0, secrets: Sequence[str] = ()) -> None:
+    def __init__(
+        self,
+        clock: Clock,
+        *,
+        min_interval: int = 0,
+        jitter: Callable[[], int] | None = None,
+        secrets: Sequence[str] = (),
+    ) -> None:
         self._clock = clock
         self._min_interval = timedelta(seconds=min_interval)
+        self._jitter = jitter
         self._secrets = tuple(s for s in secrets if s)
         self._last_request: datetime | None = None
         self._client = httpx.Client(
@@ -62,20 +70,35 @@ class HttpClient:
         self._client.close()
 
     def get_json(self, url: str, *, headers: Mapping[str, str] | None = None) -> JsonResponse:
+        return self._send("GET", url, headers or {}, None)
+
+    def post_json(
+        self, url: str, payload: object, *, headers: Mapping[str, str] | None = None
+    ) -> JsonResponse:
+        return self._send("POST", url, headers or {}, payload)
+
+    def _send(
+        self, method: str, url: str, headers: Mapping[str, str], payload: object
+    ) -> JsonResponse:
         reason = ""
         for attempt in range(1, MAX_ATTEMPTS + 1):
             try:
-                return self._attempt(url, headers or {}, backoff=2**attempt)
+                return self._attempt(method, url, headers, payload, backoff=2**attempt)
             except _Retryable as retry:
                 reason = str(retry)
                 if attempt < MAX_ATTEMPTS:
                     self._clock.sleep(retry.wait)
         raise SourceError(self._redact(f"{url}: {MAX_ATTEMPTS} denemede alınamadı: {reason}"))
 
-    def _attempt(self, url: str, headers: Mapping[str, str], *, backoff: int) -> JsonResponse:
+    def _attempt(
+        self, method: str, url: str, headers: Mapping[str, str], payload: object, *, backoff: int
+    ) -> JsonResponse:
         self._wait_turn()
         try:
-            response = self._client.get(url, headers=headers)
+            if payload is None:
+                response = self._client.request(method, url, headers=headers)
+            else:
+                response = self._client.request(method, url, headers=headers, json=payload)
         except httpx.TransportError as exc:
             raise _Retryable(f"bağlantı hatası ({type(exc).__name__})", backoff) from exc
         status = response.status_code
@@ -103,7 +126,10 @@ class HttpClient:
 
     def _wait_turn(self) -> None:
         if self._last_request is not None:
-            remaining = self._min_interval - (self._clock.now() - self._last_request)
+            gap = self._min_interval
+            if self._jitter is not None:
+                gap += timedelta(seconds=self._jitter())
+            remaining = gap - (self._clock.now() - self._last_request)
             if remaining > timedelta(0):
                 self._clock.sleep(_ceil_seconds(remaining))
         self._last_request = self._clock.now()

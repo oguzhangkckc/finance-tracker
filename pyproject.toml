@@ -100,6 +100,7 @@ modules = [
     "finans.adapters.evds",
     "finans.adapters.portfolio_toml",
     "finans.adapters.sqlite",
+    "finans.adapters.tefas",
 ]
 
 [[tool.importlinter.contracts]]
