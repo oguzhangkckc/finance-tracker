@@ -422,6 +422,14 @@ Kaynaktan bağımsız veri kuralları:
 - BYF'ler TEFAS'taki birim pay değeriyle değerlenir. Bu değer borsadaki işlem fiyatından biraz farklı olabilir. `fonFiyatBilgiGetir` BYF için birim pay değerini değil borsa bülten fiyatını döndürdüğünden BYF fiyatı `fonGnlBlgSiraliGetir`'in `fiyat` alanından alınır (K-72).
 - TEFAS'ta D tarihli fiyatın hangi emirlere uygulandığı açık sorudur (aşağıda). K-11 ve K-64 buna dayanır.
 
+### TEFAS dışa aktarım dosyaları (fon seçimi için, 2026-11-24)
+
+Kullanıcı fon seçimi için TEFAS sitesinden kategori bazında getiri, ücret ve büyüklük CSV'lerini tarayıcıyla indirdi (`var/tefas-exports/`, repoya girmez). Bu dosyalar içe aktarılmaz; yalnızca karşılaştırma için okunur. Veri tuhaflıkları:
+- Biçim: UTF-8 BOM, virgül ayırıcı, ondalık virgül ve tırnaklı sayılar; başlıktan önce üç satır (dışa aktarım tarihi, kayıt sayısı, boş satır).
+- Büyüklük dosyasında "Şemsiye Fon Türü" sütunu şemsiye türünü değil fonun alt türünü taşır (ör. "Altın Fonu", "Değişken Fon", "Katılım Fonu"). Bu dosyaların kategorisi, fon kodlarının getiri ve ücret dosyalarıyla örtüşmesinden belirlendi.
+- "Yıllık Azami Fon Toplam Gider Oranı" sütunu güvenilir değil: 267 fonun 59'unda uygulanan yönetim ücretinden düşük görünüyor (hisse 188'de 52, para piyasası 52'de 5, altın 27'de 2). Örnek: AFA'da yönetim ücreti %2,9, azami gider %1,65. Bazılarında 0 (ör. DL2, PPN). Karşılaştırmada bu sütun kullanılmaz; uygulanan yönetim ücreti esas alınır.
+- Bazı fonlarda "Fonun Risk Değeri" boş (ör. HBF).
+
 ### EVDS adapter
 
 - Resmi API kullanılır (K-61). TCMB, Ocak 2026'da EVDS3'e (evds3.tcmb.gov.tr) geçti; evds2 adresi artık evds3'e yönleniyor. İstek biçimi `https://evds3.tcmb.gov.tr/igmevdsms-dis/series=<kod>&startDate=gg-aa-yyyy&endDate=gg-aa-yyyy&type=json`; parametreler path'te. İstek başına en çok 1000 gözlem döner, aylık TÜFE tek istekte gelir. Kaynak: EVDS "Web Servis ve API Kullanımı" kılavuzu (evds3, docId=8).
