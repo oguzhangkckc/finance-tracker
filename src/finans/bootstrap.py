@@ -9,6 +9,8 @@ from finans.adapters.csv_statement import CsvStatementFile
 from finans.adapters.csv_transactions import CsvTransactionFile
 from finans.adapters.evds import EvdsCpiSource
 from finans.adapters.portfolio_toml import TomlPortfolioSource
+from finans.adapters.render.json import JsonRenderer
+from finans.adapters.render.text import TextRenderer
 from finans.adapters.sqlite.connection import sqlite_version
 from finans.adapters.sqlite.migrate import (
     MigrationError,
@@ -28,6 +30,7 @@ from finans.application.doctor import (
 )
 from finans.domain.portfolio import ConfigError, PortfolioConfig
 from finans.ports.clock import Clock
+from finans.ports.render import ReportRenderer
 from finans.ports.sources import (
     CpiSource,
     PortfolioConfigSource,
@@ -49,6 +52,7 @@ __all__ = [
     "open_unit_of_work",
     "portfolio_source",
     "price_source",
+    "report_renderer",
     "run_doctor",
     "statement_file",
     "system_clock",
@@ -122,6 +126,14 @@ def portfolio_source() -> PortfolioConfigSource:
 
 def system_clock() -> Clock:
     return SystemClock()
+
+
+def report_renderer(
+    fmt: str = "text", *, hide_amounts: bool = False, payday_amounts: bool = True
+) -> ReportRenderer:
+    if fmt == "json":
+        return JsonRenderer()
+    return TextRenderer(hide_amounts=hide_amounts, payday_amounts=payday_amounts)
 
 
 def statement_file() -> StatementFile:

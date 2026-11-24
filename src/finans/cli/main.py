@@ -17,6 +17,7 @@ from finans.application.portfolio_view import portfolio_as_of
 from finans.application.price_sync import PriceSyncReport, sync_prices
 from finans.application.prices import set_manual_price
 from finans.application.reconcile import reconcile_statement
+from finans.application.report import ReportKind, build_report, payday_plan
 from finans.application.transactions import (
     add_transaction,
     import_transactions,
@@ -28,6 +29,8 @@ from finans.domain.numeric import canonical_text
 from finans.domain.portfolio import ConfigError, QualityThresholds
 from finans.domain.quality import DataIssue
 from finans.domain.reconcile import PriceDateEvidence
+from finans.domain.schedule import logical_date
+from finans.ports.clock import BUSINESS_TZ
 from finans.ports.repositories import StoredTransaction
 from finans.settings import Settings, load_settings
 
@@ -49,6 +52,8 @@ data_app = typer.Typer(no_args_is_help=True, help="Veri kalitesi.")
 app.add_typer(price_app, name="price")
 app.add_typer(sync_app, name="sync")
 app.add_typer(data_app, name="data")
+report_app = typer.Typer(no_args_is_help=True, help="Raporlar (önizleme).")
+app.add_typer(report_app, name="report")
 
 
 class SideChoice(StrEnum):
@@ -484,6 +489,98 @@ def _print_warnings(issues: list[DataIssue]) -> None:
 
 
 _SYMBOLS = {"ok": "✓", "warn": "!", "fail": "✗"}
+
+
+class ReportFormat(StrEnum):
+    TEXT = "text"
+    JSON = "json"
+
+
+ReportOnOption = Annotated[
+    str | None, typer.Option("--on", help="YYYY-AA-GG; verilmezse son planlı rapor günü (K-86).")
+]
+ReportFormatOption = Annotated[ReportFormat, typer.Option("--format", help="text ya da json")]
+HideAmountsOption = Annotated[
+    bool, typer.Option("--hide-amounts", help="Telegram görünümü: TL tutarlarını gizle (K-90).")
+]
+ContributionOption = Annotated[
+    str | None, typer.Option("--contribution", help="Bu ayki katkı; config'teki değerin yerine.")
+]
+
+
+@report_app.command("weekly")
+def report_weekly(
+    on: ReportOnOption = None,
+    fmt: ReportFormatOption = ReportFormat.TEXT,
+    hide_amounts: HideAmountsOption = False,
+) -> None:
+    """Haftalık raporu gösterir; gönderim zamanlanmış işin (weekly-report) işidir."""
+    _show_report("weekly", on, None, fmt, hide_amounts)
+
+
+@report_app.command("monthly")
+def report_monthly(
+    on: ReportOnOption = None,
+    contribution: ContributionOption = None,
+    fmt: ReportFormatOption = ReportFormat.TEXT,
+    hide_amounts: HideAmountsOption = False,
+) -> None:
+    """Aylık raporu gösterir: XIRR, lotlar, enflasyon ve katkıyla dengeleme."""
+    _show_report("monthly", on, contribution, fmt, hide_amounts)
+
+
+@report_app.command("payday")
+def report_payday(
+    on: Annotated[str | None, typer.Option("--on", help="YYYY-AA-GG; verilmezse bugün.")] = None,
+    contribution: ContributionOption = None,
+    fmt: ReportFormatOption = ReportFormat.TEXT,
+    hide_amounts: HideAmountsOption = False,
+) -> None:
+    """Bu ayki katkının sınıf ve fon bazında dağılım önerisi (K-83)."""
+    settings = _load_settings_or_exit()
+    clock = bootstrap.system_clock()
+    day = clock.today() if on is None else _parse_date(on)
+    with _user_errors():
+        config = bootstrap.portfolio_source().load(_portfolio_path(settings, None))
+        amount = (
+            config.monthly_contribution
+            if contribution is None
+            else _parse_decimal("--contribution", contribution)
+        )
+        with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+            plan = payday_plan(uow, config, on=day, contribution=amount)
+    renderer = bootstrap.report_renderer(fmt.value, payday_amounts=not hide_amounts)
+    typer.echo(renderer.payday(plan))
+
+
+def _show_report(
+    kind: ReportKind, on: str | None, contribution: str | None, fmt: ReportFormat, hide: bool
+) -> None:
+    settings = _load_settings_or_exit()
+    clock = bootstrap.system_clock()
+    with _user_errors():
+        config = bootstrap.portfolio_source().load(_portfolio_path(settings, None))
+        day = (
+            logical_date(f"{kind}-report", clock.now().astimezone(BUSINESS_TZ))
+            if on is None
+            else _parse_date(on)
+        )
+        amount = (
+            config.monthly_contribution
+            if contribution is None
+            else _parse_decimal("--contribution", contribution)
+        )
+        with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+            report = build_report(
+                uow,
+                config,
+                kind=kind,
+                logical_date=day,
+                contribution=amount,
+                now=clock.now(),
+                cpi_series=settings.cpi_series,
+            )
+    typer.echo(bootstrap.report_renderer(fmt.value, hide_amounts=hide).report(report))
 
 
 @app.command("doctor")

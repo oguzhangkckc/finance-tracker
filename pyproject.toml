@@ -103,6 +103,7 @@ modules = [
     "finans.adapters.csv_transactions",
     "finans.adapters.evds",
     "finans.adapters.portfolio_toml",
+    "finans.adapters.render",
     "finans.adapters.sqlite",
     "finans.adapters.tefas",
 ]
@@ -126,6 +127,8 @@ name = "domain ve ports altyapı kütüphanesi görmez"
 type = "forbidden"
 source_modules = ["finans.domain", "finans.ports"]
 forbidden_modules = ["pydantic", "pydantic_settings", "typer"]
+# K-03: port'lar contracts'ı (pydantic modelleri) kullanabilir; doğrudan import yasak kalır.
+allow_indirect_imports = true
 
 [dependency-groups]
 dev = [
@@ -138,4 +141,5 @@ dev = [
     "pytest-cov>=7.1.0",
     "respx>=0.23.1",
     "ruff>=0.17.6",
+    "syrupy>=7.0.3",
 ]
