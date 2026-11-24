@@ -787,7 +787,7 @@ Bu sistemde en tehlikeli arıza sessiz olanıdır: rapor gelmez ve kimse fark et
 - Log: structlog ile JSON, journald'a. Her satırda job, run_id, logical_date ve varsa instrument alanı bulunur. httpx ve httpcore logger'ları WARNING seviyesindedir (bkz. Telegram).
 - İş kaydı: job_run tablosu durum, süre ve sayaçları (çekilen kayıt, hata sayısı) tutar.
 - Dead man's switch: her başarılı rapordan sonra harici bir ping servisine (healthchecks.io gibi, self-host edilebilir) sinyal gönderilir. Beklenen sinyal gelmezse servis ayrı bir kanaldan (e-posta) haber verir.
-- ft doctor komutu: config doğrulama, şema sürümü, sırların varlığı, kaynaklara erişim, son başarılı senkronizasyon zamanları. Kurulumdan sonra ve her sorun anında ilk çalıştırılan komuttur.
+- ft doctor komutu: config doğrulama, şema sürümü, sırların varlığı, kaynaklara erişim, son başarılı senkronizasyon zamanları. Kurulumdan sonra ve her sorun anında ilk çalıştırılan komuttur. M3'te takip edilen her varlığın son fiyat tarihini ve TÜFE'nin son dönemini gösterir; bayatlık `ft data check` ile aynı eşiklerle (K-28) uyarı verir, ayrıntı orada.
 - Haftalık rapora tek satırlık sistem sağlığı eklenir: son fiyat ve TÜFE senkron zamanı, son 7 gündeki başarısız iş sayısı.
 - Ham yanıtlar 30 gün saklanır; bir hesap yanlış çıkarsa o günün verisi yeniden işlenebilir.
 

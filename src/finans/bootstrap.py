@@ -24,6 +24,7 @@ from finans.application.doctor import (
     cpi_check,
     inactive_holdings_check,
     portfolio_checks,
+    price_check,
 )
 from finans.domain.portfolio import ConfigError, PortfolioConfig
 from finans.ports.clock import Clock
@@ -167,7 +168,9 @@ def run_doctor(settings: Settings) -> list[Check]:
                 checks.append(inactive_holdings_check(uow))
             else:
                 checks.extend(portfolio_checks(uow, config))
-            checks.append(cpi_check(uow, settings.cpi_series, today=SystemClock().today()))
+            today = SystemClock().today()
+            checks.append(price_check(uow, today=today))
+            checks.append(cpi_check(uow, settings.cpi_series, today=today))
     checks.append(_evds_key_check(settings))
     checks.append(_env_check(Path(".env")))
     return checks

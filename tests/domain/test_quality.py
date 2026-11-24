@@ -8,6 +8,7 @@ from finans.domain.portfolio import QualityThresholds
 from finans.domain.quality import (
     DataIssue,
     check_prices,
+    check_staleness,
     check_trade_prices,
     price_matches,
     trading_days,
@@ -102,6 +103,26 @@ def test_manual_price_older_than_fourteen_days_is_stale() -> None:
     assert stale(date(2026, 11, 9))
     assert not stale(date(2026, 11, 10))
     assert stale(None)
+
+
+def test_staleness_alone_leaves_out_jumps_and_gaps() -> None:
+    history = {
+        "XHT": _series("XHT", {WEEKDAYS[0]: "10", WEEKDAYS[2]: "20"}),
+        "XPP": _flat("XPP", WEEKDAYS),
+    }
+    instruments = [EQ, MM, MANUAL]
+
+    issues = check_staleness(instruments, history, today=TODAY)
+
+    assert _of(issues, "bayatlık") == [
+        ("XHT", date(2026, 11, 13), "son fiyattan sonra 7 işlem günü fiyat yok"),
+        ("ALTIN_GR", None, "hiç fiyat girilmemiş; `ft price set` ile gir"),
+    ]
+    everything = check_prices(
+        instruments, history, today=TODAY, since=SINCE, thresholds=QualityThresholds()
+    )
+    assert issues == [i for i in everything if i.check in {"bayatlık", "genel bayatlık"}]
+    assert len(everything) > len(issues)
 
 
 def test_jump_threshold_comes_from_category_then_class_then_default() -> None:

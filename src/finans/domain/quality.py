@@ -65,6 +65,21 @@ def check_prices(
 ) -> list[DataIssue]:
     funds = [inst for inst in instruments if inst.kind in _TEFAS]
     days = trading_days(p for inst in funds for p in history.get(inst.code, ()))
+    issues = check_staleness(instruments, history, today=today)
+    for inst in funds:
+        series = sorted(history.get(inst.code, ()), key=lambda p: p.price_date)
+        issues.extend(_moves(inst, series, since, thresholds.jump_for(inst)))
+    for inst in funds:
+        issues.extend(_gaps(inst, history.get(inst.code, ()), days, since, today))
+    return issues
+
+
+@in_domain_context
+def check_staleness(
+    instruments: Sequence[Instrument], history: Series, *, today: date
+) -> list[DataIssue]:
+    funds = [inst for inst in instruments if inst.kind in _TEFAS]
+    days = trading_days(p for inst in funds for p in history.get(inst.code, ()))
     issues: list[DataIssue] = []
     for inst in funds:
         issues.extend(_fund_staleness(inst, history.get(inst.code, ()), days))
@@ -75,11 +90,6 @@ def check_prices(
     for inst in instruments:
         if inst.kind is InstrumentKind.MANUAL:
             issues.extend(_manual_staleness(inst, history.get(inst.code, ()), today))
-    for inst in funds:
-        series = sorted(history.get(inst.code, ()), key=lambda p: p.price_date)
-        issues.extend(_moves(inst, series, since, thresholds.jump_for(inst)))
-    for inst in funds:
-        issues.extend(_gaps(inst, history.get(inst.code, ()), days, since, today))
     return issues
 
 

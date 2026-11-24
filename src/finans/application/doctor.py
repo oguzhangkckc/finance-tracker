@@ -1,11 +1,14 @@
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
 from typing import Literal
 
+from finans.application.data_check import price_series, tracked_instruments
 from finans.domain.models import YearMonth
 from finans.domain.numeric import canonical_text
 from finans.domain.portfolio import PortfolioConfig
 from finans.domain.positions import build_positions
+from finans.domain.quality import check_staleness
 from finans.ports.unit_of_work import UnitOfWork
 
 Status = Literal["ok", "warn", "fail"]
@@ -67,3 +70,25 @@ def cpi_check(uow: UnitOfWork, series: str, *, today: date) -> Check:
             f"{series} son dönem {latest.period}; güncel değil, `ft sync cpi` çalıştır",
         )
     return Check("TÜFE", "ok", f"{series} son dönem {latest.period}")
+
+
+def price_check(uow: UnitOfWork, *, today: date) -> Check:
+    tracked = tracked_instruments(uow)
+    if not tracked:
+        return Check("Fiyatlar", "ok", "takip edilen varlık yok")
+    history = price_series(uow, today)
+    by_day: dict[date, list[str]] = defaultdict(list)
+    for instrument in tracked:
+        series = history.get(instrument.code)
+        if series:
+            by_day[max(p.price_date for p in series)].append(instrument.code)
+    parts = [f"{day}: {', '.join(sorted(codes))}" for day, codes in sorted(by_day.items())[::-1]]
+    details = [f"son fiyat {'; '.join(parts)}"] if parts else []
+    missing = sorted(i.code for i in tracked if not history.get(i.code))
+    if missing:
+        details.append(f"fiyatı yok: {', '.join(missing)}")
+    issues = check_staleness(tracked, history, today=today)
+    if not issues:
+        return Check("Fiyatlar", "ok", "; ".join(details))
+    details.append(f"{len(issues)} bayatlık uyarısı, ayrıntı için `ft data check`")
+    return Check("Fiyatlar", "warn", "; ".join(details))

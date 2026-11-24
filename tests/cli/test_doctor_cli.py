@@ -38,6 +38,7 @@ def test_healthy_setup(portfolio: Path) -> None:
         "✓ Config: 1 varlık, 1 hedef sınıf",
         "✓ Config ile veritabanı: uyumlu",
         "✓ Pasif varlıkta pay: yok",
+        "! Fiyatlar: fiyatı yok: TTE; 1 bayatlık uyarısı, ayrıntı için `ft data check`",
         "✓ .env izinleri: dosya yok",
     ]:
         assert line in result.output
