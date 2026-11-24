@@ -1,0 +1,9 @@
+{# Fiyat her zaman günüyle; elle girilen fiyat etiketli, bayat fiyat uyarılı (K-117, K-120). #}
+{% macro price(holding, stale) -%}
+  {% if holding.price is none -%}
+    <span class="warn">fiyat yok</span>
+  {%- else -%}
+    son fiyat: <span class="num">{{ holding.price | exact }}</span> TL ({{ holding.price_date }}){% if holding.source == "manual" %} <span class="tag">elle</span>{% endif %}
+    {%- if holding.instrument in stale %} <span class="warn">bayat: {{ stale[holding.instrument] }}</span>{% endif %}
+  {%- endif %}
+{%- endmacro %}

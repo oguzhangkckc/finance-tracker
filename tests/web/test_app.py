@@ -23,9 +23,23 @@ NAME_B = "=?utf-8?b?R8O2a8OnZSBEb8SfYW4=?="
 NAME_Q = "=?utf-8?q?G=C3=B6k=C3=A7e_Do=C4=9Fan?="
 
 
+PORTFOLIO = """
+[targets]
+hisse = 1
+
+[[instruments]]
+code = "XHT"
+kind = "TEFAS_YAT"
+asset_class = "hisse"
+"""
+
+
 def _settings(tmp_path: Path, **extra: object) -> Settings:
+    portfolio = tmp_path / "portfolio.toml"
+    portfolio.write_text(PORTFOLIO, encoding="utf-8")
     values: dict[str, object] = {
         "db_path": tmp_path / "finans.db",
+        "portfolio_path": portfolio,
         "web_allowed_login": LOGIN,
         "web_origin": ORIGIN,
         **extra,
@@ -34,8 +48,8 @@ def _settings(tmp_path: Path, **extra: object) -> Settings:
 
 
 @pytest.fixture
-def client(tmp_path: Path) -> WebClient:
-    return WebClient(create_app(_settings(tmp_path)))
+def client(tmp_path: Path, migrated_db: Path) -> WebClient:
+    return WebClient(create_app(_settings(tmp_path, db_path=migrated_db)))
 
 
 def test_the_allowed_login_sees_the_page(client: WebClient) -> None:
@@ -133,7 +147,8 @@ def test_the_stylesheet_is_served(client: WebClient) -> None:
 def test_the_sanal_profile_has_a_band_on_every_page(
     tmp_path: Path, profile: str, shown: bool
 ) -> None:
-    page = WebClient(create_app(_settings(tmp_path, profile=profile))).get("/", headers=ME)
+    settings = _settings(tmp_path, profile=profile)
+    page = WebClient(create_app(settings)).get("/", headers=ME)
 
     assert ('class="band"' in page.text) is shown
     assert ("SANAL — gerçek alım değil" in page.text) is shown

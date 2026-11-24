@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>{% block title %}finans-takip{% endblock %}</title>
   <link rel="stylesheet" href="/static/site.css">
 </head>
@@ -11,7 +12,11 @@
   <div class="band" role="status">{{ sanal_notice }}</div>
   {% endif %}
   <header>
-    <nav><a href="/">Özet</a></nav>
+    <nav aria-label="Sayfalar">
+      {% for href, label in nav %}
+      <a href="{{ href }}"{% if href == path %} aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </nav>
     <span class="viewer">{{ viewer }}</span>
   </header>
   <main>
