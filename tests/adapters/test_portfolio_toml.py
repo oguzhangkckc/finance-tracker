@@ -8,6 +8,8 @@ from finans.domain.models import Instrument, InstrumentKind
 from finans.domain.portfolio import AlertThresholds, ConfigError, QualityThresholds
 
 D = Decimal
+EXAMPLE = Path(__file__).resolve().parents[2] / "config" / "portfolio.example.toml"
+FICTIONAL_CODES = {"XHT", "XHY", "XPP", "XAL", "XAC"}
 VALID = """
 [contribution]
 monthly = 15000.50
@@ -31,6 +33,22 @@ kind = "TEFAS_YAT"
 asset_class = "dusuk_risk"
 category = "para_piyasasi"
 """
+
+
+def test_example_file_is_valid_and_uses_only_fictional_codes() -> None:
+    config = TomlPortfolioSource().load(EXAMPLE)
+
+    assert [i.code for i in config.instruments] == ["XHT", "XHY", "XPP", "XAL", "XAC"]
+    assert {i.code for i in config.instruments} <= FICTIONAL_CODES
+    assert config.targets == {
+        "hisse_tr": D("0.30"),
+        "hisse_yabanci": D("0.15"),
+        "dusuk_risk": D("0.40"),
+        "altin": D("0.15"),
+    }
+    assert (config.monthly_contribution, config.payday) == (D(10000), 15)
+    assert [i.code for i in config.instruments if not i.allocation] == ["XAC"]
+    assert config.alerts == AlertThresholds()
 
 
 def _write(tmp_path: Path, text: str) -> Path:
