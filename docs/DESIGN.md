@@ -523,6 +523,7 @@ T_c = h_c (V + K), \quad d_c = \max(0,\, T_c - V_c)
 ```
 
 - Σ_c (T_c − V_c) = K'dır ve d_c bu farkların yalnızca pozitif kısmını alır. Bu yüzden Σd ≥ K her zaman geçerlidir; eşitlik yalnızca hiçbir sınıf hedefin üstünde değilken olur. Tek kural vardır: **a_c = K × d_c / Σd**. K = 0 ise tüm a_c = 0'dır (o durumda Σd = 0 olabilir).
+- Katkı tanımlı değilse (`[contribution]` yok ve `--contribution` verilmemiş) aylık raporun dengeleme bölümü öneri göstermez, "Katkı tanımlı değil." yazar; sıfırlarla dolu bir öneri gösterilmez (M4, K-56). M2'de eksik `[contribution]` 0 olarak okunuyor; M4'te "tanımlı değil" ile açıkça yazılmış 0 ayrılır ve `PortfolioConfig.monthly_contribution` `Decimal | None` olur.
 - a_c tam hassasiyetle hesaplanır. Kuruşa yuvarlama sunum katmanında, toplamı K'ya eşit tutan en büyük kalan (Hamilton) yöntemiyle yapılır (M4).
 - Özellik testleri: Σa = K; a_c ≥ 0; a_c ≤ d_c. Decimal bölmesinin artığı için bu koşullar 1e−20 göreli toleransla sınanır.
   - a_c ≤ d_c, hedefin altındaki sınıflar için V_c + a_c ≤ T_c demektir.
@@ -542,7 +543,7 @@ class Report(BaseModel):
     summary: Summary              # toplam değer, basit getiri, XIRR, reel XIRR (annualized bayrağıyla)
     holdings: list[HoldingLine]   # değer, haftalık değişim, fiyat tarihi, kaynak; lotlarda alım TÜFE dönemi
     allocation: list[AllocationLine]
-    rebalance: RebalancePlan | None
+    rebalance: RebalancePlan | None  # katkı tanımlı değilse None (K-56)
     alerts: list[Alert]
     data_issues: list[DataIssue]
     provenance: Provenance        # fiyat tarihleri, değerleme TÜFE dönemi, çekilme zamanları
@@ -552,7 +553,7 @@ Report ve ajan çıktıları `finans.contracts` içindeki pydantic modelleridir.
 
 Haftalık rapor: toplam değer ve haftalık değişim, varlık satırları, dağılım ve sapma, açık uyarılar, veri sorunları, tek satırlık sistem sağlığı.
 
-Aylık rapor: haftalık içeriğe ek olarak kullanılan TÜFE dönemleri ve yıllık enflasyon, lot bazlı reel getiri, nominal ve reel XIRR (bir yıldan kısa dönemde "Dönem getirisi (para ağırlıklı, yıllık değil)" etiketiyle), bu ayki katkı için yalnızca katkıyla dengeleme önerisi. Para birimi biçimi (1.234,56 TL) `locale` modülüyle değil, kendi biçimlendiricimizle üretilir.
+Aylık rapor: haftalık içeriğe ek olarak kullanılan TÜFE dönemleri ve yıllık enflasyon, lot bazlı reel getiri, nominal ve reel XIRR (bir yıldan kısa dönemde "Dönem getirisi (para ağırlıklı, yıllık değil)" etiketiyle), bu ayki katkı için yalnızca katkıyla dengeleme önerisi (katkı tanımlı değilse yalnızca "Katkı tanımlı değil." notu, K-56). Para birimi biçimi (1.234,56 TL) `locale` modülüyle değil, kendi biçimlendiricimizle üretilir.
 
 ### Telegram
 
@@ -816,6 +817,7 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-53 | M3'te TEFAS fiyatları gelince her işlemin birim fiyatı o günün TEFAS fiyatıyla karşılaştırılır; eşik aşılırsa uyarı (büyük olasılıkla yanlış tarih) | `trade_date` fiyatın uygulandığı gün olduğu için fiyat tutmalı; tutmuyorsa tarih büyük olasılıkla yanlış | Veri kalitesi |
 | K-54 | K-18'i günceller: GVK geçici 67/1 ikinci paragraf FIFO'yu kanunla belirliyor; fon paylarına uygulanması kapsam hükümlerinin birlikte okunmasıyla (kanunun istisna cümlesi, GİB rehberi 2026 §20, 258 seri tebliğ §1.1.2). Aynı paragraftaki "aynı gün ağırlıklı ortalama" K-42 ile uyumlu | Birincil kaynakla doğrulama istendi; hiçbir cümle fon paylarını ve FIFO'yu birlikte anmadığı için bu ayrım açıkça yazıldı | Hesap motoru |
 | K-55 | Bekleyen migration varsa ve veritabanı sürümü 1 ya da üstüyse migration'dan önce SQLite backup API'siyle kopya alınır: veritabanının yanındaki `backups/`, `<ad>-<UTC zaman damgası>-v<sürüm>.db`, 600 izin, geçici adla yazılıp yeniden adlandırılır, journal kipi `DELETE`; son 5 kopya tutulur. Yedek alınamazsa migration uygulanmaz; başarısızlıkta hata mesajı yedeğin yolunu verir (M2) | Tablo yeniden kuran migration'larda atomiklik grup bazında; sonraki grup başarısız olursa veritabanı ara sürümde kalır. Eski şemaya dönüşün tek yolu migration öncesi kopya; dosya kopyalama WAL'daki değişiklikleri kaçırabilir | Veri modeli |
+| K-56 | Katkı tanımlı değilse (`[contribution]` yok, `--contribution` verilmemiş) aylık raporun dengeleme bölümü "Katkı tanımlı değil." yazar; sıfırlarla dolu öneri gösterilmez. `Report.rebalance` bu durumda None; M4'te eksik `[contribution]` 0 yerine "tanımlı değil" okunur (M4) | Sıfırlardan oluşan bir öneri, dengelemenin gerekmediği izlenimini verir | Raporlama, Dağılım |
 
 ## Planı kodlama ajanıyla uygulama
 
