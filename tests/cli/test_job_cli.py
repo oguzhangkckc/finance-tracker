@@ -1,14 +1,27 @@
 import hashlib
 import logging
+import time
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
+from finans import bootstrap
 from finans.cli.main import app
+from tests.fakes.clock import FixedClock
 
 runner = CliRunner()
+# İstanbul'da Pazar 20:30: haftalık raporun 20:00 dilimi geçmiş. Yerel saate bakan kod
+# UTC ve Los Angeles'ta önceki Pazar'ı, Kiritimati'de Pazartesi'yi görürdü.
+SUNDAY_EVENING = datetime(2026, 11, 29, 17, 30, tzinfo=UTC)
+LOCAL_DAY_AND_HOUR = {
+    "Europe/Istanbul": (29, 20),
+    "UTC": (29, 17),
+    "Pacific/Kiritimati": (30, 7),
+    "America/Los_Angeles": (29, 9),
+}
 PORTFOLIO = """
 [targets]
 hisse = 1
@@ -49,6 +62,25 @@ def test_job_runs_once_per_day_and_is_listed() -> None:
     assert "weekly-report 2026-11-29: bu gün için zaten tamamlanmış; atlandı" in second.output
     listed = runner.invoke(app, ["job", "list", "--days", "36500"])
     assert "#1 weekly-report 2026-11-29 ok" in listed.output
+
+
+def test_system_zone_fixture_really_changes_local_time(system_zone: str) -> None:
+    local = time.localtime(SUNDAY_EVENING.timestamp())
+    assert (local.tm_mday, local.tm_hour) == LOCAL_DAY_AND_HOUR[system_zone]
+
+
+@pytest.mark.usefixtures("portfolio", "system_zone")
+def test_logical_date_and_listed_time_do_not_follow_the_system_zone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(bootstrap, "system_clock", lambda: FixedClock(SUNDAY_EVENING))
+
+    ran = runner.invoke(app, ["job", "run", "weekly-report"])
+    listed = runner.invoke(app, ["job", "list"])
+
+    assert ran.exit_code == 0, ran.output
+    assert "weekly-report 2026-11-29: tamam" in ran.output
+    assert "#1 weekly-report 2026-11-29 ok (2026-11-29 20:30)" in listed.output
 
 
 @pytest.mark.usefixtures("portfolio")
