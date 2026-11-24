@@ -6,8 +6,25 @@ from pathlib import Path
 import pytest
 
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
-from finans.application.paper import NoPriceError, PaperTrade, paper_buy, paper_sell
-from finans.domain.models import DomainError, Instrument, InstrumentKind, PricePoint
+from finans.application.paper import (
+    NoPriceError,
+    PaperTrade,
+    PaydayPurchasePlan,
+    paper_buy,
+    paper_sell,
+    plan_payday_purchases,
+    record_payday_purchases,
+)
+from finans.application.transactions import add_transaction
+from finans.domain.models import (
+    DomainError,
+    Instrument,
+    InstrumentKind,
+    PricePoint,
+    Side,
+    Transaction,
+)
+from finans.domain.portfolio import AlertThresholds, PortfolioConfig
 
 D = Decimal
 NOW = datetime(2026, 6, 20, 9, 0, tzinfo=UTC)
@@ -70,3 +87,98 @@ def test_sell_uses_the_stored_price_and_oversell_is_still_refused(uow: SqliteUni
     assert (sold.units, sold.price, sold.spent) == (D(100), D("1.234567"), D("123.4567"))
     with pytest.raises(DomainError):
         paper_sell(uow, code="XHT", units=D(10000), day=date(2026, 6, 15), now=NOW)
+
+
+XPP = Instrument("XPP", InstrumentKind.TEFAS_YAT, "dusuk_risk", category="para_piyasasi")
+PAYDAY = date(2026, 6, 15)
+CONFIG = PortfolioConfig(
+    (XHT, XPP), {"hisse": D("0.6"), "dusuk_risk": D("0.4")}, D(1000), AlertThresholds(), payday=15
+)
+
+
+@pytest.fixture
+def payday_uow(migrated_db: Path) -> Iterator[SqliteUnitOfWork]:
+    with SqliteUnitOfWork(migrated_db) as work:
+        work.instruments.sync([XHT, XPP])
+        prices = [
+            ("XHT", date(2026, 6, 12), "10"),
+            ("XHT", PAYDAY, "10.2"),
+            ("XHT", date(2026, 6, 16), "10.5"),
+            ("XPP", date(2026, 6, 12), "20"),
+        ]
+        for code, day, price in prices:
+            work.prices.upsert(PricePoint(code, day, D(price), "tefas"), fetched_at=NOW)
+        for code in ("XHT", "XPP"):
+            paper_buy(work, code=code, amount=D(200), day=date(2026, 6, 12), fee=D(0), now=NOW)
+        yield work
+
+
+def _statuses(plan: PaydayPurchasePlan) -> dict[str, str]:
+    return {line.instrument: line.status for line in plan.lines}
+
+
+def test_payday_price_is_the_first_priced_day_after_payday_and_the_preview_writes_nothing(
+    payday_uow: SqliteUnitOfWork,
+) -> None:
+    before = len(payday_uow.transactions.list())
+
+    plan = plan_payday_purchases(payday_uow, CONFIG, payday=PAYDAY, today=date(2026, 6, 17))
+
+    [xht, xpp] = sorted(plan.lines, key=lambda line: line.instrument)
+    assert (xht.status, xht.price_day, xht.price) == ("ready", date(2026, 6, 16), D("10.5"))
+    assert (xht.amount, xht.units, xht.spent, xht.leftover) == (
+        D("638.40"),
+        D(60),
+        D("630.0"),
+        D("8.40"),
+    )
+    assert xpp.status == "pending"
+    assert (plan.window_end, plan.retry_after) == (date(2026, 6, 25), date(2026, 6, 18))
+    assert sum((line.amount for line in plan.lines), D(0)) == D(1000)
+    assert len(payday_uow.transactions.list()) == before
+
+
+def test_fund_without_a_price_in_the_window_is_skipped_and_its_amount_stays_put(
+    payday_uow: SqliteUnitOfWork,
+) -> None:
+    plan = plan_payday_purchases(payday_uow, CONFIG, payday=PAYDAY, today=date(2026, 6, 26))
+
+    assert _statuses(plan) == {"XHT": "ready", "XPP": "expired"}
+    assert record_payday_purchases(payday_uow, plan, now=NOW)[0].code == "XHT"
+    assert {s.transaction.instrument for s in payday_uow.transactions.list()} == {"XHT", "XPP"}
+    assert [s.external_ref for s in payday_uow.transactions.list() if s.external_ref] == [
+        "sanal-maas-gunu:2026-06-15:XHT"
+    ]
+
+
+def test_rerun_records_only_the_remaining_funds_and_never_applies_twice(
+    payday_uow: SqliteUnitOfWork,
+) -> None:
+    first = plan_payday_purchases(payday_uow, CONFIG, payday=PAYDAY, today=date(2026, 6, 17))
+    assert len(record_payday_purchases(payday_uow, first, now=NOW)) == 1
+    payday_uow.prices.upsert(
+        PricePoint("XPP", date(2026, 6, 18), D("20.1"), "tefas"), fetched_at=NOW
+    )
+
+    second = plan_payday_purchases(payday_uow, CONFIG, payday=PAYDAY, today=date(2026, 6, 19))
+    assert _statuses(second) == {"XHT": "applied", "XPP": "ready"}
+    assert [line.amount for line in second.lines] == [line.amount for line in first.lines]
+    assert len(record_payday_purchases(payday_uow, second, now=NOW)) == 1
+
+    third = plan_payday_purchases(payday_uow, CONFIG, payday=PAYDAY, today=date(2026, 6, 19))
+    assert _statuses(third) == {"XHT": "applied", "XPP": "applied"}
+    assert record_payday_purchases(payday_uow, third, now=NOW) == []
+
+
+def test_plan_is_skipped_when_a_held_fund_has_no_price_by_payday(migrated_db: Path) -> None:
+    with SqliteUnitOfWork(migrated_db) as work:
+        work.instruments.sync([XHT, XPP])
+        work.prices.upsert(PricePoint("XHT", date(2026, 6, 12), D(10), "tefas"), fetched_at=NOW)
+        work.prices.upsert(PricePoint("XPP", date(2026, 6, 16), D(20), "tefas"), fetched_at=NOW)
+        paper_buy(work, code="XHT", amount=D(100), day=date(2026, 6, 12), fee=D(0), now=NOW)
+        held = Transaction("XPP", date(2026, 6, 12), Side.BUY, D(10), D(20), D(0))
+        add_transaction(work, held, ref=None, note=None, now=NOW)
+
+        plan = plan_payday_purchases(work, CONFIG, payday=PAYDAY, today=date(2026, 6, 17))
+
+    assert (plan.missing_prices, plan.lines) == (["XPP"], [])

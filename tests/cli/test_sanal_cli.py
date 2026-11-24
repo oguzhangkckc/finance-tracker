@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -350,3 +351,49 @@ def test_only_the_real_profile_pings_healthchecks(
 
     assert result.exit_code == 0, result.output
     assert route.called is pinged
+
+
+PAYDAY_PORTFOLIO = (
+    PORTFOLIO
+    + """
+[contribution]
+monthly = 1000
+payday = 15
+"""
+)
+
+
+@pytest.mark.usefixtures("real_db")
+def test_payday_purchases_are_previewed_and_written_only_after_confirmation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    portfolio = tmp_path / "maas.toml"
+    portfolio.write_text(PAYDAY_PORTFOLIO, encoding="utf-8")
+    monkeypatch.setenv("FT_PORTFOLIO_PATH", str(portfolio))
+    monkeypatch.setattr(
+        bootstrap, "system_clock", lambda: FixedClock(datetime(2026, 6, 17, 9, 0, tzinfo=UTC))
+    )
+    _sanal(monkeypatch)
+    assert runner.invoke(app, ["sanal", "init"]).exit_code == 0
+    for day, price in (("2026-06-15", "10.2"), ("2026-06-16", "10.5")):
+        assert runner.invoke(app, ["price", "set", "XHT", day, price]).exit_code == 0
+    command = ["sanal", "maas-gunu-uygula", "--maas-gunu", "2026-06-15"]
+
+    declined = runner.invoke(app, command, input="h\n")
+    accepted = runner.invoke(app, command, input="e\n")
+    again = runner.invoke(app, command)
+
+    assert declined.exit_code == 0, declined.output
+    assert "pencere 2026-06-25 tarihinde biter" in declined.output
+    assert (
+        "hisse XHT: 1000 TL → fiyat günü 2026-06-16, 95 pay × 10.5 = 997.5 TL; artan 2.5 TL"
+        in declined.output
+    )
+    assert "Kaydedilmedi." in declined.output
+    assert accepted.exit_code == 0, accepted.output
+    assert "Kaydedildi: 1 sanal alım." in accepted.output
+    assert "hisse XHT: 1000 TL → zaten uygulandı." in again.output
+    assert "Kaydedilsin mi?" not in again.output
+    listed = runner.invoke(app, ["tx", "list"]).output
+    assert "#1  2026-06-16  XHT  BUY  95 × 10.5" in listed
+    assert "ref sanal-maas-gunu:2026-06-15:XHT" in listed

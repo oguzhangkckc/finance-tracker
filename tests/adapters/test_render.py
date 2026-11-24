@@ -9,6 +9,7 @@ from finans.adapters.render.json import JsonRenderer
 from finans.adapters.render.text import TextRenderer
 from finans.contracts.report import (
     DataIssueLine,
+    PaydayLine,
     PaydayPlan,
     RebalancePlan,
     Report,
@@ -95,3 +96,14 @@ def test_manual_price_is_labelled_in_text_and_kept_as_manual_in_json(monthly: Re
     assert f"fiyat {first.price_date} (elle)" in text
     assert "(manual)" not in text
     assert body["holdings"][0]["source"] == "manual"
+
+
+def test_sanal_payday_message_points_to_the_paper_command() -> None:
+    line = PaydayLine(asset_class="hisse", instrument="XHT", amount=D(1000), share=D(1))
+    plan = PaydayPlan(
+        profile="sanal", logical_date=date(2026, 6, 15), contribution=D(1000), lines=[line]
+    )
+
+    text = TextRenderer().payday(plan)
+
+    assert text.splitlines()[-1] == "Sanal alımları `ft sanal maas-gunu-uygula` ile uygula."

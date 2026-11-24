@@ -14,7 +14,14 @@ from finans.application.backup import verify_backups
 from finans.application.cpi import CPI_HISTORY_START, CpiSyncReport, sync_cpi
 from finans.application.data_check import DEFAULT_WINDOW, check_data, trade_price_issues
 from finans.application.inputs import InputError, parse_amount, parse_day, parse_period
-from finans.application.paper import paper_buy, paper_sell
+from finans.application.paper import (
+    PaydayPurchase,
+    PaydayPurchasePlan,
+    paper_buy,
+    paper_sell,
+    plan_payday_purchases,
+    record_payday_purchases,
+)
 from finans.application.portfolio_config import ApplyReport, apply_portfolio
 from finans.application.portfolio_view import portfolio_as_of
 from finans.application.price_sync import PriceSyncReport, sync_prices
@@ -789,6 +796,77 @@ def sanal_sell_command(
         f"{canonical_text(trade.price)} ({trade.day.isoformat()}) = "
         f"{canonical_text(trade.spent)} TL"
     )
+
+
+@sanal_app.command("maas-gunu-uygula")
+def sanal_payday_command(
+    payday: Annotated[
+        str | None,
+        typer.Option("--maas-gunu", help="YYYY-AA-GG; verilmezse son maaş günü."),
+    ] = None,
+) -> None:
+    """Maaş günü planını sanal alımlara çevirir; önce önizleme, onaylanınca kayıt (K-113)."""
+    settings = _load_settings_or_exit()
+    with _user_errors():
+        bootstrap.require_sanal(settings)
+    clock = bootstrap.system_clock()
+    with _user_errors():
+        config = bootstrap.portfolio_source().load(_portfolio_path(settings, None))
+        if config.payday is None:
+            raise DomainError("portfolio.toml'da [contribution] payday tanımlı değil.")
+        day = (
+            _parse_date(payday)
+            if payday is not None
+            else logical_date("payday", clock.now().astimezone(BUSINESS_TZ), payday=config.payday)
+        )
+        with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+            plan = plan_payday_purchases(uow, config, payday=day, today=clock.today())
+    _print_payday_purchases(plan)
+    if not any(line.status == "ready" for line in plan.lines):
+        return
+    answer = typer.prompt("Kaydedilsin mi? (e/H)", default="H", show_default=False)
+    if answer.strip().casefold() not in {"e", "evet"}:
+        typer.echo("Kaydedilmedi.")
+        return
+    with _user_errors(), bootstrap.open_unit_of_work(settings) as uow:
+        trades = record_payday_purchases(uow, plan, now=clock.now())
+    typer.echo(f"Kaydedildi: {len(trades)} sanal alım.")
+
+
+def _print_payday_purchases(plan: PaydayPurchasePlan) -> None:
+    typer.echo(
+        f"Maaş günü {plan.payday.isoformat()}, sanal alım önizlemesi; fiyat günü maaş gününden "
+        f"sonraki ilk fiyatlı gün, pencere {plan.window_end.isoformat()} tarihinde biter."
+    )
+    if plan.missing_prices:
+        typer.echo(
+            f"Maaş günü planı hesaplanmadı: {', '.join(plan.missing_prices)} için fiyat yok "
+            "(K-95); hiçbir işlem yapılmadı."
+        )
+        return
+    for line in plan.lines:
+        typer.echo(_payday_line(line, plan))
+
+
+def _payday_line(line: PaydayPurchase, plan: PaydayPurchasePlan) -> str:
+    head = f"{line.asset_class} {line.instrument}: {canonical_text(line.amount)} TL"
+    if line.status == "ready" and line.units is not None and line.price is not None:
+        leftover = canonical_text(line.leftover or Decimal(0))
+        return (
+            f"{head} → fiyat günü {line.price_day}, {canonical_text(line.units)} pay × "
+            f"{canonical_text(line.price)} = {canonical_text(line.spent or Decimal(0))} TL; "
+            f"artan {leftover} TL"
+        )
+    if line.status == "pending":
+        return (
+            f"{head} → fiyat henüz açıklanmadı; {plan.retry_after.isoformat()} tarihinden "
+            "sonra tekrar çalıştır."
+        )
+    if line.status == "expired":
+        return f"{head} → pencerede fiyat yok; işlem yapılmadı, tutar başka fona aktarılmaz."
+    if line.status == "applied":
+        return f"{head} → zaten uygulandı."
+    return f"{head} → işlem yapılmadı: {line.reason}"
 
 
 @sanal_app.command("reset")

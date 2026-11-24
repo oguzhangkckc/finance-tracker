@@ -88,7 +88,11 @@ class TextRenderer:
                 share = percent(line.share, places=1)
                 amount = f"{money(line.amount)} ({share})" if show else f"katkının {share}"
                 lines.append(f"{line.asset_class} {line.instrument}: {amount}")
-            lines.append("Alımları `ft tx add` ile gir.")
+            lines.append(
+                "Sanal alımları `ft sanal maas-gunu-uygula` ile uygula."
+                if plan.profile == "sanal"
+                else "Alımları `ft tx add` ile gir."
+            )
         return self._markup("\n\n".join([*self._profile(plan.profile), "\n".join(lines)]))
 
     def alerts(self, notices: list[AlertNotice]) -> str:
