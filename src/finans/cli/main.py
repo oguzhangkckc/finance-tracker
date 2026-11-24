@@ -1,10 +1,10 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 import typer
 from pydantic import ValidationError
@@ -13,6 +13,7 @@ from finans import bootstrap
 from finans.application.backup import verify_backups
 from finans.application.cpi import CPI_HISTORY_START, CpiSyncReport, sync_cpi
 from finans.application.data_check import DEFAULT_WINDOW, check_data, trade_price_issues
+from finans.application.inputs import InputError, parse_amount, parse_day, parse_period
 from finans.application.portfolio_config import ApplyReport, apply_portfolio
 from finans.application.portfolio_view import portfolio_as_of
 from finans.application.price_sync import PriceSyncReport, sync_prices
@@ -737,37 +738,30 @@ def _format_transaction(stored: StoredTransaction) -> str:
     return "  ".join(parts)
 
 
+def _usage_error(error: InputError) -> NoReturn:
+    typer.echo(str(error), err=True)
+    raise typer.Exit(code=2) from None
+
+
 def _parse_date(text: str) -> date:
     try:
-        value = date.fromisoformat(text)
-    except ValueError:
-        value = None
-    if value is None or value.isoformat() != text:
-        typer.echo(f"Tarih YYYY-AA-GG biçiminde olmalı, {text!r} verildi.", err=True)
-        raise typer.Exit(code=2)
-    return value
+        return parse_day(text)
+    except InputError as exc:
+        _usage_error(exc)
 
 
 def _parse_period(text: str) -> YearMonth:
     try:
-        return YearMonth.parse(text)
-    except DomainError:
-        typer.echo(f"Dönem YYYY-AA biçiminde geçerli bir ay olmalı, {text!r} verildi.", err=True)
-        raise typer.Exit(code=2) from None
+        return parse_period(text)
+    except InputError as exc:
+        _usage_error(exc)
 
 
 def _parse_decimal(name: str, text: str) -> Decimal:
-    if text.count(",") == 1 and "." not in text:
-        typer.echo(
-            f"{name}: ondalık ayırıcı nokta olmalı; {text} yerine {text.replace(',', '.')} yaz.",
-            err=True,
-        )
-        raise typer.Exit(code=2)
     try:
-        return Decimal(text)
-    except InvalidOperation:
-        typer.echo(f"{name}: sayı olmalı, {text!r} verildi.", err=True)
-        raise typer.Exit(code=2) from None
+        return parse_amount(name, text)
+    except InputError as exc:
+        _usage_error(exc)
 
 
 def _print_apply(report: ApplyReport) -> None:
