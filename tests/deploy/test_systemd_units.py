@@ -41,6 +41,13 @@ SECRETS = [
     "ft_healthcheck_reports_url",
     "ft_healthcheck_backup_url",
 ]
+HARDENING = {
+    "NoNewPrivileges": "yes",
+    "PrivateTmp": "yes",
+    "ProtectSystem": "strict",
+    "ReadWritePaths": "/var/lib/finans",
+    "ProtectHome": "yes",
+}
 
 
 def _unit(path: Path) -> dict[str, list[tuple[str, str]]]:
@@ -108,6 +115,40 @@ def test_credentials_are_secret_settings_and_the_manual_wrapper_uses_the_same() 
     loop = re.search(r"for name in (.+); do", wrapper)
     assert loop is not None
     assert loop[1].split() == SECRETS
+
+
+def test_service_and_manual_wrapper_share_the_hardening() -> None:
+    service = _unit(UNITS / "finans-job@.service")["Service"]
+    wrapper = (DEPLOY / "ft-finans").read_text(encoding="utf-8")
+    properties = dict(re.findall(r"-p (\w+)=(\S+)", wrapper))
+
+    assert {name: _one(service, name) for name in HARDENING} == HARDENING
+    assert {name: properties.get(name) for name in HARDENING} == HARDENING
+
+
+def test_everything_the_jobs_write_is_under_the_writable_path() -> None:
+    service = _unit(UNITS / "finans-job@.service")["Service"]
+    writable = Path(_one(service, "ReadWritePaths"))
+    example = (DEPLOY / "finans.env.example").read_text(encoding="utf-8")
+    env = dict(
+        line.split("=", 1)
+        for line in example.splitlines()
+        if "=" in line and not line.startswith("#")
+    )
+    wrapper = (DEPLOY / "ft-finans").read_text(encoding="utf-8")
+    manual = re.search(r"--working-directory=(\S+)", wrapper)
+    assert manual is not None
+
+    written = [
+        Path(env["FT_DB_PATH"]).parent,
+        Path(env["FT_LOCK_DIR"]),
+        Path(env["FT_BACKUP_DIR"]),
+        Path(_one(service, "WorkingDirectory")),
+        Path(manual[1]),
+    ]
+    assert all(path.is_relative_to(writable) for path in written)
+    assert "FT_BACKUP_SCRATCH_DIR" not in env
+    assert not Path(env["FT_PORTFOLIO_PATH"]).is_relative_to(writable)
 
 
 def test_credential_files_are_read_as_settings(tmp_path: Path) -> None:
