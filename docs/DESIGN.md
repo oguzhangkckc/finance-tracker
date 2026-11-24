@@ -152,7 +152,7 @@ finance-tracker/
 │   │   ├── _http.py             # ortak httpx istemcisi, retry, kibarlık (bağımsızlık kuralı dışında)
 │   │   ├── clock.py             # SystemClock: duvar saatine erişen tek yer
 │   │   ├── tefas.py, evds.py, tcmb_ppk.py
-│   │   ├── sqlite/              # bağlantı fabrikası, repository'ler, migration çalıştırıcı
+│   │   ├── sqlite/              # bağlantı fabrikası, repository'ler, migration çalıştırıcı ve öncesindeki yedek
 │   │   │   └── migrations/      # 0001_init.sql ...; paket verisi, importlib.resources ile okunur
 │   │   ├── snapshot_fs.py       # anlık görüntüleri atomik yazar ve okur
 │   │   ├── telegram.py
@@ -344,8 +344,16 @@ Migration dosyaları paketin içinde (`src/finans/adapters/sqlite/migrations/`) 
   - Başlık yalnızca dosyanın ilk satırında geçerlidir. `-- finans:` ile başlayan bir satır dosyanın başka bir yerindeyse çalıştırıcı hata verir; yanlış yere yazılmış bir başlık sessizce etkisiz kalmasın.
   - Adım 4'ten sonra `PRAGMA foreign_keys` tekrar okunur ve 1 olduğu doğrulanır. Bağlantı, foreign key kontrolü kapalı halde bırakılmaz.
   - Migration yazarı için yeniden kurma kalıbı, SQLite'ın önerdiği sıradır: yeni tabloyu geçici adla oluştur, verileri kopyala, eskisini sil, yenisinin adını değiştir, index ve trigger'ları yeniden oluştur. `legacy_alter_table` varsayılan değerinde (OFF) kalır; böylece diğer tabloların foreign key başvuruları yeni tabloya bağlanır.
+- **Migration öncesi yedek (M2, K-55).** Bekleyen migration varsa ve veritabanına daha önce en az bir migration uygulanmışsa, çalıştırıcı migration'dan önce SQLite backup API'siyle (`Connection.backup`) veritabanının tutarlı bir kopyasını alır. WAL'da bekleyen değişiklikler de kopyaya girer; dosya kopyalamada bunlar kaybolabilirdi. Atomiklik grup bazında olduğu için sonraki bir grup başarısız olursa veritabanı ara bir sürümde kalır; eski şemaya dönmenin yolu bu kopyadır.
+  - Yer ve ad: veritabanının yanındaki `backups/` dizini; ad `finans-20261124T120000Z-v1.db` biçimindedir (UTC zaman damgası ve kopyanın şema sürümü). Zaman Clock port'undan gelir.
+  - Kopya önce gizli, geçici bir adla yazılır ve bitince yeniden adlandırılır; yarım kalan kopya yedek gibi görünmez. Dosya 600 izinle oluşur. Kopyanın journal kipi `DELETE`'e çevrilir; böylece yedek tek bir dosyadır. Var olan bir yedeğin üzerine yazılmaz.
+  - Son 5 kopya tutulur; daha eskileri yeni kopya alındıktan sonra silinir. Yalnızca bu ad kalıbına uyan dosyalar silinir.
+  - Yedek alınamazsa migration uygulanmaz. Migration başarısız olursa hata mesajı yedeğin yolunu verir; `ft db migrate` başarıda da yolu yazar.
+  - Yeni (sürüm 0) veritabanında yedek alınmaz; yedeklenecek veri yoktur.
+  - Geri dönüş: ft ve zamanlanmış işler durdurulur; `finans.db-wal` ile `finans.db-shm` silinir ve yedek `finans.db` yerine kopyalanır.
+  - Bu kopyalar makinede kalır ve şifrelenmez. Şifreli, makine dışı gece yedeği ayrı bir iştir (M4).
 
-Yedekleme her gece sqlite3 .backup ile alınır, şifrelenip makine dışına kopyalanır; geri yükleme ayda bir test edilir.
+Yedekleme her gece sqlite3 .backup ile alınır, şifrelenip makine dışına kopyalanır; geri yükleme ayda bir test edilir. Bu, migration öncesi alınan yerel kopyadan (K-55) ayrıdır.
 
 ## Veri toplama katmanı
 
@@ -702,7 +710,7 @@ Hesap doğruluğu bu projenin tek vazgeçilmez kalitesidir; test ağırlığı d
 | Takvim ve zaman | pytest ve FixedClock | Hafta sonu ve bayram as-of'u, ay sonu, artık yıl, TÜFE yayın gecikmesi ve referans ay kuralı, 2003=100'den 2025=100'e zincirleme |
 | Mimari | import-linter ve AST testleri | Katman kuralları; domain'in yalnızca standart kütüphaneyi kullanması; float yasağı; duvar saati yasağı (`time.localtime`, `time.gmtime`, `time.ctime` ve zaman argümansız `time.strftime` dahil); her adapter'ın bağımsızlık kuralında listelenmesi |
 | Adapter kontratı | respx ve kayıtlı fixture'lar | TEFAS ve EVDS ayrıştırma, epoch'tan TR tarihine çeviri, retry ve hata kodları, bozuk yanıt |
-| Repository | Geçici SQLite | Migration'lar, upsert idempotency, Decimal gidiş-dönüş, revizyon kaydı |
+| Repository | Geçici SQLite | Migration'lar ve öncesindeki yedek, upsert idempotency, Decimal gidiş-dönüş, revizyon kaydı |
 | Rapor | syrupy snapshot | Metin ve JSON çıktının bilinçsiz değişmemesi |
 | Ajan kontratı | jsonschema | ft-agent çıktısının yayımlanan şemaya uyması; iki bayatlık sinyalinin birbirinden bağımsız çalışması (taze snapshot ve eski fiyat; eski snapshot ve taze fiyat) |
 | Canlı smoke | pytest -m live (CI dışı) | Gerçek uç noktaların hâlâ beklenen biçimde yanıt vermesi; haftada bir timer ile |
@@ -807,6 +815,7 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-52 | Decimal kanonik biçimi `format(d.normalize(), "f")`; `-0` → `0`. Fiyat revizyonunda eski ve yeni değer Decimal olarak karşılaştırılır. Tarih kolonlarında `CHECK (date(kolon) IS kolon)` | `normalize()` tek başına `1E+2` üretir; metin karşılaştırması `10` ile `10.0`'ı farklı sayar; GLOB biçimi kontrol eder ama 2026-02-30 gibi geçersiz tarihleri kaçırır | Veri modeli |
 | K-53 | M3'te TEFAS fiyatları gelince her işlemin birim fiyatı o günün TEFAS fiyatıyla karşılaştırılır; eşik aşılırsa uyarı (büyük olasılıkla yanlış tarih) | `trade_date` fiyatın uygulandığı gün olduğu için fiyat tutmalı; tutmuyorsa tarih büyük olasılıkla yanlış | Veri kalitesi |
 | K-54 | K-18'i günceller: GVK geçici 67/1 ikinci paragraf FIFO'yu kanunla belirliyor; fon paylarına uygulanması kapsam hükümlerinin birlikte okunmasıyla (kanunun istisna cümlesi, GİB rehberi 2026 §20, 258 seri tebliğ §1.1.2). Aynı paragraftaki "aynı gün ağırlıklı ortalama" K-42 ile uyumlu | Birincil kaynakla doğrulama istendi; hiçbir cümle fon paylarını ve FIFO'yu birlikte anmadığı için bu ayrım açıkça yazıldı | Hesap motoru |
+| K-55 | Bekleyen migration varsa ve veritabanı sürümü 1 ya da üstüyse migration'dan önce SQLite backup API'siyle kopya alınır: veritabanının yanındaki `backups/`, `<ad>-<UTC zaman damgası>-v<sürüm>.db`, 600 izin, geçici adla yazılıp yeniden adlandırılır, journal kipi `DELETE`; son 5 kopya tutulur. Yedek alınamazsa migration uygulanmaz; başarısızlıkta hata mesajı yedeğin yolunu verir (M2) | Tablo yeniden kuran migration'larda atomiklik grup bazında; sonraki grup başarısız olursa veritabanı ara sürümde kalır. Eski şemaya dönüşün tek yolu migration öncesi kopya; dosya kopyalama WAL'daki değişiklikleri kaçırabilir | Veri modeli |
 
 ## Planı kodlama ajanıyla uygulama
 

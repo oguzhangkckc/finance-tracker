@@ -19,6 +19,7 @@ Geliştirme kapısı: İşlemler girilip herhangi bir tarihteki değer görüleb
 Not: Migration çalıştırıcısına tablo yeniden kurma desteği: `-- finans: foreign_keys=off` başlığı, transaction öncesinde FK kapatma, COMMIT öncesi `foreign_key_check`, ardından FK açma (K-33).
 Not: Config doğrulaması bütün hataları tek seferde, yer, değer, beklenen ve düzeltme önerisiyle gösterir (K-47).
 Not: 0001 yalnızca instrument, txn, price, price_revision (K-49). İşlem iptali `ft tx void` (K-48); CSV içe aktarma kuralları (K-50); pasif enstrüman kuralları ve uyarıları (K-51); codec ve tarih kısıtları (K-52).
+Not: Bekleyen migration varsa önce SQLite backup API'siyle yerel kopya alınır; son 5 kopya tutulur, yedek alınamazsa migration uygulanmaz (K-55).
 
 ## M3 · Veri kaynakları
 TEFAS ve EVDS3 adapter'ları (ilk iş: EVDS3 anahtar iletimi), backfill, veri kalitesi kontrolleri; kayıtlı fixture'larla kontrat testleri, haftalık canlı smoke testi.

@@ -8,6 +8,7 @@ from importlib.resources import files
 from importlib.resources.abc import Traversable
 from pathlib import Path
 
+from finans.adapters.sqlite.backup import backup_name, prune_backups, write_backup
 from finans.adapters.sqlite.codec import encode_timestamp
 from finans.adapters.sqlite.connection import connect, transaction
 from finans.ports.clock import Clock
@@ -77,6 +78,49 @@ class SchemaStatus:
 def schema_status(path: Path) -> SchemaStatus:
     with closing(connect(path, readonly=True)) as conn:
         return SchemaStatus(current=_user_version(conn), latest=len(bundled()))
+
+
+@dataclass(frozen=True, slots=True)
+class MigrationRun:
+    applied: list[int]
+    backup: Path | None
+
+
+def migrate(
+    path: Path,
+    migrations: Sequence[Migration],
+    *,
+    clock: Clock,
+    backup_dir: Path,
+    keep_backups: int,
+) -> MigrationRun:
+    """Bekleyen migration'ları uygular; uygulanmış bir şema varsa önce yedeğini alır."""
+    with closing(connect(path)) as conn:
+        current = _user_version(conn)
+        backup = None
+        if 0 < current < len(migrations):
+            backup = _backup(conn, path, current, clock, backup_dir, keep_backups)
+        try:
+            return MigrationRun(apply(conn, migrations, clock=clock), backup)
+        except MigrationError as exc:
+            if backup is None:
+                raise
+            raise MigrationError(f"{exc}. Migration öncesi yedek: {backup}") from exc
+
+
+def _backup(
+    conn: sqlite3.Connection, path: Path, version: int, clock: Clock, directory: Path, keep: int
+) -> Path:
+    target = directory / backup_name(path, version=version, at=clock.now())
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        write_backup(conn, target)
+        prune_backups(directory, path, keep=keep)
+    except (OSError, sqlite3.Error) as exc:
+        raise MigrationError(
+            f"Migration öncesi yedekleme başarısız; migration uygulanmadı ({exc})"
+        ) from exc
+    return target
 
 
 def apply(conn: sqlite3.Connection, migrations: Sequence[Migration], *, clock: Clock) -> list[int]:

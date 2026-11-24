@@ -1,11 +1,16 @@
-from contextlib import closing
 from pathlib import Path
 
 from finans.adapters.clock import SystemClock
 from finans.adapters.csv_transactions import CsvTransactionFile
 from finans.adapters.portfolio_toml import TomlPortfolioSource
-from finans.adapters.sqlite.connection import connect, sqlite_version
-from finans.adapters.sqlite.migrate import MigrationError, apply, bundled, schema_status
+from finans.adapters.sqlite.connection import sqlite_version
+from finans.adapters.sqlite.migrate import (
+    MigrationError,
+    MigrationRun,
+    bundled,
+    migrate,
+    schema_status,
+)
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.application.doctor import Check, inactive_holdings_check, portfolio_checks
 from finans.domain.portfolio import ConfigError, PortfolioConfig
@@ -16,6 +21,7 @@ from finans.settings import Settings
 
 __all__ = [
     "MigrationError",
+    "MigrationRun",
     "SetupError",
     "migrate_database",
     "open_unit_of_work",
@@ -26,14 +32,22 @@ __all__ = [
 ]
 
 
+MIGRATION_BACKUPS_KEPT = 5
+
+
 class SetupError(Exception):
     pass
 
 
-def migrate_database(settings: Settings, clock: Clock | None = None) -> list[int]:
+def migrate_database(settings: Settings, clock: Clock | None = None) -> MigrationRun:
     settings.db_path.parent.mkdir(parents=True, exist_ok=True)
-    with closing(connect(settings.db_path)) as conn:
-        return apply(conn, bundled(), clock=clock or SystemClock())
+    return migrate(
+        settings.db_path,
+        bundled(),
+        clock=clock or SystemClock(),
+        backup_dir=settings.db_path.parent / "backups",
+        keep_backups=MIGRATION_BACKUPS_KEPT,
+    )
 
 
 def open_unit_of_work(settings: Settings, *, readonly: bool = False) -> UnitOfWork:

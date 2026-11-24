@@ -61,14 +61,16 @@ def migrate() -> None:
     """Bekleyen migration'ları uygular."""
     settings = _load_settings_or_exit()
     try:
-        applied = bootstrap.migrate_database(settings)
+        run = bootstrap.migrate_database(settings)
     except bootstrap.MigrationError as exc:
         typer.echo(f"Migration hatası: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-    if applied:
-        typer.echo(f"Uygulanan migration'lar: {', '.join(map(str, applied))}")
+    if run.applied:
+        typer.echo(f"Uygulanan migration'lar: {', '.join(map(str, run.applied))}")
     else:
         typer.echo("Veritabanı güncel.")
+    if run.backup is not None:
+        typer.echo(f"Migration öncesi yedek: {run.backup}")
 
 
 @config_app.command("check")
