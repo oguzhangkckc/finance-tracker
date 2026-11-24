@@ -22,7 +22,7 @@ from finans.contracts.report import (
     SystemHealth,
     ValueSplit,
 )
-from finans.domain.allocation import deviations, plan_contribution, quiet_period_over, weights
+from finans.domain.allocation import deviations, plan_contribution, quiet_threshold, weights
 from finans.domain.inflation import CpiSeries, annual_inflation, reference_period
 from finans.domain.models import ZERO, DomainError, Instrument, Transaction
 from finans.domain.portfolio import PortfolioConfig
@@ -43,6 +43,7 @@ from finans.ports.unit_of_work import UnitOfWork
 
 ReportKind = Literal["weekly", "monthly"]
 WEEK = timedelta(days=7)
+DAY = timedelta(days=1)
 
 
 def build_report(
@@ -55,7 +56,11 @@ def build_report(
     now: datetime,
     cpi_series: str,
 ) -> Report:
-    """`contribution` bu ayki katkıdır: config ya da --contribution; None ise tanımlı değil."""
+    """`contribution` bu ayki katkıdır: config ya da --contribution; None ise tanımlı değil.
+
+    Fiyatı olmayan varlık değerlenmez; dağılım içinde böyle bir varlık varsa dağılım, katkı
+    planı ve para ağırlıklı getiri hesaplanmaz (K-85, K-95).
+    """
     instruments = _instruments(uow)
     transactions = [s.transaction for s in uow.transactions.list(until=logical_date)]
     history = PriceHistory(uow.prices.history(until=logical_date))
@@ -63,36 +68,32 @@ def build_report(
     valuation = value_book(book, history, logical_date)
     points = uow.cpi.points(cpi_series)
     series = CpiSeries(points) if points and kind == "monthly" else None
+    missing = sorted(valuation.missing_prices)
+    skipped = [code for code in missing if _in_allocation(code, instruments)]
 
     split = _split(valuation, instruments)
-    class_values = _class_values(valuation, instruments, config.targets)
-    allocation = _allocation(class_values, config.targets)
-    current = {line.asset_class: line.deviation for line in allocation}
-    previous = value_book(
-        build_positions(transactions, as_of=logical_date - WEEK), history, logical_date - WEEK
+    allocation = (
+        []
+        if skipped
+        else _allocation(_class_values(valuation, instruments, config.targets), config.targets)
     )
-    flows = [
-        tx.cash_flow() for tx in transactions if logical_date - WEEK < tx.trade_date <= logical_date
-    ]
-    previous_total = previous.total_value if previous.holdings else None
+    current = {line.asset_class: line.deviation for line in allocation}
+    since = logical_date - WEEK if kind == "weekly" else logical_date.replace(day=1) - DAY
     summary = Summary(
         values=split,
-        previous_total=previous_total,
-        weekly_change=None
-        if previous_total is None
-        else modified_dietz(
-            previous_total,
-            split.total,
-            flows,
-            start_day=logical_date - WEEK,
-            end_day=logical_date,
-        ),
-        simple_return=simple_return(valuation.total_value, valuation.priced_cost),
+        change_since=since,
+        previous_total=None,
+        change=None,
+        simple_return=None
+        if missing
+        else simple_return(valuation.total_value, valuation.priced_cost),
         realized_pnl=book.realized_pnl(),
     )
+    if not missing:
+        summary = _with_change(summary, transactions, history, since, logical_date, split.total)
     if kind == "monthly":
         summary = _with_money_weighted(
-            summary, transactions, instruments, split, series, logical_date
+            summary, transactions, instruments, split, series, logical_date, skipped
         )
     return Report(
         kind=kind,
@@ -101,13 +102,12 @@ def build_report(
         holdings=_holdings(valuation, instruments, book, series, logical_date),
         lots=_lots(book, history, series, logical_date) if kind == "monthly" else [],
         allocation=allocation,
-        quiet_period=not quiet_period_over(
-            split.in_allocation,
-            config.monthly_contribution,
-            ended_on=uow.allocation_state.quiet_ended_on(),
-        ),
+        quiet_period=uow.allocation_state.quiet_ended_on() is None
+        and quiet_threshold(config.monthly_contribution) > ZERO,
+        missing_prices=missing,
+        allocation_skipped=skipped,
         rebalance=_rebalance(valuation, instruments, config, contribution)
-        if kind == "monthly"
+        if kind == "monthly" and not skipped
         else None,
         alerts=[
             AlertLine(
@@ -119,7 +119,7 @@ def build_report(
             for state in uow.alerts.list_open()
             if state.direction is not None
         ],
-        data_issues=_data_issues(uow, config, kind, logical_date),
+        data_issues=_data_issues(uow, config, since, logical_date),
         inflation=_inflation(series, cpi_series, logical_date),
         provenance=Provenance(
             price_dates={
@@ -128,7 +128,13 @@ def build_report(
             cpi_period=None if series is None else str(reference_period(logical_date, series)),
             generated_at=now,
         ),
-        health=_health(uow, now),
+        health=SystemHealth(
+            last_price_sync=uow.prices.last_fetched_at(),
+            last_cpi_sync=uow.cpi.last_fetched_at(cpi_series),
+            failed_jobs_7d=sum(
+                1 for run in uow.runs.recent(since=now - WEEK) if run.status == "failed"
+            ),
+        ),
     )
 
 
@@ -143,9 +149,14 @@ def payday_plan(
     valuation = value_book(
         build_positions(transactions, as_of=on), PriceHistory(uow.prices.history(until=on)), on
     )
-    lines = plan_contribution(
-        _funds(valuation, instruments, config.targets), config.targets, contribution
-    )
+    skipped = [
+        code for code in sorted(valuation.missing_prices) if _in_allocation(code, instruments)
+    ]
+    if skipped:
+        return PaydayPlan(
+            logical_date=on, contribution=contribution, lines=[], missing_prices=skipped
+        )
+    funds = _funds(valuation, instruments, config.targets)
     return PaydayPlan(
         logical_date=on,
         contribution=contribution,
@@ -156,7 +167,7 @@ def payday_plan(
                 amount=line.amount,
                 share=line.amount / contribution if contribution > ZERO else ZERO,
             )
-            for line in lines
+            for line in plan_contribution(funds, config.targets, contribution)
         ],
     )
 
@@ -182,6 +193,28 @@ def _split(valuation: Valuation, instruments: Mapping[str, Instrument]) -> Value
         in_allocation=inside,
         out_of_allocation=valuation.total_value - inside,
         total=valuation.total_value,
+    )
+
+
+def _with_change(
+    summary: Summary,
+    transactions: Sequence[Transaction],
+    history: PriceHistory,
+    since: date,
+    on: date,
+    total: Decimal,
+) -> Summary:
+    previous = value_book(build_positions(transactions, as_of=since), history, since)
+    if not previous.holdings or previous.missing_prices:
+        return summary
+    flows = [tx.cash_flow() for tx in transactions if since < tx.trade_date <= on]
+    return summary.model_copy(
+        update={
+            "previous_total": previous.total_value,
+            "change": modified_dietz(
+                previous.total_value, total, flows, start_day=since, end_day=on
+            ),
+        }
     )
 
 
@@ -220,7 +253,7 @@ def _allocation(
 def _funds(
     valuation: Valuation, instruments: Mapping[str, Instrument], targets: Mapping[str, Decimal]
 ) -> dict[str, dict[str, Decimal]]:
-    """Dağılım içi etkin fonlar ve değerleri; fiyatı ya da payı olmayan fonun değeri 0'dır."""
+    """Dağılım içi etkin fonlar ve değerleri; payı olmayan fonun değeri 0'dır."""
     values = {h.instrument: h.value for h in valuation.holdings if h.value is not None}
     funds: dict[str, dict[str, Decimal]] = {name: {} for name in targets}
     for code, instrument in instruments.items():
@@ -326,17 +359,27 @@ def _with_money_weighted(
     split: ValueSplit,
     series: CpiSeries | None,
     on: date,
+    skipped: Sequence[str],
 ) -> Summary:
     """Para ağırlıklı getiri yalnızca dağılım içi portföy için (K-74)."""
+    if skipped:
+        missing = ReturnFigure(status="missing_price")
+        return summary.model_copy(
+            update={"money_weighted": missing, "real_money_weighted": missing}
+        )
     inside = [tx for tx in transactions if _in_allocation(tx.instrument, instruments)]
     flows = portfolio_cash_flows(inside, terminal_value=split.in_allocation, on=on)
-    real = None
-    if series is not None:
-        real = _figure(money_weighted_return(real_cash_flows(flows, series, on=on)))
+    if series is None:
+        return summary.model_copy(update={"money_weighted": _figure(money_weighted_return(flows))})
+    valuation_period = reference_period(on, series)
     return summary.model_copy(
         update={
             "money_weighted": _figure(money_weighted_return(flows)),
-            "real_money_weighted": real,
+            "real_money_weighted": _figure(
+                money_weighted_return(real_cash_flows(flows, series, on=on))
+            ),
+            "real_same_as_nominal": bool(inside)
+            and all(reference_period(tx.trade_date, series) == valuation_period for tx in inside),
         }
     )
 
@@ -345,18 +388,18 @@ def _inflation(series: CpiSeries | None, cpi_series: str, on: date) -> Inflation
     if series is None:
         return None
     period = reference_period(on, series)
-    earlier = period.shift(-12)
     return Inflation(
         cpi_series=cpi_series,
         valuation_period=str(period),
-        annual_inflation=annual_inflation(series, period) if earlier in series.periods() else None,
+        annual_inflation=annual_inflation(series, period)
+        if period.shift(-12) in series.periods()
+        else None,
     )
 
 
 def _data_issues(
-    uow: UnitOfWork, config: PortfolioConfig, kind: ReportKind, on: date
+    uow: UnitOfWork, config: PortfolioConfig, since: date, on: date
 ) -> list[DataIssueLine]:
-    since = on - WEEK if kind == "weekly" else on.replace(day=1)
     return [
         DataIssueLine(
             check=issue.check,
@@ -367,15 +410,3 @@ def _data_issues(
         )
         for issue in check_data(uow, quality=config.quality, today=on, since=since)
     ]
-
-
-def _health(uow: UnitOfWork, now: datetime) -> SystemHealth:
-    prices = uow.runs.last_ok("sync-prices")
-    cpi = uow.runs.last_ok("sync-cpi")
-    return SystemHealth(
-        last_price_sync=None if prices is None else prices.finished_at,
-        last_cpi_sync=None if cpi is None else cpi.finished_at,
-        failed_jobs_7d=sum(
-            1 for run in uow.runs.recent(since=now - WEEK) if run.status == "failed"
-        ),
-    )

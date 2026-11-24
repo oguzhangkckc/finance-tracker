@@ -83,9 +83,10 @@ def test_weekly_report_splits_values_and_leaves_flows_out_of_the_change(db: Path
         in_allocation=D(2275), out_of_allocation=D("505"), total=D(2780)
     )
     assert report.summary.previous_total == D(2550)
+    assert report.summary.change_since == date(2026, 11, 22)
     # Modified Dietz (K-94): 2026-11-25 alımı dönemin 4/7'sinde portföyde.
-    assert report.summary.weekly_change is not None
-    assert is_close(report.summary.weekly_change, D(120) / (D(2550) + D(110) * D(4) / D(7)))
+    assert report.summary.change is not None
+    assert is_close(report.summary.change, D(120) / (D(2550) + D(110) * D(4) / D(7)))
     assert report.summary.simple_return == D(2780) / D(2610) - 1
     assert report.summary.money_weighted is None
     assert report.allocation == [
@@ -114,7 +115,7 @@ def test_weekly_report_splits_values_and_leaves_flows_out_of_the_change(db: Path
     assert report.lots == []
     assert report.inflation is None
     assert report.provenance.generated_at == NOW
-    assert report.health == SystemHealth(last_price_sync=None, last_cpi_sync=None, failed_jobs_7d=0)
+    assert report.health == SystemHealth(last_price_sync=NOW, last_cpi_sync=NOW, failed_jobs_7d=0)
     assert "işlem fiyatı" in {issue.check for issue in report.data_issues}
 
 
@@ -141,6 +142,8 @@ def test_monthly_report_adds_returns_lots_inflation_and_the_contribution_plan(db
     ]
     assert is_close(net_present_value(flows, money_weighted.rate, day_count=28), D(0))
     assert report.summary.real_money_weighted == money_weighted
+    assert report.summary.real_same_as_nominal
+    assert (report.summary.change_since, report.summary.change) == (date(2026, 10, 31), None)
 
     assert [(lot.instrument, lot.real_return, lot.cpi_period) for lot in report.lots] == [
         ("XAC", D("0.01"), "2026-10"),
@@ -209,7 +212,7 @@ def test_open_alerts_and_finished_quiet_period_are_reported(db: Path) -> None:
     [alert] = report.alerts
     assert (alert.asset_class, alert.direction) == ("hisse", "below")
     assert alert.deviation == D(1265) / D(2275) - D("0.6")
-    assert report.health == SystemHealth(last_price_sync=NOW, last_cpi_sync=None, failed_jobs_7d=1)
+    assert report.health == SystemHealth(last_price_sync=NOW, last_cpi_sync=NOW, failed_jobs_7d=1)
 
 
 def test_payday_plan_splits_the_contribution_and_states_each_share(db: Path) -> None:

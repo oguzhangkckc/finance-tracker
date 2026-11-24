@@ -1,0 +1,329 @@
+# serializer version: 1
+# name: test_json_is_the_contract
+  '''
+  {
+    "schema_version": "1.0",
+    "kind": "monthly",
+    "logical_date": "2026-11-30",
+    "summary": {
+      "values": {
+        "in_allocation": "2275.0",
+        "out_of_allocation": "505.0",
+        "total": "2780.0"
+      },
+      "change_since": "2026-10-31",
+      "previous_total": null,
+      "change": null,
+      "simple_return": "0.065134099616858237547892720",
+      "realized_pnl": "0",
+      "money_weighted": {
+        "status": "ok",
+        "rate": "0.08172303919533983874237520407",
+        "annualized": false
+      },
+      "real_money_weighted": {
+        "status": "ok",
+        "rate": "0.08172303919533983874237520407",
+        "annualized": false
+      },
+      "real_same_as_nominal": true
+    },
+    "holdings": [
+      {
+        "instrument": "XAC",
+        "asset_class": "acil_durum",
+        "allocation": false,
+        "units": "10",
+        "cost": "500.000000",
+        "value": "505.0",
+        "price": "50.5",
+        "price_date": "2026-11-27",
+        "source": "tefas",
+        "simple_return": "0.01",
+        "real_return": "0.01"
+      },
+      {
+        "instrument": "XHT",
+        "asset_class": "hisse",
+        "allocation": true,
+        "units": "110",
+        "cost": "1110.000000",
+        "value": "1265.0",
+        "price": "11.5",
+        "price_date": "2026-11-27",
+        "source": "tefas",
+        "simple_return": "0.139639639639639639639639640",
+        "real_return": null
+      },
+      {
+        "instrument": "XPP",
+        "asset_class": "dusuk_risk",
+        "allocation": true,
+        "units": "50",
+        "cost": "1000.000000",
+        "value": "1010.0",
+        "price": "20.2",
+        "price_date": "2026-11-27",
+        "source": "tefas",
+        "simple_return": "0.01",
+        "real_return": null
+      }
+    ],
+    "lots": [
+      {
+        "instrument": "XAC",
+        "acquired": "2026-11-02",
+        "units": "10",
+        "cost": "500.000000",
+        "value": "505.0",
+        "real_return": "0.01",
+        "cpi_period": "2026-10"
+      },
+      {
+        "instrument": "XHT",
+        "acquired": "2026-11-02",
+        "units": "100",
+        "cost": "1000.000000",
+        "value": "1150.0",
+        "real_return": "0.15",
+        "cpi_period": "2026-10"
+      },
+      {
+        "instrument": "XHT",
+        "acquired": "2026-11-25",
+        "units": "10",
+        "cost": "110.000000",
+        "value": "115.0",
+        "real_return": "0.045454545454545454545454545",
+        "cpi_period": "2026-10"
+      },
+      {
+        "instrument": "XPP",
+        "acquired": "2026-11-02",
+        "units": "50",
+        "cost": "1000.000000",
+        "value": "1010.0",
+        "real_return": "0.01",
+        "cpi_period": "2026-10"
+      }
+    ],
+    "allocation": [
+      {
+        "asset_class": "dusuk_risk",
+        "value": "1010.0",
+        "weight": "0.4439560439560439560439560440",
+        "target": "0.4",
+        "deviation": "0.0439560439560439560439560440"
+      },
+      {
+        "asset_class": "hisse",
+        "value": "1265.0",
+        "weight": "0.5560439560439560439560439560",
+        "target": "0.6",
+        "deviation": "-0.0439560439560439560439560440"
+      }
+    ],
+    "quiet_period": true,
+    "missing_prices": [],
+    "allocation_skipped": [],
+    "rebalance": {
+      "contribution": "1000",
+      "lines": [
+        {
+          "asset_class": "dusuk_risk",
+          "instrument": "XPP",
+          "amount": "300.00"
+        },
+        {
+          "asset_class": "hisse",
+          "instrument": "XHT",
+          "amount": "700.00"
+        }
+      ]
+    },
+    "alerts": [],
+    "data_issues": [],
+    "inflation": {
+      "cpi_series": "TP.TUKFIY2025.GENEL",
+      "valuation_period": "2026-10",
+      "annual_inflation": "0.3"
+    },
+    "provenance": {
+      "price_dates": {
+        "XAC": "2026-11-27",
+        "XHT": "2026-11-27",
+        "XPP": "2026-11-27"
+      },
+      "cpi_period": "2026-10",
+      "generated_at": "2026-11-30T09:00:00Z"
+    },
+    "health": {
+      "last_price_sync": "2026-11-27T18:31:00Z",
+      "last_cpi_sync": "2026-11-03T07:35:00Z",
+      "failed_jobs_7d": 0
+    }
+  }
+  '''
+# ---
+# name: test_missing_price_is_reported_not_valued
+  '''
+  Haftalık rapor (2026-11-29)
+  Bilinen değer: 1.770,00 TL; fiyatı olmayan: XPP, toplam eksik.
+  Haftalık değişim (tüm varlıklar, 2026-11-22 sonrası): —
+  Basit getiri (tüm varlıklar): hesaplanmadı, fiyat eksik
+  Gerçekleşmiş K/Z (tüm varlıklar): 0,00 TL
+  
+  Varlıklar
+  XAC acil_durum (dağılım dışı): 505,00 TL, fiyat 2026-11-27 (tefas), basit getiri %1,00
+  XHT hisse: 1.265,00 TL, fiyat 2026-11-27 (tefas), basit getiri %13,96
+  XPP dusuk_risk: fiyat yok, değeri bilinmiyor
+  
+  Dağılım
+  Hesaplanmadı: XPP için fiyat yok; sapma ve alarm değerlendirmesi atlandı.
+  
+  Açık uyarılar
+  hisse: hedefin altında, güncel sapma hesaplanamadı (açılış 2026-11-21 21:35)
+  
+  Veri sorunları
+  ! bayatlık XPP: hiç fiyat yok; `ft sync prices` çalıştır
+  i işlem fiyatı XPP 2026-11-02: işlem günü çevresinde fiyat yok; kontrol edilemedi
+  
+  Sistem: son fiyat çekimi 2026-11-27 21:31, son TÜFE çekimi 2026-11-03 10:35, son 7 günde başarısız iş 0
+  '''
+# ---
+# name: test_monthly_as_sent_to_telegram
+  '''
+  Aylık rapor (2026-11-30)
+  Dağılım içi %81,8, dağılım dışı %18,2 (toplam değerin yüzdesi)
+  Aylık değişim (tüm varlıklar, 2026-10-31 sonrası): —
+  Basit getiri (tüm varlıklar): %6,51
+  Açık pozisyonların değeri / kalan maliyeti - 1; satılmış payların kârı dahil değil.
+  
+  Varlıklar
+  XAC acil_durum (dağılım dışı): toplamın %18,2, fiyat 2026-11-27 (tefas), basit getiri %1,00, reel %1,00
+  XHT hisse: toplamın %45,5, fiyat 2026-11-27 (tefas), basit getiri %13,96
+  XPP dusuk_risk: toplamın %36,3, fiyat 2026-11-27 (tefas), basit getiri %1,00
+  
+  Dağılım
+  dusuk_risk: %44,4 (hedef %40,0, sapma +4,4 puan)
+  hisse: %55,6 (hedef %60,0, sapma -4,4 puan)
+  Portföy henüz küçük; sapma alarmları 3 aylık katkıya ulaşınca başlar.
+  
+  Getiri
+  Dönem getirisi (para ağırlıklı, yıllık değil), dağılım içi: %8,17
+  Reel dönem getirisi (para ağırlıklı, yıllık değil), dağılım içi: %8,17
+  Alım ve satışların tarihi ve tutarı hesaba katılarak, ilk yatırımdan değerleme tarihine kadarki getiri; bir yıldan kısa dönemde yıllığa çevrilmez.
+  Alımlar ve değerleme aynı TÜFE dönemine düştüğü için reel getiri henüz nominalle aynı.
+  Enflasyon: TÜFE 2026-10, yıllık %30,00
+  
+  Lotlar
+  XAC 2026-11-02: reel %1,00 (TÜFE 2026-10)
+  XHT 2026-11-02: reel %15,00 (TÜFE 2026-10)
+  XHT 2026-11-25: reel %4,55 (TÜFE 2026-10)
+  XPP 2026-11-02: reel %1,00 (TÜFE 2026-10)
+  
+  Katkıyla dengeleme
+  dusuk_risk XPP: katkının %30,0
+  hisse XHT: katkının %70,0
+  
+  Açık uyarılar
+  Açık uyarı yok.
+  
+  Veri sorunları
+  Veri sorunu yok.
+  
+  Sistem: son fiyat çekimi 2026-11-27 21:31, son TÜFE çekimi 2026-11-03 10:35, son 7 günde başarısız iş 0
+  '''
+# ---
+# name: test_monthly_with_amounts
+  '''
+  Aylık rapor (2026-11-30)
+  Toplam değer: 2.780,00 TL (dağılım içi 2.275,00 TL, dağılım dışı 505,00 TL)
+  Aylık değişim (tüm varlıklar, 2026-10-31 sonrası): —
+  Basit getiri (tüm varlıklar): %6,51
+  Açık pozisyonların değeri / kalan maliyeti - 1; satılmış payların kârı dahil değil.
+  Gerçekleşmiş K/Z (tüm varlıklar): 0,00 TL
+  
+  Varlıklar
+  XAC acil_durum (dağılım dışı): 505,00 TL, fiyat 2026-11-27 (tefas), basit getiri %1,00, reel %1,00
+  XHT hisse: 1.265,00 TL, fiyat 2026-11-27 (tefas), basit getiri %13,96
+  XPP dusuk_risk: 1.010,00 TL, fiyat 2026-11-27 (tefas), basit getiri %1,00
+  
+  Dağılım
+  dusuk_risk: 1.010,00 TL, %44,4 (hedef %40,0, sapma +4,4 puan)
+  hisse: 1.265,00 TL, %55,6 (hedef %60,0, sapma -4,4 puan)
+  Portföy henüz küçük; sapma alarmları 3 aylık katkıya ulaşınca başlar.
+  
+  Getiri
+  Dönem getirisi (para ağırlıklı, yıllık değil), dağılım içi: %8,17
+  Reel dönem getirisi (para ağırlıklı, yıllık değil), dağılım içi: %8,17
+  Alım ve satışların tarihi ve tutarı hesaba katılarak, ilk yatırımdan değerleme tarihine kadarki getiri; bir yıldan kısa dönemde yıllığa çevrilmez.
+  Alımlar ve değerleme aynı TÜFE dönemine düştüğü için reel getiri henüz nominalle aynı.
+  Enflasyon: TÜFE 2026-10, yıllık %30,00
+  
+  Lotlar
+  XAC 2026-11-02: 10 adet, maliyet 500,00 TL, değer 505,00 TL, reel %1,00 (TÜFE 2026-10)
+  XHT 2026-11-02: 100 adet, maliyet 1.000,00 TL, değer 1.150,00 TL, reel %15,00 (TÜFE 2026-10)
+  XHT 2026-11-25: 10 adet, maliyet 110,00 TL, değer 115,00 TL, reel %4,55 (TÜFE 2026-10)
+  XPP 2026-11-02: 50 adet, maliyet 1.000,00 TL, değer 1.010,00 TL, reel %1,00 (TÜFE 2026-10)
+  
+  Katkıyla dengeleme
+  Bu ayki katkı: 1.000,00 TL
+  dusuk_risk XPP: 300,00 TL
+  hisse XHT: 700,00 TL
+  
+  Açık uyarılar
+  Açık uyarı yok.
+  
+  Veri sorunları
+  Veri sorunu yok.
+  
+  Sistem: son fiyat çekimi 2026-11-27 21:31, son TÜFE çekimi 2026-11-03 10:35, son 7 günde başarısız iş 0
+  '''
+# ---
+# name: test_payday_as_sent_and_with_amounts
+  tuple(
+    '''
+      Maaş günü (2026-11-15)
+      Bu ayki katkının dağılımı:
+      dusuk_risk XPP: katkının %20,0
+      hisse XHT: katkının %80,0
+      Alımları <code>ft tx add</code> ile gir.
+    ''',
+    '''
+      Maaş günü (2026-11-15)
+      Bu ayki katkı: 1.000,00 TL
+      dusuk_risk XPP: 200,00 TL (%20,0)
+      hisse XHT: 800,00 TL (%80,0)
+      Alımları `ft tx add` ile gir.
+    ''',
+  )
+# ---
+# name: test_weekly_with_amounts
+  '''
+  Haftalık rapor (2026-11-29)
+  Toplam değer: 2.780,00 TL (dağılım içi 2.275,00 TL, dağılım dışı 505,00 TL)
+  Haftalık değişim (tüm varlıklar, 2026-11-22 sonrası): +%4,59 (Modified Dietz; alım ve satışlar ayrılmış)
+  Basit getiri (tüm varlıklar): %6,51
+  Açık pozisyonların değeri / kalan maliyeti - 1; satılmış payların kârı dahil değil.
+  Gerçekleşmiş K/Z (tüm varlıklar): 0,00 TL
+  
+  Varlıklar
+  XAC acil_durum (dağılım dışı): 505,00 TL, fiyat 2026-11-27 (tefas), basit getiri %1,00
+  XHT hisse: 1.265,00 TL, fiyat 2026-11-27 (tefas), basit getiri %13,96
+  XPP dusuk_risk: 1.010,00 TL, fiyat 2026-11-27 (tefas), basit getiri %1,00
+  
+  Dağılım
+  dusuk_risk: 1.010,00 TL, %44,4 (hedef %40,0, sapma +4,4 puan)
+  hisse: 1.265,00 TL, %55,6 (hedef %60,0, sapma -4,4 puan)
+  Portföy henüz küçük; sapma alarmları 3 aylık katkıya ulaşınca başlar.
+  
+  Açık uyarılar
+  Açık uyarı yok.
+  
+  Veri sorunları
+  Veri sorunu yok.
+  
+  Sistem: son fiyat çekimi 2026-11-27 21:31, son TÜFE çekimi 2026-11-03 10:35, son 7 günde başarısız iş 0
+  '''
+# ---

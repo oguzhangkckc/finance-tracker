@@ -74,3 +74,23 @@ def test_out_of_allocation_flag_round_trips_and_counts_as_a_change(migrated_db: 
         assert stored is not None
         assert stored.instrument == emergency
         assert uow.instruments.sync([replace(emergency, allocation=True)]).updated == ("ACL",)
+
+
+def test_last_fetch_times_come_from_the_data(migrated_db: Path) -> None:
+    from finans.domain.models import CpiPoint, PricePoint, YearMonth
+
+    with SqliteUnitOfWork(migrated_db) as uow:
+        assert uow.prices.last_fetched_at() is None
+        assert uow.cpi.last_fetched_at("TP.TUKFIY2025.GENEL") is None
+        uow.instruments.sync([Instrument("XHT", InstrumentKind.TEFAS_YAT, "hisse")])
+        uow.prices.upsert(PricePoint("XHT", DAY, Decimal(1), "tefas"), fetched_at=T1)
+        uow.prices.upsert(PricePoint("XHT", date(2026, 11, 25), Decimal(1), "tefas"), fetched_at=T3)
+        uow.cpi.upsert(
+            "TP.TUKFIY2025.GENEL",
+            CpiPoint(YearMonth(2026, 10), Decimal(130)),
+            base=None,
+            fetched_at=T2,
+        )
+        assert uow.prices.last_fetched_at() == T3
+        assert uow.cpi.last_fetched_at("TP.TUKFIY2025.GENEL") == T2
+        assert uow.cpi.last_fetched_at("TP.FG.J0") is None

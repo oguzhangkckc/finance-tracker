@@ -331,6 +331,11 @@ class SqlitePriceRepo:
         code, day, price, source = row
         return PricePoint(code, decode_date(day), decode_decimal(price), source)
 
+    def last_fetched_at(self) -> datetime | None:
+        # Zaman damgaları aynı ISO UTC biçiminde; metin sırası zaman sırasıdır.
+        row = self._conn.execute("SELECT max(fetched_at) FROM price").fetchone()
+        return None if row[0] is None else decode_timestamp(row[0])
+
 
 class SqliteCpiRepo:
     def __init__(self, conn: sqlite3.Connection) -> None:
@@ -383,6 +388,12 @@ class SqliteCpiRepo:
         if row is None:
             return None
         return CpiPoint(YearMonth.parse(row[0]), decode_decimal(row[1]))
+
+    def last_fetched_at(self, series: str) -> datetime | None:
+        row = self._conn.execute(
+            "SELECT max(fetched_at) FROM cpi WHERE series_code = ?", (series,)
+        ).fetchone()
+        return None if row[0] is None else decode_timestamp(row[0])
 
 
 class SqliteRawPayloadRepo:

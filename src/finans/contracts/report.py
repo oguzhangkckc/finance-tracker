@@ -12,9 +12,10 @@ class _Model(BaseModel):
 
 
 class ReturnFigure(_Model):
-    """K-44: "out_of_range" kök aralık dışında, "undefined" hesaplanamadı."""
+    """K-44: "out_of_range" kök aralık dışında, "undefined" hesaplanamadı; "missing_price"
+    dağılım içi bir varlığın fiyatı yok (K-95)."""
 
-    status: Literal["ok", "out_of_range", "undefined"]
+    status: Literal["ok", "out_of_range", "undefined", "missing_price"]
     rate: Decimal | None = None
     annualized: bool | None = None
 
@@ -26,13 +27,18 @@ class ValueSplit(_Model):
 
 
 class Summary(_Model):
+    """`change` `change_since`ten bu yana Modified Dietz değişimi (K-94); haftalıkta 7 gün,
+    aylıkta önceki ayın son gününden itibaren (K-95)."""
+
     values: ValueSplit
+    change_since: date
     previous_total: Decimal | None
-    weekly_change: Decimal | None
+    change: Decimal | None
     simple_return: Decimal | None
     realized_pnl: Decimal
     money_weighted: ReturnFigure | None = None
     real_money_weighted: ReturnFigure | None = None
+    real_same_as_nominal: bool = False
 
 
 class HoldingLine(_Model):
@@ -122,6 +128,8 @@ class Report(_Model):
     lots: list[LotLine] = Field(default_factory=list)
     allocation: list[AllocationLine]
     quiet_period: bool
+    missing_prices: list[str] = Field(default_factory=list)
+    allocation_skipped: list[str] = Field(default_factory=list)
     rebalance: RebalancePlan | None
     alerts: list[AlertLine]
     data_issues: list[DataIssueLine]
@@ -138,6 +146,9 @@ class PaydayLine(_Model):
 
 
 class PaydayPlan(_Model):
+    """Dağılım içi bir fonun fiyatı yoksa öneri yapılmaz; `missing_prices` doludur (K-95)."""
+
     logical_date: date
     contribution: Decimal
     lines: list[PaydayLine]
+    missing_prices: list[str] = Field(default_factory=list)
