@@ -35,6 +35,7 @@ Not: `txn.unit_price_scale` (migration 0003): girilen fiyatın basamak sayısı 
 Not: `make live` EVDS canlı smoke testini çalıştırır; haftalık timer M4'te. `ft doctor` son fiyat tarihlerini ve bayatlığı gösterir.
 Kabul kapısı: Bir ay canlı veri; elle tutulan tabloyla mutabakat ±0,01 TL/kalem.
 Not: "Bir ay canlı veri" fiyat ve TÜFE akışıyla izlenebilir; mutabakat gerçek aracı kurum ekstresi gerektirir ve sanal portföyle geçilmez (K-112).
+Kabul süresi: "bir ay canlı veri" 2026-11-25 – 2026-12-25 (sanal `sync-prices`'ın ilk zamanlanmış çalışması 2026-11-25 12:15). Elle tutulan tabloyla mutabakat ilk gerçek aracı kurum ekstresini bekliyor.
 
 ## M4 · Rapor ve bildirim (ilk kullanılabilir sürüm)
 Report modeli, metin ve JSON render, aylık raporda XIRR ve yalnızca katkıyla dengeleme, Telegram (rapor botu), uyarı tekilleştirme; systemd timer'ları, job_run, dead man's switch, yedekleme.
@@ -42,7 +43,7 @@ Geliştirme kapısı: Snapshot ve iş testleri yeşil; zamanlayıcılar test ort
 Kapının kanıtı: uçtan uca rapor snapshot'ları `tests/e2e`; iş yürütücü `tests/application/test_jobs.py`; birim dosyaları `tests/deploy` ve CI'daki `units` işi (`deploy/check-units.sh`, systemd-analyze calendar ve verify).
 Kabul kapısı: İki hafta kesintisiz ve doğru rapor; süre, cihazda bütün zamanlayıcıların açıldığı gün başlar.
 Kurulum durumu (2026-11-24): cihaz kuruldu; `ft doctor` fiyatlar dışında yeşil; `backup` ve `sync-cpi` zamanlayıcıları açık; ilk yedek Mac'e çekildi ve geri yükleme testi geçti.
-Bekleyen adım: fiyat kaynağı kararı verildi (K-121). Gerçek işlem yokken yalnızca sanal `sync-prices` çalışır; gerçek `sync-prices`, `weekly-report`, `monthly-report` ve `payday` gerçek alımlar başlayınca açılır. M4 kabulü sanal portföyle (K-112): sanal rapor zamanlayıcıları ilk sanal alım günü açılır ve başlangıç ile bitiş tarihleri buraya yazılır. M3'ün "bir ay canlı veri" süresi sanal `sync-prices`'ın ilk zamanlanmış çalışmasıyla başlar.
+Kabul süresi (sanal portföy, K-112): 2026-11-24 – 2026-12-08. İlk sanal alımlar 2026-11-24'te girildi; altı sanal zamanlayıcı da açık. Süre içinde haftalık rapor 2026-11-29 ve 2026-12-06'da, aylık rapor 2026-12-05 ile 10 arasında. Gerçek `sync-prices`, `weekly-report`, `monthly-report` ve `payday` gerçek alımlar başlayınca açılır (K-121).
 Not: M4 kabulü sanal portföyle şartlı geçilebilir: sanal timer'lar iki hafta açık ve raporlar zamanında, raporlar aynı sanal işlemlerle elle tutulan tabloyla mutabık, gerçek profilin yedek ping'i hiç kaçmamış; gerçek işlemler başlayınca ilk rapor ping'i ayrıca doğrulanır (K-112).
 İlk commit (M3 düzeltmeleri): mutabakatta adet farkı son 5 işlem gününde girilmiş tek bir işlemle eşleşiyorsa "olası valör farkı" gösterilir (K-79).
 Not: Para ağırlıklı getirinin kökü [−0,99; 10] dışındaysa (alt ya da üst) rapor basit getiriyi ve "Zamanlama nedeniyle para ağırlıklı getiri anlamlı değil." notunu gösterir; domain sonuç türü bu durumu "hesaplanamadı"dan ayırır (K-44).
