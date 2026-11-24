@@ -3,7 +3,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
-from finans.domain.models import Transaction
+from finans.domain.models import CpiPoint, Transaction, YearMonth
 from finans.domain.portfolio import PortfolioConfig
 
 
@@ -52,3 +52,13 @@ class RawPayload:
 
 class SourceError(Exception):
     """Dış kaynaktan veri alınamadı; mesaj sır içermez."""
+
+
+@dataclass(frozen=True, slots=True)
+class FetchResult[T]:
+    points: list[T]
+    raw: list[RawPayload]
+
+
+class CpiSource(Protocol):
+    def fetch(self, series: str, start: YearMonth, end: YearMonth) -> FetchResult[CpiPoint]: ...
