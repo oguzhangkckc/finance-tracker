@@ -1,0 +1,10 @@
+[Unit]
+Description=finans-takip: sanal portföyün şifreli gece yedeği (gerçek yedekten sonra)
+
+[Timer]
+OnCalendar=*-*-* 03:15 Europe/Istanbul
+Persistent=true
+Unit=finans-sanal-job@backup.service
+
+[Install]
+WantedBy=timers.target

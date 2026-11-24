@@ -1,0 +1,10 @@
+[Unit]
+Description=finans-takip: sanal portföy maaş günü mesajı
+
+[Timer]
+OnCalendar=*-*-* 09:00 Europe/Istanbul
+Persistent=true
+Unit=finans-sanal-job@payday.service
+
+[Install]
+WantedBy=timers.target

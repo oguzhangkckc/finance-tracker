@@ -1,0 +1,10 @@
+[Unit]
+Description=finans-takip: sanal portföy TÜFE senkronu
+
+[Timer]
+OnCalendar=*-*-03..05 10:30 Europe/Istanbul
+Persistent=true
+Unit=finans-sanal-job@sync-cpi.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,23 @@
+[Unit]
+Description=finans-takip sanal portföy işi: %i
+Documentation=file:/opt/finans/docs/DESIGN.md
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=finans
+Group=finans
+WorkingDirectory=/var/lib/finans
+EnvironmentFile=/etc/finans/finans.env
+# K-107, K-111: sanal profil ayrı ve işaretli veritabanında çalışır; ping sırları yüklenmez.
+Environment=FT_PROFILE=sanal
+LoadCredential=ft_evds_api_key:/etc/finans/credstore/ft_evds_api_key
+LoadCredential=ft_telegram_bot_token:/etc/finans/credstore/ft_telegram_bot_token
+# K-98: cihaz başka projelerle paylaşılıyor. Root seviyesindeki bir saldırıya karşı korumaz.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/finans
+ProtectHome=yes
+ExecStart=/opt/finans/.venv/bin/ft job run %i

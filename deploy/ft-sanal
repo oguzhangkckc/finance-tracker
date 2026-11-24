@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Sunucuda sanal portföy komutu: ft-finans gibi, ama FT_PROFILE=sanal ve yalnızca EVDS ile
+# Telegram sırlarıyla (K-107, K-111). Onay isteyen komutlar --pipe ile terminale bağlanır.
+# Kullanım: sudo /opt/finans/deploy/ft-sanal sanal al KOD --tutar 5000 --tarih 2026-06-15
+set -euo pipefail
+
+credentials=()
+for name in ft_evds_api_key ft_telegram_bot_token; do
+  credentials+=(-p "LoadCredential=$name:/etc/finans/credstore/$name")
+done
+
+exec systemd-run --quiet --pipe --wait --collect \
+  --uid=finans --gid=finans --working-directory=/var/lib/finans \
+  -p EnvironmentFile=/etc/finans/finans.env \
+  -p Environment=FT_PROFILE=sanal \
+  "${credentials[@]}" \
+  -p NoNewPrivileges=yes -p PrivateTmp=yes -p ProtectSystem=strict \
+  -p ReadWritePaths=/var/lib/finans -p ProtectHome=yes \
+  /opt/finans/.venv/bin/ft "$@"
