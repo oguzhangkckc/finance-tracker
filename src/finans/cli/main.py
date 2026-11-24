@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from pathlib import Path
@@ -56,6 +56,10 @@ report_app = typer.Typer(no_args_is_help=True, help="Raporlar (önizleme).")
 app.add_typer(report_app, name="report")
 notify_app = typer.Typer(no_args_is_help=True, help="Bildirim kanalı (Telegram).")
 app.add_typer(notify_app, name="notify")
+job_app = typer.Typer(
+    no_args_is_help=True, help="Zamanlanmış işler; systemd yalnızca bunları çağırır."
+)
+app.add_typer(job_app, name="job")
 
 
 class SideChoice(StrEnum):
@@ -491,6 +495,69 @@ def _print_warnings(issues: list[DataIssue]) -> None:
 
 
 _SYMBOLS = {"ok": "✓", "warn": "!", "fail": "✗"}
+
+
+class JobChoice(StrEnum):
+    SYNC_PRICES = "sync-prices"
+    SYNC_CPI = "sync-cpi"
+    WEEKLY_REPORT = "weekly-report"
+    MONTHLY_REPORT = "monthly-report"
+    PAYDAY = "payday"
+    BACKUP = "backup"
+
+
+_OUTCOME_LABELS = {
+    "ok": "tamam",
+    "partial": "kısmi",
+    "failed": "başarısız",
+    "skipped": "bu gün için zaten tamamlanmış; atlandı",
+    "busy": "başka bir örnek çalışıyor; beklemeden çıkıldı",
+}
+
+
+@job_app.command("run")
+def job_run(
+    name: Annotated[JobChoice, typer.Argument(help="İş adı")],
+    logical: Annotated[
+        str | None,
+        typer.Option("--logical-date", help="YYYY-AA-GG; verilmezse son planlı çalışmanın günü."),
+    ] = None,
+) -> None:
+    """Bir zamanlanmış işi çalıştırır (K-80); aynı gün için "ok" varsa atlar (K-12)."""
+    settings = _load_settings_or_exit()
+    bootstrap.configure_logging(settings)
+    clock = bootstrap.system_clock()
+    with _user_errors():
+        payday = bootstrap.portfolio_source().load(_portfolio_path(settings, None)).payday
+        day = (
+            _parse_date(logical)
+            if logical is not None
+            else logical_date(name.value, clock.now().astimezone(BUSINESS_TZ), payday=payday)
+        )
+        outcome = bootstrap.run_scheduled_job(settings, clock, name.value, day)
+    typer.echo(f"{name.value} {day}: {_OUTCOME_LABELS[outcome.status]}")
+    for key, value in outcome.detail.items():
+        typer.echo(f"  {key}: {value}")
+    if outcome.status == "failed":
+        raise typer.Exit(code=1)
+
+
+@job_app.command("list")
+def job_list(
+    days: Annotated[int, typer.Option("--days", help="Kaç günlük kayıt.")] = 7,
+) -> None:
+    """Son iş denemelerini gösterir."""
+    settings = _load_settings_or_exit()
+    clock = bootstrap.system_clock()
+    with _user_errors(), bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+        runs = uow.runs.recent(since=clock.now() - timedelta(days=days))
+    if not runs:
+        typer.echo(f"Son {days} günde iş kaydı yok.")
+    for run in runs:
+        started = run.started_at.astimezone(BUSINESS_TZ)
+        typer.echo(
+            f"#{run.id} {run.job} {run.logical_date} {run.status} ({started:%Y-%m-%d %H:%M})"
+        )
 
 
 @notify_app.command("test")

@@ -1,6 +1,9 @@
+import logging
 import secrets
+import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import date
 from pathlib import Path
 
 from finans.adapters._http import HttpClient
@@ -8,6 +11,9 @@ from finans.adapters.clock import SystemClock
 from finans.adapters.csv_statement import CsvStatementFile
 from finans.adapters.csv_transactions import CsvTransactionFile
 from finans.adapters.evds import EvdsCpiSource
+from finans.adapters.healthcheck import HealthcheckPing
+from finans.adapters.json_log import JsonFormatter
+from finans.adapters.lock import FlockJobLock
 from finans.adapters.portfolio_toml import TomlPortfolioSource
 from finans.adapters.render.json import JsonRenderer
 from finans.adapters.render.text import TextRenderer
@@ -29,6 +35,7 @@ from finans.application.doctor import (
     portfolio_checks,
     price_check,
 )
+from finans.application.jobs import JobContext, JobOutcome, job_body, run_job
 from finans.domain.portfolio import ConfigError, PortfolioConfig
 from finans.ports.clock import Clock
 from finans.ports.notifier import Notifier, NotifyError
@@ -50,6 +57,7 @@ __all__ = [
     "NotifyError",
     "SetupError",
     "SourceError",
+    "configure_logging",
     "cpi_source",
     "migrate_database",
     "notifier",
@@ -58,6 +66,7 @@ __all__ = [
     "price_source",
     "report_renderer",
     "run_doctor",
+    "run_scheduled_job",
     "statement_file",
     "system_clock",
     "telegram_renderer",
@@ -148,6 +157,66 @@ def notifier(settings: Settings, clock: Clock) -> Iterator[Notifier]:
             token=secret,
             chat_id=settings.telegram_chat_id,
             base_url=settings.telegram_base_url,
+        )
+
+
+def configure_logging(settings: Settings) -> None:
+    """İşler stderr'e JSON satırı yazar; systemd bunu journald'a aktarır (K-81)."""
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(JsonFormatter())
+    root = logging.getLogger()
+    root.handlers[:] = [handler]
+    root.setLevel(settings.log_level)
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
+def run_scheduled_job(settings: Settings, clock: Clock, job: str, logical_date: date) -> JobOutcome:
+    if settings.portfolio_path is None:
+        raise SetupError("FT_PORTFOLIO_PATH tanımlı değil; işler portföy dosyasına ihtiyaç duyar.")
+    config = portfolio_source().load(settings.portfolio_path)
+    hidden = [
+        secret.get_secret_value()
+        for secret in (
+            settings.evds_api_key,
+            settings.telegram_bot_token,
+            settings.healthcheck_reports_url,
+            settings.healthcheck_backup_url,
+        )
+        if secret is not None
+    ]
+    telegram = settings.telegram_bot_token is not None and settings.telegram_chat_id is not None
+    context = JobContext(
+        config=config,
+        open_uow=lambda: open_unit_of_work(settings),
+        clock=clock,
+        cpi_series=settings.cpi_series,
+        cpi_base=settings.cpi_base,
+        price_source=lambda: price_source(settings, clock),
+        cpi_source=lambda: cpi_source(settings, clock),
+        notifier=(lambda: notifier(settings, clock)) if telegram else None,
+        renderer=telegram_renderer(settings),
+        weekly_enabled=settings.weekly_report_enabled,
+    )
+    urls = {
+        check: url.get_secret_value()
+        for check, url in (
+            ("reports", settings.healthcheck_reports_url),
+            ("backup", settings.healthcheck_backup_url),
+        )
+        if url is not None
+    }
+    lock = FlockJobLock(settings.lock_dir or settings.db_path.parent / "locks")
+    with HttpClient(clock, secrets=list(urls.values())) as http:
+        return run_job(
+            job,
+            logical_date,
+            job_body(job, logical_date, context),
+            open_uow=lambda: open_unit_of_work(settings),
+            lock=lock,
+            clock=clock,
+            ping=HealthcheckPing(http, urls),
+            secrets=hidden,
         )
 
 

@@ -710,6 +710,13 @@ Deterministik işler systemd timer ile, LLM gerektiren işler OpenClaw'ın zaman
 
 **Tek giriş noktası (M4, K-80).** Her zamanlanmış iş `ft job run <iş> [--logical-date YYYY-AA-GG]` ile çalışır; systemd birimleri yalnızca bu komutu çağırır. İş adları: sync-prices, sync-cpi, weekly-report, monthly-report, payday, backup. Alarm değerlendirmesi sync-prices'ın parçasıdır. export-snapshot ve ppk-summary M5'te eklenir.
 
+**İş yürütücünün ayrıntıları (M4, K-96).**
+- sync-prices: hedef günde bütün aktif TEFAS fonlarının fiyatı varsa "ok" ve alarm değerlendirilir; yoksa "partial" ve alarm atlanır (K-85). Bekleyen alarm bildirimleri iki durumda da gönderilir; gönderim başarısızsa iş "partial" olur, olaylar bekler.
+- monthly-report: önceki ayın TÜFE'si yoksa ayın 10'una kadar "partial" döner ve gönderilmez; 10'u ve sonrasında mesajın başına "Not: … TÜFE'si henüz yok; en son dönemle hesaplandı." eklenerek gönderilir.
+- weekly-report `FT_WEEKLY_REPORT_ENABLED` kapalıyken gönderilmez ve "ok" sayılır. Rapor ve maaş günü mesajı Telegram tanımlı değilse iş "failed" olur.
+- Ping (K-84): rapor işleri `FT_HEALTHCHECK_REPORTS_URL`, yedek `FT_HEALTHCHECK_BACKUP_URL`; "ok"da ping, "failed"da `/fail`, "partial"da ping yok. Ping hatası işin sonucunu değiştirmez, detail'e yazılır.
+- İş hatası yakalanır ve sırlardan arındırılmış mesajla job_run'a yazılır; log stderr'e JSON satırıdır (K-81). Kilit dosyaları `FT_LOCK_DIR`'de (varsayılan veritabanının yanındaki `locks/`). `ft job list` son denemeleri gösterir.
+
 İş yürütme kuralları:
 
 - Her çalıştırmanın idempotency anahtarı (iş, mantıksal tarih) çiftidir. Aynı anahtarla "ok" bitmiş bir deneme varsa iş hiçbir şey yapmadan çıkar. Her deneme job_run'da ayrı bir satırdır; "ok" tekilliğini kısmi indeks sağlar.
@@ -1019,6 +1026,7 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-93 | K-90'a ek: maaş günü mesajının tutar gösterimi ayrı ayarla yönetilir: `FT_TELEGRAM_PAYDAY_SHOW_AMOUNTS` (varsayılan false; false iken paylar katkının yüzdesi). Diğer mesajların gizleme ayarından bağımsız | Maaş günü mesajının asıl içeriği tutarlar; gösterip göstermemek ayrı bir tercih | Raporlama, Dağılım |
 | K-94 | K-88 ve K-74'e ek: haftalık değişim Modified Dietz ile hesaplanır: (V_1 − V_0 − ΣF) / (V_0 + Σ w_i·F_i), w_i = akışın dönemde kaldığı gün / dönem günü; V_0 = 0 ya da payda ≤ 0 ise "—". Dağılım dışı varlığın basit reel getirisinde her lotun maliyeti ayrı ayrı değerleme gününün TL'sine çevrilir | Akışları dönem sonunda sayan formül, katkı portföyden büyükken kazancı yalnızca başlangıç değerine bölüp şişiriyordu (V_0 = 1.000, Pazartesi 10.000 alım, hafta %1 → ~%11); çok lotlu varlıkta reel getiri tek anlamlı olsun | Raporlama, Hesap motoru |
 | K-95 | Rapor kuralları: fiyatı olmayan varlık değerlenmez ve açıkça yazılır; dağılım içinde eksik fiyat varsa dağılım, alarm, katkı planı ve para ağırlıklı getiri atlanır. Sessiz dönem notu kaydedilen bitiş tarihine bakar. Sistem satırı çekim zamanlarını veriden alır. Getiri etiketleri kapsamı yazar; aylık raporda aylık değişim; reel = nominal notu. Telegram mesajı `<pre>` yerine HTML metin, komutlar `<code>` (K-22'yi günceller). Snapshot'lar uçtan uca üretilir | Elle kurulmuş snapshot verisi gerçekte oluşamayacak çelişkiler içeriyordu; eksik fiyat sessizce yanlış dağılım ve alarm üretebilirdi | Raporlama, Test |
+| K-96 | İş yürütücü: sync-prices eksik fiyatta ve bildirim gönderilemezse "partial"; aylık rapor TÜFE beklerken ayın 10'una kadar "partial", sonra notla gönderilir; haftalık rapor kapalıyken "ok"; ping yalnız "ok" ve "failed"da, hatası sonucu değiştirmez; iş hataları arındırılmış mesajla kaydedilir | "partial" yeniden denemeye izin verir, "ok" vermez; gönderilmemiş rapor "ok" sayılmamalı | Zamanlama, Gözlemlenebilirlik |
 
 ## Planı kodlama ajanıyla uygulama
 

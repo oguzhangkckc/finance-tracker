@@ -77,6 +77,18 @@ class HttpClient:
     def get_json(self, url: str, *, headers: Mapping[str, str] | None = None) -> JsonResponse:
         return self._send("GET", url, headers or {}, None)
 
+    def touch(self, url: str) -> None:
+        """Gövdesine bakılmayan tek istek (ping); başarısızlık SourceError'dur."""
+        self._wait_turn()
+        try:
+            response = self._client.get(url)
+        except httpx.TransportError as exc:
+            raise SourceError(
+                self._redact(f"{url}: bağlantı hatası ({type(exc).__name__})")
+            ) from exc
+        if not response.is_success:
+            raise SourceError(self._redact(f"{url}: HTTP {response.status_code}"))
+
     def post_json(
         self, url: str, payload: object, *, headers: Mapping[str, str] | None = None
     ) -> JsonResponse:
