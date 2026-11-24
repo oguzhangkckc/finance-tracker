@@ -198,6 +198,8 @@ Varlık tanımlarının kaynağı `portfolio.toml`'dur. `ft config apply` komutu
   - Varlığı olmayan hedef: `targets.emtia: bu sınıfta tanımlı varlık yok.`
   - Tekrarlanan kod: `instruments[3].code: "TTE" iki kez tanımlı (ilki instruments[0]).`
 
+**Örnek hedef dağılım.** Gerçek hedefler, fonlar ve katkı yalnızca yerel `config/portfolio.toml`'dadır (repoya girmez). Örnek: `hisse_tr` 0.30, `hisse_yabanci` 0.15, `dusuk_risk` 0.40, `altin` 0.15; her sınıfta bir TEFAS fonu, `dusuk_risk` fonu `category = "para_piyasasi"`. Acil durum fonu gibi dağılım dışı varlıklar K-74 ile (M4) eklenir.
+
 **Pasif enstrüman (M2, K-51).** Dosyadan çıkarılan enstrüman pasif olur. Pasif enstrümana alış girilemez, satış girilebilir; böylece elde kalan pay çıkarılabilir. Elde pay varken pasif yapılan bir enstrüman için `ft config apply` uyarı verir; `ft doctor` da aynı durumu kontrol eder.
 
 **İşlem iptali (M2, K-48).** İşlemler silinmez. Yanlış girilen bir işlem `ft tx void ID --reason "…"` ile iptal edilir ve doğrusu yeniden girilir.
@@ -565,6 +567,13 @@ Reel XIRR'da her akış E[ref(t)] / E[ref(t_i)] ile çarpılır. Son akışta t_
   - Açık bir alarm varken sapmanın işareti değişirse eski alarm kapanır ("resolved"). Ters yön, açık alarm yokmuş gibi, yani açılma eşiğiyle (5 puan) değerlendirilir. Örneğin +4 puanda açık bir alarm, sapma −4 puan olunca yalnızca kapanır; −6 puan olunca kapanır ve ters yönde yeniden açılır.
   - Tek değerlendirme bu yüzden iki geçiş üretebilir. Sonuç, sıralı bir olay listesi taşır: önce "kapandı", sonra "açıldı".
   - Sapma tam sıfırsa işaret değişmiş sayılmaz; açık alarm, kapanma eşiğinin altında kaldığı için normal yoldan kapanır.
+- **Dağılım dışı varlık (M4, K-74).** Acil durum fonu gibi takip edilen ama hedef dağılıma girmeyen varlıklar desteklenir.
+  - Önerilen biçim: `instruments[]` içinde `allocation = false`. Böyle bir varlık değerlemede ve raporda görünür; ağırlık, sapma, sapma alarmı ve dengeleme hesabına girmez. Config doğrulamasındaki "hedef sınıflar varlık sınıflarıyla birebir aynı" kuralı bu varlıkları saymaz.
+  - M4 planında karar verilecekler: toplam değerin raporda dağılım içi ve dışı olarak ayrı gösterilmesi; getiri ölçülerinin (basit getiri, XIRR) bu varlıkları içerip içermeyeceği.
+- **Başlangıçta sessiz sapma alarmları (M4, K-75).** Portföy birkaç aylık katkı büyüklüğüne ulaşana kadar sapma alarmları açılmaz ve bildirilmez; küçük bir portföyde tek bir alım ağırlıkları onlarca puan oynatır.
+  - Önerilen kural: dağılım içi toplam değer `N × aylık katkı`nın altındaysa sapma alarmı değerlendirilmez (öneri N = 3, `[alerts]` altında ayarlanabilir). Raporda sapma değerleri ve katkıyla dengeleme önerisi yine gösterilir; alarm bölümünde "Portföy henüz küçük; sapma alarmları N aylık katkıya ulaşınca başlar." yazar.
+  - Eşik aşılınca değerlendirme açık alarm yokmuş gibi başlar (açılma eşiği 5 puan).
+  - M4 planında karar verilecekler: N'nin varsayılanı; katkı tanımlı değilken (K-56) eşiğin nasıl belirleneceği (ör. ayrı bir tutar ayarı).
 - Dengeleme yalnızca yeni birikimle yapılır, çünkü satış komisyon ve stopaj doğurur. K bu ayki katkı, V toplam değer, h hedef ağırlıktır. K, `portfolio.toml` içinde `[contribution]` bölümünde tanımlanır ve `ft report monthly --contribution` ile geçersiz kılınabilir.
 
 ```latex
@@ -892,6 +901,8 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-71 | K-60'ın "otomatik istek atılmaz" ve K-68'in dosya içe aktarma kararlarını değiştirir: TEFAS fiyatları JSON API'den çekilir (kullanıcı kararı, kişisel ve düşük hacimli kullanım). İstekleri kullanıcı çalıştırır; Claude bu uç noktalara istek atmaz. İstek yapısı açık kaynak istemcilerinkidir (`fonFiyatBilgiGetir` periyod ile, `fonGnlBlgSiraliGetir` tam gövde ve ≤28 gün, 200 içinde `errorMessage`), tarayıcı taklidi ve TLS doğrulamasını kapatma hariç. Engel aşılmaz; `ft price import` yazılmaz | Dosya indirmek her ay elle iş; kayıt API'nin dürüst User-Agent ile çalıştığını ve yanıt biçimini gösterdi | Veri toplama |
 | K-72 | BYF fiyatı `fonGnlBlgSiraliGetir`'in `fiyat` alanından (birim pay değeri) alınır; `fonFiyatBilgiGetir` BYF için borsa bülten fiyatını döndürür (EOZ 23.11: 22.03 = `borsaBultenFiyat`, birim pay değeri 21.968691). BYF geçmişi ≤28 günlük pencerelerle çekilir | DESIGN BYF'yi birim pay değeriyle değerliyor; iki uç nokta BYF'de farklı fiyat veriyor | Veri toplama |
 | K-73 | K-69'u değiştirir: TEFAS fiyatları hafta içi her gün 21:30'da `ft sync prices` ile senkronize edilir (systemd, Persistent=true ile telafi; kullanıcının sunucusunda). Dağılım sapması her başarılı senkronizasyondan sonra değerlendirilir. Haftalık rapor isteğe bağlı (varsayılan kapalı, M4 kabul süresince açık). K-28'deki bayatlık eşikleri geçerli. Takasbank'tan izin istenmez (kullanıcı kararı) | API ile günlük veri fon başına tek istekle alınabiliyor; aylık ritüel yalnızca elle indirme için gerekliydi | Zamanlama, Veri toplama |
+| K-74 | M4: dağılım dışı varlık desteği (ör. acil durum fonu): takip edilir, değerlemede görünür; ağırlık, sapma, alarm ve dengeleme hesabına girmez. Önerilen biçim `allocation = false`; getiri ölçülerine dahil olup olmayacağı M4 planında | Takip edilen her varlık hedef dağılımın parçası değil | Dağılım, Veri modeli |
+| K-75 | M4: dağılım içi toplam değer birkaç aylık katkının (öneri 3) altındayken sapma alarmları açılmaz ve bildirilmez; sapma ve dengeleme önerisi raporda yine görünür. Varsayılan N ve katkı tanımlı değilkenki davranış M4 planında | Küçük portföyde tek alım ağırlıkları onlarca puan oynatır; alarmlar anlamsız gürültü olur | Dağılım, Bildirim |
 
 ## Planı kodlama ajanıyla uygulama
 
