@@ -34,6 +34,7 @@ Not: HTTP istemci kuralları: dürüst User-Agent, robots.txt kontrolü, `Retry-
 Not: `txn.unit_price_scale` (migration 0003): girilen fiyatın basamak sayısı K-64 için korunur; M4 tabloları 0004'e kayar (K-76). `ft data check --strict` uyarıda 1 ile çıkar (K-77).
 Not: `make live` EVDS canlı smoke testini çalıştırır; haftalık timer M4'te. `ft doctor` son fiyat tarihlerini ve bayatlığı gösterir.
 Kabul kapısı: Bir ay canlı veri; elle tutulan tabloyla mutabakat ±0,01 TL/kalem.
+Not: "Bir ay canlı veri" fiyat ve TÜFE akışıyla izlenebilir; mutabakat gerçek aracı kurum ekstresi gerektirir ve sanal portföyle geçilmez (K-112).
 
 ## M4 · Rapor ve bildirim (ilk kullanılabilir sürüm)
 Report modeli, metin ve JSON render, aylık raporda XIRR ve yalnızca katkıyla dengeleme, Telegram (rapor botu), uyarı tekilleştirme; systemd timer'ları, job_run, dead man's switch, yedekleme.
@@ -42,6 +43,7 @@ Kapının kanıtı: uçtan uca rapor snapshot'ları `tests/e2e`; iş yürütüc�
 Kabul kapısı: İki hafta kesintisiz ve doğru rapor; süre, cihazda bütün zamanlayıcıların açıldığı gün başlar.
 Kurulum durumu (2026-11-24): cihaz kuruldu; `ft doctor` fiyatlar dışında yeşil; `backup` ve `sync-cpi` zamanlayıcıları açık; ilk yedek Mac'e çekildi ve geri yükleme testi geçti.
 Bekleyen adım: fiyat konusu (ilk `ft sync prices`) ele alındığı gün `sync-prices`, `weekly-report`, `monthly-report` ve `payday` zamanlayıcıları açılır; M3 (bir ay canlı veri) ve M4 (iki hafta rapor) kabul süreleri o gün başlar ve başlangıç ile bitiş tarihleri buraya yazılır.
+Not: M4 kabulü sanal portföyle şartlı geçilebilir: sanal timer'lar iki hafta açık ve raporlar zamanında, raporlar aynı sanal işlemlerle elle tutulan tabloyla mutabık, gerçek profilin yedek ping'i hiç kaçmamış; gerçek işlemler başlayınca ilk rapor ping'i ayrıca doğrulanır (K-112).
 İlk commit (M3 düzeltmeleri): mutabakatta adet farkı son 5 işlem gününde girilmiş tek bir işlemle eşleşiyorsa "olası valör farkı" gösterilir (K-79).
 Not: Para ağırlıklı getirinin kökü [−0,99; 10] dışındaysa (alt ya da üst) rapor basit getiriyi ve "Zamanlama nedeniyle para ağırlıklı getiri anlamlı değil." notunu gösterir; domain sonuç türü bu durumu "hesaplanamadı"dan ayırır (K-44).
 Not: Katkı tanımlı değilse aylık raporun dengeleme bölümü "Katkı tanımlı değil." yazar, sıfırlarla dolu öneri göstermez; eksik `[contribution]` 0 yerine "tanımlı değil" okunur (K-56).
@@ -59,6 +61,27 @@ Not: Evdeki Debian tabanlı cihazda systemd; tek şablon servis ve iş başına 
 Not: Kurulumda ilk iş `ft doctor` ve `ft sync cpi` (K-91); Telegram kurulumu ve `ft notify test` kullanıcıda (K-89); M4 birimlerinde LoadCredential (K-92).
 Not: Cihaz başka projelerle paylaşıldığı için M4 birimlerinde ve `deploy/ft-finans`'ta NoNewPrivileges, PrivateTmp, ProtectSystem=strict, ReadWritePaths=/var/lib/finans ve ProtectHome var; kalan risk: birim sertleştirmesi root seviyesindeki bir saldırıya karşı korumaz (K-98). Sistem saat dilimi değiştirilmez, kurulumda yalnızca NTP açılır (K-99).
 Açık soru: Paylaşılan cihazın sertleştirmesi (SSH parola girişi, container portlarının bağlanması, IPv6 erişimi): gerçek işlemler girilmeden önce değerlendirilecek.
+
+## W0 · Web ve sanal portföy için hazırlık
+DESIGN'da web arayüzü ve sanal portföy (K-101…K-113). CLI'daki girdi ayrıştırması ve Türkçe sayı biçimi ortak modüllere taşınır; davranış değişmez.
+Geliştirme kapısı: `make check` yeşil; CLI çıktıları ve snapshot'lar değişmedi.
+
+## S · Sanal portföy
+`FT_PROFILE=sanal`: ayrı ve işaretli veritabanı; gerçek fonlar, fiyatlar ve TÜFE; tutarla işlem girişi (fiyat yalnızca o günün kaydından, tam sayı pay); raporlar, maaş günü mesajı, alarmlar ve dengeleme gerçek kodla; `ft sanal maas-gunu-uygula` (önizleme ve onay); SANAL işaretleri; ping yok; sanal yedek ayrı ve şifreli dosya; ayrı timer şablonu (K-107…K-113).
+Ön koşul: fiyat verisinin kaynağı kullanıcı tarafından belirlenmiş ve sanal işlemlerin tarihleri için fiyatlar sanal veritabanında var.
+Geliştirme kapısı: profil ayrımı testleri yeşil (sanal işlem gerçek veritabanına giremez, gerçek profil sanal veritabanını açmaz); tutarla işlem testleri (fiyat günü, yuvarlama, fiyat yoksa red); maaş günü uygulaması testleri (önizleme yazmaz, fiyatsız fon atlanır, ikinci uygulama reddedilir); sanal profilde ping çağrılmıyor; sanal yedek ayrı dosyada ve gerçek yedeğin budamasından etkilenmiyor.
+
+## W1 · Web arayüzü, salt okuma
+`finans.web` (Starlette, Jinja2, uvicorn), Unix soketi ve `tailscale serve`, kimlik başlığı denetimi, sayfalar (özet, varlıklar, dağılım, getiri, raporlar, alarmlar, işlemler, sistem), `finans-web.service` (K-101…K-104, K-106). Sanal portföyle geliştirilir; testlerde hayali fixture'lar kullanılır.
+Ön koşul: cihaza Tailscale üzerinden yapılan bütün erişimlerin listesi kullanıcı onayından geçer; Pi etiketlenir ve politika her mevcut erişime açık izin verir (K-102).
+Geliştirme kapısı: kimlik, güvenlik başlıkları, salt okuma, HTML kaçışı ve birim testleri yeşil; cihazda kendi cihazından 200, Pi'nin kendisinden ve `tag:ci`'dan 403, Funnel kapalı.
+Not: kabul süresi başlamadan cihaza alınması önerilir; kabul süresince `/opt/finans` güncellemesi kabul edilen sistemi değiştirir.
+
+## W2 · Web'den işlem girişi
+İşlem girişi (önizleme → onay) ve iptali; CSRF; yazma için şifre kilidi (K-105).
+Ön koşul: paylaşılan cihazın sertleştirmesi açık sorusu kapanmış.
+Geliştirme kapısı: CSRF, CLI ile eşlik, şifre ve çift gönderim testleri yeşil.
+Kabul kapısı: web'den girilen ilk gerçek işlemler aracı kurum ekstresiyle ±0,01 TL/kalem mutabık.
 
 ## M5 · OpenClaw ve güvenlik sertleştirmesi
 JSON anlık görüntüleri ve rrsync ile aktarımı (yalnızca çekirdekten dışarı), ft-agent (boru hattı ve veri tazeliği için iki ayrı bayatlık sinyali), JSON Schema kontratı, SKILL.md, PPK özeti akışı (oranlar kodla çıkarılır), asistan botu; iki makine, ayrı OS kullanıcıları, systemd sertleştirmesinin geri kalanı (LoadCredential K-92 ve beş ayar K-98 ile M4'te geldi), makine bazında egress allowlist.
