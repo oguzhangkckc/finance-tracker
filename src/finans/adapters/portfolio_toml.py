@@ -15,7 +15,7 @@ from finans.domain.portfolio import (
 )
 
 _SECTIONS = ("alerts", "contribution", "instruments", "quality", "targets")
-_INSTRUMENT_FIELDS = ("code", "kind", "asset_class", "category", "name")
+_INSTRUMENT_FIELDS = ("code", "kind", "asset_class", "category", "name", "allocation")
 _ALERT_FIELDS = ("open_above", "close_below", "reminder_days")
 _KIND_HINT = "TEFAS_YAT, TEFAS_EMK, TEFAS_BYF ya da MANUAL olmalı."
 
@@ -30,17 +30,18 @@ class TomlPortfolioSource:
         ]
         entries, instruments = _instruments(data.get("instruments", []), issues)
         targets = _targets(data.get("targets", {}), issues)
-        contribution = _contribution(data.get("contribution", {}), issues)
+        contribution, payday = _contribution(data.get("contribution", {}), issues)
         alerts = _alerts(data.get("alerts", {}), issues)
         jump = _jump(data.get("quality", {}), issues)
-        issues.extend(validate_portfolio(entries, targets, alerts, contribution))
+        issues.extend(validate_portfolio(entries, targets, alerts, contribution, payday=payday))
         issues.extend(validate_quality(jump))
-        if issues or contribution is None or alerts is None:
+        if issues or alerts is None:
             raise ConfigError(issues)
         return PortfolioConfig(
             instruments=tuple(instruments),
             targets={name: value for name, value in targets.items() if value is not None},
             monthly_contribution=contribution,
+            payday=payday,
             alerts=alerts,
             quality=QualityThresholds.with_overrides(
                 {name: value for name, value in jump.items() if value is not None}
@@ -121,10 +122,19 @@ def _instruments(
         asset_class = _text(item, path, "asset_class", issues, required=True)
         category = _text(item, path, "category", issues, required=False)
         name = _text(item, path, "name", issues, required=False)
+        allocation = item.get("allocation", True)
+        if not isinstance(allocation, bool):
+            message = f"true ya da false olmalı, {allocation!r} verildi."
+            issues.append(ConfigIssue(f"{path}.allocation", message))
+            allocation = True
         _unknown_keys(item, path, _INSTRUMENT_FIELDS, issues)
-        entries.append(InstrumentEntry(path, code, asset_class))
+        entries.append(InstrumentEntry(path, code, asset_class, allocation))
         if code is not None and kind is not None and asset_class is not None:
-            instruments.append(Instrument(code, kind, asset_class, category=category, name=name))
+            instruments.append(
+                Instrument(
+                    code, kind, asset_class, category=category, name=name, allocation=allocation
+                )
+            )
     return entries, instruments
 
 
@@ -135,14 +145,25 @@ def _targets(raw: object, issues: list[ConfigIssue]) -> dict[str, Decimal | None
     return {name: _number(value, f"targets.{name}", issues) for name, value in table.items()}
 
 
-def _contribution(raw: object, issues: list[ConfigIssue]) -> Decimal | None:
+def _contribution(raw: object, issues: list[ConfigIssue]) -> tuple[Decimal | None, int | None]:
+    """Eksik `monthly` "tanımlı değil"dir (K-56); açıkça yazılmış 0'dan ayrılır."""
     table = _table(raw, "contribution", issues)
     if table is None:
-        return None
-    _unknown_keys(table, "contribution", ("monthly",), issues)
+        return None, None
+    _unknown_keys(table, "contribution", ("monthly", "payday"), issues)
+    monthly = (
+        _number(table["monthly"], "contribution.monthly", issues) if "monthly" in table else None
+    )
+    payday = table.get("payday")
+    if payday is None:
+        return monthly, None
+    if not isinstance(payday, int) or isinstance(payday, bool):
+        issues.append(ConfigIssue("contribution.payday", f"tam sayı olmalı, {payday!r} verildi."))
+        return monthly, None
     if "monthly" not in table:
-        return Decimal(0)
-    return _number(table["monthly"], "contribution.monthly", issues)
+        message = "maaş günü için contribution.monthly da tanımlı olmalı."
+        issues.append(ConfigIssue("contribution.payday", message))
+    return monthly, payday
 
 
 def _alerts(raw: object, issues: list[ConfigIssue]) -> AlertThresholds | None:

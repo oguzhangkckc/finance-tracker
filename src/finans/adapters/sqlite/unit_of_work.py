@@ -4,6 +4,11 @@ from types import TracebackType
 from typing import Self
 
 from finans.adapters.sqlite.connection import connect, transaction
+from finans.adapters.sqlite.operations import (
+    SqliteAlertRepo,
+    SqliteAllocationStateRepo,
+    SqliteRunRepo,
+)
 from finans.adapters.sqlite.repositories import (
     SqliteCpiRepo,
     SqliteInstrumentRepo,
@@ -12,10 +17,13 @@ from finans.adapters.sqlite.repositories import (
     SqliteTransactionRepo,
 )
 from finans.ports.repositories import (
+    AlertRepo,
+    AllocationStateRepo,
     CpiRepo,
     InstrumentRepo,
     PriceRepo,
     RawPayloadRepo,
+    RunRepo,
     TransactionRepo,
 )
 
@@ -26,6 +34,9 @@ class SqliteUnitOfWork:
     prices: PriceRepo
     cpi: CpiRepo
     raw_payloads: RawPayloadRepo
+    runs: RunRepo
+    alerts: AlertRepo
+    allocation_state: AllocationStateRepo
 
     def __init__(self, path: Path, *, readonly: bool = False) -> None:
         self._path = path
@@ -41,6 +52,9 @@ class SqliteUnitOfWork:
             self.prices = SqlitePriceRepo(conn)
             self.cpi = SqliteCpiRepo(conn)
             self.raw_payloads = SqliteRawPayloadRepo(conn)
+            self.runs = SqliteRunRepo(conn)
+            self.alerts = SqliteAlertRepo(conn)
+            self.allocation_state = SqliteAllocationStateRepo(conn)
             self._stack = stack.pop_all()
         return self
 

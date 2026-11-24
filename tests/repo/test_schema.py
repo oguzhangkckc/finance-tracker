@@ -50,6 +50,10 @@ def test_expected_tables_and_all_strict(conn: sqlite3.Connection) -> None:
         "cpi",
         "cpi_revision",
         "raw_payload",
+        "job_run",
+        "alert",
+        "alert_event",
+        "allocation_state",
     }
     assert all(
         sql.rstrip().endswith(("STRICT", "STRICT, WITHOUT ROWID")) for sql in tables.values()
@@ -97,6 +101,29 @@ def test_external_ref_is_unique_only_among_active_transactions(conn: sqlite3.Con
             " VALUES ('', 'k', ?, x'00')",
             (NOW,),
         ),
+        ("UPDATE instrument SET allocation = 2", ()),
+        (
+            "INSERT INTO job_run (job, logical_date, started_at, status)"
+            " VALUES ('backup', '2026-11-24', ?, 'done')",
+            (NOW,),
+        ),
+        (
+            "INSERT INTO job_run (job, logical_date, started_at, status)"
+            " VALUES ('backup', '2026-11-31', ?, 'ok')",
+            (NOW,),
+        ),
+        (
+            "INSERT INTO alert (fingerprint, state, direction, opened_at, payload)"
+            " VALUES ('drift:hisse', 'open', NULL, ?, '{}')",
+            (NOW,),
+        ),
+        (
+            "INSERT INTO alert_event (fingerprint, kind, direction, deviation, occurred_at)"
+            " VALUES ('drift:hisse', 'opened', 'up', '0.07', ?)",
+            (NOW,),
+        ),
+        ("INSERT INTO allocation_state VALUES (2, NULL)", ()),
+        ("INSERT INTO allocation_state VALUES (1, '2026-02-30')", ()),
     ],
 )
 def test_enumerated_columns_are_checked(
@@ -127,3 +154,14 @@ def test_unit_price_scale_is_a_sane_digit_count(conn: sqlite3.Connection, scale:
             " unit_price_scale) VALUES (1, '2026-01-05', 'BUY', '1', '1.72', ?, ?)",
             (NOW, scale),
         )
+
+
+def test_job_run_allows_one_ok_attempt_per_job_and_day(conn: sqlite3.Connection) -> None:
+    insert = (
+        "INSERT INTO job_run (job, logical_date, started_at, status) VALUES ('backup', ?, ?, ?)"
+    )
+    conn.execute(insert, ("2026-11-24", NOW, "failed"))
+    conn.execute(insert, ("2026-11-24", NOW, "ok"))
+    conn.execute(insert, ("2026-11-25", NOW, "ok"))
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(insert, ("2026-11-24", NOW, "ok"))

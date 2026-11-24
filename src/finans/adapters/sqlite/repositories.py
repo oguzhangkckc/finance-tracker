@@ -29,7 +29,7 @@ from finans.ports.repositories import (
 )
 from finans.ports.sources import RawPayload
 
-_INSTRUMENT_COLUMNS = "code, kind, asset_class, category, name, active"
+_INSTRUMENT_COLUMNS = "code, kind, asset_class, category, name, active, allocation"
 
 
 def _instrument_id(conn: sqlite3.Connection, code: str) -> int:
@@ -39,12 +39,19 @@ def _instrument_id(conn: sqlite3.Connection, code: str) -> int:
     return int(row[0])
 
 
-def _stored_instrument(row: tuple[str, str, str, str | None, str | None, int]) -> StoredInstrument:
-    code, kind, asset_class, category, name, active = row
-    return StoredInstrument(
-        Instrument(code, InstrumentKind(kind), asset_class, category=category, name=name),
-        active=bool(active),
+def _stored_instrument(
+    row: tuple[str, str, str, str | None, str | None, int, int],
+) -> StoredInstrument:
+    code, kind, asset_class, category, name, active, allocation = row
+    instrument = Instrument(
+        code,
+        InstrumentKind(kind),
+        asset_class,
+        category=category,
+        name=name,
+        allocation=bool(allocation),
     )
+    return StoredInstrument(instrument, active=bool(active))
 
 
 class SqliteInstrumentRepo:
@@ -62,20 +69,21 @@ class SqliteInstrumentRepo:
                 instrument.asset_class,
                 instrument.category,
                 instrument.name,
+                int(instrument.allocation),
             )
             stored = existing.get(instrument.code)
             if stored is None:
                 self._conn.execute(
-                    "INSERT INTO instrument (kind, asset_class, category, name, code)"
-                    " VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO instrument (kind, asset_class, category, name, allocation, code)"
+                    " VALUES (?, ?, ?, ?, ?, ?)",
                     (*values, instrument.code),
                 )
                 added.append(instrument.code)
                 continue
             if stored.instrument != instrument:
                 self._conn.execute(
-                    "UPDATE instrument SET kind = ?, asset_class = ?, category = ?, name = ?"
-                    " WHERE code = ?",
+                    "UPDATE instrument SET kind = ?, asset_class = ?, category = ?, name = ?,"
+                    " allocation = ? WHERE code = ?",
                     (*values, instrument.code),
                 )
                 updated.append(instrument.code)

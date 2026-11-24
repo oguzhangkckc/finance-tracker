@@ -2,10 +2,13 @@ from types import TracebackType
 from typing import Protocol, Self
 
 from finans.ports.repositories import (
+    AlertRepo,
+    AllocationStateRepo,
     CpiRepo,
     InstrumentRepo,
     PriceRepo,
     RawPayloadRepo,
+    RunRepo,
     TransactionRepo,
 )
 
@@ -18,6 +21,9 @@ class UnitOfWork(Protocol):
     prices: PriceRepo
     cpi: CpiRepo
     raw_payloads: RawPayloadRepo
+    runs: RunRepo
+    alerts: AlertRepo
+    allocation_state: AllocationStateRepo
 
     def __enter__(self) -> Self: ...
 
