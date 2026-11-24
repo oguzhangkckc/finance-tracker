@@ -1,9 +1,9 @@
 import os
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, SecretStr, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     healthcheck_reports_url: SecretStr | None = None
     healthcheck_backup_url: SecretStr | None = None
     lock_dir: Path | None = None
+    # K-82: yalnızca açık anahtarlar (age1…), virgülle ayrılmış; gizli anahtar sunucuda durmaz.
+    backup_dir: Path | None = None
+    backup_age_recipients: Annotated[list[str], NoDecode] = Field(default_factory=list)
+    backup_scratch_dir: Path | None = None
+    age_binary: str = "age"
     evds_base_url: str = "https://evds3.tcmb.gov.tr/igmevdsms-dis/"
     cpi_series: str = "TP.TUKFIY2025.GENEL"
     cpi_base: str = "2025=100"
@@ -50,6 +55,13 @@ class Settings(BaseSettings):
     def _blank_key_is_undefined(cls, value: object) -> object:
         if isinstance(value, str) and not value.strip():
             return None
+        return value
+
+    @field_validator("backup_age_recipients", mode="before")
+    @classmethod
+    def _split_recipients(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [part.strip() for part in value.split(",") if part.strip()]
         return value
 
 

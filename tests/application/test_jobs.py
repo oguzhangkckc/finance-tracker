@@ -2,7 +2,7 @@ import json
 from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import replace
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -10,11 +10,19 @@ import pytest
 
 from finans.adapters.render.text import TextRenderer
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
-from finans.application.jobs import JobContext, JobOutcome, JobResult, job_body, run_job
+from finans.application.backup import BackupOutcome
+from finans.application.jobs import (
+    JobContext,
+    JobError,
+    JobOutcome,
+    JobResult,
+    job_body,
+    run_job,
+)
 from finans.domain.models import CpiPoint, YearMonth
 from finans.domain.portfolio import PortfolioConfig
 from finans.ports.operations import HealthPing, JobLock
-from finans.ports.sources import FetchResult
+from finans.ports.sources import FetchResult, RawPayload
 from tests.fakes.clock import FixedClock
 from tests.fakes.notifier import FakeNotifier
 from tests.fakes.operations import FakeLock, FakePing
@@ -268,3 +276,34 @@ def test_messages_without_telegram_fail_clearly(migrated_db: Path, clock: FixedC
 
     assert outcome.status == "failed"
     assert "JobError: Telegram tanımlı değil" in str(outcome.detail["hata"])
+
+
+def test_backup_job_records_the_file_and_trims_old_raw_payloads(
+    migrated_db: Path, clock: FixedClock
+) -> None:
+    with SqliteUnitOfWork(migrated_db) as uow:
+        for key, age in (("eski", 31), ("yeni", 1)):
+            fetched = clock.now() - timedelta(days=age)
+            uow.raw_payloads.add(RawPayload("tefas", key, fetched, b"{}"))
+    made: list[datetime] = []
+
+    def backup(now: datetime) -> BackupOutcome:
+        made.append(now)
+        return BackupOutcome("finans-x.db.age", "abc", 10, "ok", ("finans-eski.db.age",))
+
+    result = job_body("backup", SUNDAY, replace(_context(migrated_db, clock), backup=backup))()
+
+    assert result.detail == {
+        "dosya": "finans-x.db.age",
+        "sha256": "abc",
+        "boyut": 10,
+        "bütünlük": "ok",
+        "silinen_yedek": ["finans-eski.db.age"],
+        "silinen_ham_yanıt": 1,
+    }
+    assert made == [clock.now()]
+
+
+def test_backup_job_needs_its_settings(migrated_db: Path, clock: FixedClock) -> None:
+    with pytest.raises(JobError, match="FT_BACKUP_DIR ve FT_BACKUP_AGE_RECIPIENTS"):
+        job_body("backup", SUNDAY, _context(migrated_db, clock))()

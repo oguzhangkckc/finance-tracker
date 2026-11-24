@@ -1,12 +1,15 @@
 import logging
+import os
 import secrets
+import shutil
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from finans.adapters._http import HttpClient
+from finans.adapters.age import AgeEncryptor
 from finans.adapters.clock import SystemClock
 from finans.adapters.csv_statement import CsvStatementFile
 from finans.adapters.csv_transactions import CsvTransactionFile
@@ -25,9 +28,16 @@ from finans.adapters.sqlite.migrate import (
     migrate,
     schema_status,
 )
+from finans.adapters.sqlite.snapshot import SqliteCopier
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.adapters.tefas import TefasPriceSource
 from finans.adapters.telegram import TelegramNotifier
+from finans.application.backup import (
+    BackupOutcome,
+    create_backup,
+    files_with_secret_keys,
+    recipient_problems,
+)
 from finans.application.doctor import (
     Check,
     cpi_check,
@@ -197,6 +207,7 @@ def run_scheduled_job(settings: Settings, clock: Clock, job: str, logical_date: 
         notifier=(lambda: notifier(settings, clock)) if telegram else None,
         renderer=telegram_renderer(settings),
         weekly_enabled=settings.weekly_report_enabled,
+        backup=_backup_factory(settings),
     )
     urls = {
         check: url.get_secret_value()
@@ -285,6 +296,7 @@ def run_doctor(settings: Settings) -> list[Check]:
             checks.append(cpi_check(uow, settings.cpi_series, today=today))
     checks.append(_evds_key_check(settings))
     checks.append(_telegram_check(settings))
+    checks.extend(_backup_checks(settings, Path(".env")))
     checks.append(_env_check(Path(".env")))
     return checks
 
@@ -322,6 +334,58 @@ def _evds_key_check(settings: Settings) -> Check:
     if settings.evds_api_key is None:
         return Check("EVDS anahtarı", "warn", "FT_EVDS_API_KEY tanımlı değil")
     return Check("EVDS anahtarı", "ok", "tanımlı")
+
+
+def _backup_factory(settings: Settings) -> Callable[[datetime], BackupOutcome] | None:
+    directory = settings.backup_dir
+    if directory is None or not settings.backup_age_recipients:
+        return None
+    scratch = settings.backup_scratch_dir or settings.db_path.parent
+
+    def backup(now: datetime) -> BackupOutcome:
+        return create_backup(
+            copier=SqliteCopier(settings.db_path),
+            encryptor=AgeEncryptor(settings.age_binary),
+            recipients=settings.backup_age_recipients,
+            directory=directory,
+            scratch_parent=scratch,
+            now=now,
+        )
+
+    return backup
+
+
+def _backup_checks(settings: Settings, env: Path) -> list[Check]:
+    """age gizli anahtarı sunucuda durmaz; yalnızca açık anahtarlar tanımlıdır (K-82)."""
+    if settings.backup_dir is None or not settings.backup_age_recipients:
+        setup = Check(
+            "Yedek",
+            "warn",
+            "FT_BACKUP_DIR ya da FT_BACKUP_AGE_RECIPIENTS tanımlı değil; gece yedeği alınamaz",
+        )
+    elif problems := recipient_problems(settings.backup_age_recipients):
+        setup = Check("Yedek", "fail", "; ".join(problems))
+    elif shutil.which(settings.age_binary) is None:
+        setup = Check("Yedek", "warn", f"{settings.age_binary} bulunamadı; age paketini kur")
+    else:
+        count = len(settings.backup_age_recipients)
+        setup = Check("Yedek", "ok", f"{count} alıcı (açık anahtar), dizin {settings.backup_dir}")
+    places = [env] + [
+        Path(path)
+        for path in (os.environ.get("CREDENTIALS_DIRECTORY"), settings.backup_dir)
+        if path is not None
+    ]
+    found = files_with_secret_keys([place for place in places if place.exists()])
+    secret = (
+        Check(
+            "age gizli anahtarı",
+            "fail",
+            "sunucuda bulundu, kaldır: " + ", ".join(str(path) for path in found),
+        )
+        if found
+        else Check("age gizli anahtarı", "ok", "sunucuda yok (.env, credentials, yedek dizini)")
+    )
+    return [setup, secret]
 
 
 def _env_check(path: Path) -> Check:

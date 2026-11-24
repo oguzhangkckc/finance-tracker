@@ -45,6 +45,9 @@ ban-relative-imports = "all"
 "scripts/**" = ["T201"]
 # E-posta kontrolü ve testi git'i PATH'ten, sabit argümanlarla çağırır.
 "scripts/check_push_emails.py" = ["S603", "S607"]
+# age işletim sistemi paketidir; sabit argümanlarla çağrılır (K-82).
+"src/finans/adapters/age.py" = ["S603"]
+"tests/adapters/test_age.py" = ["S603"]
 "tests/scripts/**" = ["S603", "S607"]
 
 [tool.mypy]
@@ -98,6 +101,7 @@ allow_indirect_imports = true
 name = "Adapter'lar birbirinden bağımsız"
 type = "independence"
 modules = [
+    "finans.adapters.age",
     "finans.adapters.clock",
     "finans.adapters.csv_statement",
     "finans.adapters.csv_transactions",

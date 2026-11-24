@@ -91,6 +91,7 @@ class CpiRepo(Protocol):
 
 class RawPayloadRepo(Protocol):
     def add(self, payload: RawPayload) -> int: ...
+    def delete_before(self, cutoff: datetime) -> int: ...
 
 
 JobStatus = Literal["running", "ok", "partial", "failed"]

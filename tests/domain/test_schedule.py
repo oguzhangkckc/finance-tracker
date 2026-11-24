@@ -82,3 +82,26 @@ def test_job_names_are_the_scheduled_entry_points() -> None:
         "payday",
         "backup",
     )
+
+
+@pytest.mark.parametrize(
+    ("payday", "year", "month", "expected"),
+    [
+        (29, 2027, 2, date(2027, 2, 28)),
+        (30, 2027, 2, date(2027, 2, 28)),
+        (31, 2027, 2, date(2027, 2, 28)),
+        (29, 2028, 2, date(2028, 2, 29)),
+        (30, 2028, 2, date(2028, 2, 29)),
+        (31, 2027, 4, date(2027, 4, 30)),
+        (30, 2027, 4, date(2027, 4, 30)),
+        (31, 2027, 5, date(2027, 5, 31)),
+    ],
+)
+def test_late_payday_moves_to_the_last_day_of_short_months(
+    payday: int, year: int, month: int, expected: date
+) -> None:
+    assert payday_on(year, month, payday) == expected
+    on_the_day = _at(expected.year, expected.month, expected.day, 9, 0)
+    assert logical_date("payday", on_the_day, payday=payday) == expected
+    day_before = _at(expected.year, expected.month, expected.day - 1, 23, 0)
+    assert logical_date("payday", day_before, payday=payday) < date(year, month, 1)

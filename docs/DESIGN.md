@@ -388,9 +388,10 @@ Migration dosyaları paketin içinde (`src/finans/adapters/sqlite/migrations/`) 
   - Geri dönüş: ft ve zamanlanmış işler durdurulur; `finans.db-wal` ile `finans.db-shm` silinir ve yedek `finans.db` yerine kopyalanır.
   - Bu kopyalar makinede kalır ve şifrelenmez. Şifreli, makine dışı gece yedeği ayrı bir iştir (M4).
 
-**Gece yedeği (M4, K-82).** `ft job run backup` her gece SQLite backup API'siyle tutarlı bir kopya alır. Kopyayı `age` ile yalnızca config'teki açık anahtara (`FT_BACKUP_AGE_RECIPIENT`, `age1…`) şifreler ve sunucudaki yerel yedek dizinine (`FT_BACKUP_DIR`) `finans-<UTC zaman damgası>.db.age` adıyla yazar. Bu, migration öncesi alınan yerel kopyadan (K-55) ayrıdır.
-- Şifresiz ara kopya 700 izinli geçici bir dizinde oluşur ve her durumda silinir. Şifreli dosya geçici adla yazılıp yeniden adlandırılır (600 izin). Son 14 yedek tutulur. 30 günden eski raw_payload kayıtları aynı işte silinir.
-- **age gizli anahtarı sunucuda durmaz.** Sunucu yedeği çözemez; çözme ve aylık geri yükleme testi kullanıcının Mac'inde yapılır (Kurulum). `ft doctor` alıcının bir açık anahtar olduğunu ve `.env`, credentials dizini ile yedek dizininde `AGE-SECRET-KEY-` içeren dosya olmadığını denetler.
+**Gece yedeği (M4, K-82).** `ft job run backup` her gece SQLite backup API'siyle tutarlı bir kopya alır. Kopyayı `age` ile config'teki bütün açık anahtarlara (`FT_BACKUP_AGE_RECIPIENTS`, virgülle ayrılmış `age1…` listesi; ör. Mac'teki anahtar ve parola yöneticisinde saklanan kurtarma anahtarı) şifreler ve sunucudaki yerel yedek dizinine (`FT_BACKUP_DIR`) `finans-<UTC zaman damgası>.db.age` adıyla yazar. Bu, migration öncesi alınan yerel kopyadan (K-55) ayrıdır.
+- Şifresiz kopya veritabanının yanında (`FT_BACKUP_SCRATCH_DIR`), 700 izinli geçici bir dizinde 600 izinle oluşur ve iş başarısız olsa bile silinir; silinemezse iş hata verir. Şifreli dosya geçici adla yazılıp yeniden adlandırılır (600 izin). Son 14 yedek tutulur. 30 günden eski raw_payload kayıtları aynı işte silinir.
+- **Doğrulama ikiye bölünür.** Sunucu, şifrelemeden önce kopyada `PRAGMA integrity_check` çalıştırır ("ok" değilse şifrelemez) ve şifreli dosyanın sha256 özetini yanına `<ad>.sha256` olarak (`shasum -c` biçiminde) yazar. `ft backup verify` sunucudaki kopyaların özetini denetler. Tam geri yükleme testi Mac'te, gizli anahtarla `scripts/verify_backup.sh` ile yapılır: özeti doğrular, çözer, `integrity_check` çalıştırır ve tablo sayılarını gösterir.
+- **age gizli anahtarı sunucuda durmaz.** Sunucu yedeği çözemez. `ft doctor` alıcıların açık anahtar olduğunu ve `.env`, credentials dizini ile yedek dizininde `AGE-SECRET-KEY-` içeren dosya olmadığını denetler; bulursa yalnızca dosya adını yazar.
 - **Makine dışına çıkış çekmeyle olur.** Sunucu yedek hedefi için hiçbir kimlik bilgisi tutmaz; Mac şifreli yedekleri SSH ile çeker. Sunucu ele geçirilse bile Mac'teki kopyalara ulaşamaz.
 - Her başarılı yedekten sonra günlük yedek ping'i gider (K-84).
 
@@ -831,17 +832,17 @@ En değerli varlık finansal hesaplar değil, çünkü sistem onlara hiç erişm
 6. Mac'te yedek çekme (sunucu yalnızca şifreli dosya tutar; kimlik bilgisi Mac'tedir):
 
    ```sh
-   rsync -a --ignore-existing finans@SUNUCU:/var/lib/finans/backups/ ~/Yedekler/finans/
+   rsync -a --ignore-existing --exclude '.*' finans@SUNUCU:/var/lib/finans/backups/ ~/Yedekler/finans/
    ```
 
    Zamanlama önerisi: Mac'te launchd ile her gün 09:30, sunucudaki 03:00 yedeğinden sonra. `~/Library/LaunchAgents/` altındaki bir plist'te `StartCalendarInterval` (Hour 9, Minute 30) ve `ProgramArguments` olarak yukarıdaki komut; Mac uykudaysa iş uyanınca bir kez çalışır.
-7. Aylık geri yükleme testi (Mac'te; age gizli anahtarı yalnızca Mac'tedir):
+7. Aylık geri yükleme testi (Mac'te; age gizli anahtarı yalnızca Mac'tedir). Betik özeti doğrular, yedeği 700 izinli geçici bir dizine çözer, `integrity_check` ve tablo sayılarını gösterir, çıkarken geçici dizini siler:
 
    ```sh
-   age -d -i ~/.config/age/finans.txt ~/Yedekler/finans/finans-<zaman>.db.age > /tmp/finans-test.db
-   sqlite3 /tmp/finans-test.db "PRAGMA integrity_check"   # "ok" beklenir
-   rm /tmp/finans-test.db
+   scripts/verify_backup.sh ~/Yedekler/finans/finans-<zaman>.db.age ~/.config/age/finans.txt
    ```
+
+   Kurtarma anahtarı parola yöneticisinde durur. Onunla da ara sıra deneme, anahtar diske yazılmadan yapılır: anahtarı panoya kopyalayıp `scripts/verify_backup.sh <yedek> <(pbpaste)`, ardından panoyu temizle. Sunucuda `ft backup verify` yalnızca özetleri denetler.
 
 ## Gözlemlenebilirlik ve operasyon
 
@@ -1012,7 +1013,7 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-79 | K-78'e ek: adet farkı, ekstre gününe kadarki son 5 işlem gününde (ekstre günü dahil) girilmiş tek bir işlemin adediyle birebir ve yönüyle eşleşiyorsa mesaj "olası valör farkı (işlem #id, tarih)" olur; birden çok işlem eşleşirse en yenisi gösterilir. Kalem yine uyumsuz sayılır | Ekstre takas edilmiş payları gösterir; yeni bir işlem ekstreye birkaç gün geç yansıyabilir, bu durum eksik işlemden ayırt edilmeli | Test, Veri kalitesi |
 | K-80 | Sistem her zaman açık bir Linux makinede systemd ile çalışır. Her zamanlanmış iş tek giriş noktası `ft job run <iş> [--logical-date]` ile; birimler `deploy/systemd/finans-<iş>.{service,timer}`. Birim dosyaları testte ayrıştırılarak, CI'da `systemd-analyze calendar` ve `verify` ile doğrulanır | Zamanlama tek yerden ve test edilebilir olsun; geliştirme kapısı "zamanlayıcılar test ortamında doğrulandı" | Zamanlama, Test |
 | K-81 | Rapor snapshot testleri için syrupy (dev); log için structlog yerine standart `logging` ve küçük bir JSON biçimlendirici | Snapshot testi geliştirme kapısında; log için ek bağımlılık gerekmiyor | Teknoloji seçimleri, Gözlemlenebilirlik |
-| K-82 | Gece yedeği: backup API kopyası `age` ile yalnızca açık anahtara şifrelenip sunucudaki yerel dizine yazılır (son 14); Mac SSH ile çeker, sunucu hedef için kimlik bilgisi tutmaz. age gizli anahtarı sunucuda durmaz; `ft doctor` denetler. Geri yükleme testi Mac'te | Sunucu ele geçirilirse yedekler okunamasın ve makine dışı kopyalara ulaşılamasın | Veri modeli, Güvenlik, Kurulum |
+| K-82 | Gece yedeği: backup API kopyası `age` ile config'teki bütün açık anahtarlara (`FT_BACKUP_AGE_RECIPIENTS` listesi: Mac anahtarı ve kurtarma anahtarı) şifrelenip sunucudaki yerel dizine yazılır (son 14); Mac SSH ile çeker, sunucu hedef için kimlik bilgisi tutmaz. Şifresiz kopya 700 izinli geçici dizinde 600 izinle oluşur, iş başarısız olsa bile silinir. Doğrulama ikiye bölünür: sunucu şifrelemeden önce `integrity_check` çalıştırır ve şifreli dosyanın sha256 özetini kaydeder (`ft backup verify` özetleri denetler); tam geri yükleme testi Mac'te `scripts/verify_backup.sh` ile, gizli anahtarla. age gizli anahtarı sunucuda durmaz; `ft doctor` denetler | Sunucu ele geçirilirse yedekler okunamasın ve makine dışı kopyalara ulaşılamasın; sunucu yedeği çözemediği için içerik doğrulaması anahtarın olduğu yerde yapılır | Veri modeli, Güvenlik, Kurulum |
 | K-83 | FR-14 M4'e alınır: maaş günü (`[contribution] payday`, `monthly` zorunlu) mesajı bu ayki katkının sınıf (`allocate_contribution`) ve fon bazında (sınıf içinde mevcut değerle orantılı, değer 0 ise eşit) dağılım önerisini Hamilton yuvarlamasıyla ve `ft tx add` hatırlatmasıyla gönderir | Sabit hatırlatma K-73'ten sonra amacını yitirdi; katkının nereye gideceği maaş günü gerekli bilgi | Dağılım, Zamanlama |
 | K-84 | Dead man's switch iki kontrol: başarılı rapor gönderimi ve başarılı gece yedeği (günlük) ping alır; başarısız işte `/fail`. Ping URL'leri sır | Haftalık rapor isteğe bağlı olduğundan yalnızca rapor ping'i sessiz arızayı ayda bir yakalardı | Gözlemlenebilirlik |
 | K-85 | Fiyatlar eksikken sapma alarmı değerlendirilmez: yalnızca sync-prices "ok" sonrası; "partial"da atlanır ve job_run.detail'e yazılır | Eksik fiyat ağırlıkları bozar ve yanlış alarm üretir | Dağılım, Zamanlama |

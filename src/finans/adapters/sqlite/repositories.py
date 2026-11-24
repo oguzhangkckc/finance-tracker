@@ -413,3 +413,10 @@ class SqliteRawPayloadRepo:
         if cursor.lastrowid is None:
             raise RuntimeError("raw_payload satır numarası alınamadı")
         return cursor.lastrowid
+
+    def delete_before(self, cutoff: datetime) -> int:
+        # Zaman damgaları aynı ISO UTC biçiminde; metin sırası zaman sırasıdır.
+        cursor = self._conn.execute(
+            "DELETE FROM raw_payload WHERE fetched_at < ?", (encode_timestamp(cutoff),)
+        )
+        return cursor.rowcount

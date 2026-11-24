@@ -6,10 +6,11 @@ import re
 from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Final, Literal
 
 from finans.application.alerts import deliver_alerts, evaluate_alerts, is_quiet_hour
+from finans.application.backup import BackupOutcome
 from finans.application.cpi import sync_cpi
 from finans.application.price_sync import TEFAS_KINDS, sync_prices
 from finans.application.report import ReportKind, build_report, payday_plan
@@ -25,6 +26,7 @@ from finans.ports.unit_of_work import UnitOfWork
 Outcome = Literal["ok", "partial", "failed", "skipped", "busy"]
 PING_CHECKS: Final = {"weekly-report": "reports", "monthly-report": "reports", "backup": "backup"}
 CPI_WAIT_LAST_DAY: Final = 10
+RAW_PAYLOAD_RETENTION: Final = timedelta(days=30)
 _BOT_TOKEN: Final = re.compile(r"bot\d+:[A-Za-z0-9_-]+")
 _LOG = logging.getLogger("finans.jobs")
 
@@ -59,6 +61,7 @@ class JobContext:
     notifier: Callable[[], AbstractContextManager[Notifier]] | None
     renderer: ReportRenderer
     weekly_enabled: bool
+    backup: Callable[[datetime], BackupOutcome] | None = None
 
 
 def run_job(
@@ -113,7 +116,7 @@ def job_body(job: str, logical_date: date, ctx: JobContext) -> Callable[[], JobR
         "weekly-report": _weekly_report,
         "monthly-report": _monthly_report,
         "payday": _payday,
-        "backup": _not_yet,
+        "backup": _backup,
     }
     if job not in bodies:
         raise JobError(f"tanınmayan iş: {job}")
@@ -248,5 +251,22 @@ def _send(ctx: JobContext, text: str) -> None:
         notifier.send(text, silent=is_quiet_hour(ctx.clock.now()))
 
 
-def _not_yet(day: date, ctx: JobContext) -> JobResult:
-    raise JobError("yedek işi bu sürümde yok (K-82)")
+def _backup(day: date, ctx: JobContext) -> JobResult:
+    """Şifreli gece yedeği ve 30 günden eski ham yanıtların silinmesi (K-82)."""
+    if ctx.backup is None:
+        raise JobError("FT_BACKUP_DIR ve FT_BACKUP_AGE_RECIPIENTS tanımlı olmalı (K-82)")
+    now = ctx.clock.now()
+    outcome = ctx.backup(now)
+    with ctx.open_uow() as uow:
+        deleted = uow.raw_payloads.delete_before(now - RAW_PAYLOAD_RETENTION)
+    return JobResult(
+        "ok",
+        {
+            "dosya": outcome.name,
+            "sha256": outcome.sha256,
+            "boyut": outcome.size,
+            "bütünlük": outcome.integrity,
+            "silinen_yedek": list(outcome.removed),
+            "silinen_ham_yanıt": deleted,
+        },
+    )

@@ -10,6 +10,7 @@ import typer
 from pydantic import ValidationError
 
 from finans import bootstrap
+from finans.application.backup import verify_backups
 from finans.application.cpi import CPI_HISTORY_START, CpiSyncReport, sync_cpi
 from finans.application.data_check import DEFAULT_WINDOW, check_data, trade_price_issues
 from finans.application.portfolio_config import ApplyReport, apply_portfolio
@@ -60,6 +61,8 @@ job_app = typer.Typer(
     no_args_is_help=True, help="Zamanlanmış işler; systemd yalnızca bunları çağırır."
 )
 app.add_typer(job_app, name="job")
+backup_app = typer.Typer(no_args_is_help=True, help="Gece yedeği (K-82).")
+app.add_typer(backup_app, name="backup")
 
 
 class SideChoice(StrEnum):
@@ -495,6 +498,26 @@ def _print_warnings(issues: list[DataIssue]) -> None:
 
 
 _SYMBOLS = {"ok": "✓", "warn": "!", "fail": "✗"}
+
+
+@backup_app.command("verify")
+def backup_verify() -> None:
+    """Sunucudaki şifreli yedeklerin sha256 özetini denetler (K-82).
+
+    Sunucu yedeği çözemez; tam geri yükleme testi Mac'te `scripts/verify_backup.sh` ile yapılır.
+    """
+    settings = _load_settings_or_exit()
+    if settings.backup_dir is None:
+        typer.echo("FT_BACKUP_DIR tanımlı değil.", err=True)
+        raise typer.Exit(code=2)
+    checks = verify_backups(settings.backup_dir)
+    if not checks:
+        typer.echo("Yedek yok.")
+    for check in checks:
+        typer.echo(f"{'✓' if check.ok else '✗'} {check.name}: {check.message}")
+    typer.echo("Tam geri yükleme testi Mac'te: scripts/verify_backup.sh <yedek> <age-anahtarı>")
+    if not all(check.ok for check in checks):
+        raise typer.Exit(code=1)
 
 
 class JobChoice(StrEnum):
