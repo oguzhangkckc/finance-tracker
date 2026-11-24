@@ -9,7 +9,7 @@ from decimal import (
 
 import pytest
 
-from finans.domain.numeric import DOMAIN_CONTEXT, in_domain_context
+from finans.domain.numeric import DOMAIN_CONTEXT, in_domain_context, is_exponent_notation
 
 
 @in_domain_context
@@ -56,3 +56,17 @@ def test_global_precision_does_not_affect_domain_and_is_restored() -> None:
 def test_wrapper_keeps_function_metadata() -> None:
     assert _third.__name__ == "_third"
     assert _third.__doc__ == "Bir bölü üç."
+
+
+@pytest.mark.parametrize(
+    "text", ["1e3", "2E-2", "+1E+3", "-1e3", ".5e2", "1.23457E+11", "1,23457E+11", " 1e3 "]
+)
+def test_exponent_notation_is_recognised_with_either_decimal_separator(text: str) -> None:
+    assert is_exponent_notation(text)
+
+
+@pytest.mark.parametrize(
+    "text", ["1000", "12.5", "12,5", "1.234,5", "NaN", "Infinity", "1e", "e3", "abc", ""]
+)
+def test_plain_numbers_and_non_numbers_are_not_exponent_notation(text: str) -> None:
+    assert not is_exponent_notation(text)
