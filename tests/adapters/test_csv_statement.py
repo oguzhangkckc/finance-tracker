@@ -48,6 +48,11 @@ def test_price_column_may_be_left_out(tmp_path: Path) -> None:
             'date,code,units,value\n2026-11-23,XHT,1,"25,95"\n',
             "satır 2: value: ondalık ayırıcı nokta olmalı; 25,95 yerine 25.95 yaz.",
         ),
+        (
+            'date,code,units,value\n2026-11-23,XHT,"1,23457E+11",1\n',
+            "satır 2: units: üstel gösterim kullanılamaz (1,23457E+11); "
+            "Excel'de sütun biçimini Sayı yap ve dosyayı yeniden kaydet.",
+        ),
         ("date,code,units,value\n2026-11-23,XHT,0,1\n", "satır 2: units: sıfırdan büyük olmalı"),
         ("date,code,units,value\n2026-11-23,XHT,1,-1\n", "satır 2: value: negatif olamaz"),
         (
