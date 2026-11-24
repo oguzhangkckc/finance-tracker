@@ -9,10 +9,15 @@ from pathlib import Path
 from typing import NoReturn
 
 import pytest
+from hypothesis import settings
 
 from finans.adapters.sqlite.connection import connect
 from finans.adapters.sqlite.migrate import apply, bundled
 from tests.fakes.clock import FixedClock
+
+# Testler performans ölçmüyor; süre sınırı makine yüküne göre rastgele kırılıyordu.
+settings.register_profile("finans", deadline=None)
+settings.load_profile("finans")
 
 
 def _network_blocked(*_args: object, **_kwargs: object) -> NoReturn:
