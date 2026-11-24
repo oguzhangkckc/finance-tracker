@@ -1,6 +1,7 @@
 import json
 from collections.abc import Iterator
 from decimal import Decimal
+from pathlib import Path
 
 import httpx
 import pytest
@@ -8,12 +9,14 @@ import respx
 
 from finans.adapters._http import HttpClient
 from finans.adapters.evds import EvdsCpiSource
+from finans.domain.inflation import CpiSeries, chain_link
 from finans.domain.models import CpiPoint, YearMonth
 from finans.ports.sources import RawPayload, SourceError
 from tests.fakes.clock import FixedClock
 
-# Yanıt biçimi şimdilik ikincil kaynaklara dayanıyor (alan adları, metin değerler, "2026-1").
-# Anahtarla kaydedilen gerçek yanıt gelince bu sentetik örnek onunla değiştirilir (K-61).
+# Biçim 2026-11-24'te anahtarla kaydedilen gerçek yanıtlarla doğrulandı (tests/fixtures/evds).
+# Küçük örnekler aynı biçimde kurulur: "YYYY-M" dönem, 8 ondalığa dolgulanmış metin değer.
+FIXTURES = Path(__file__).parents[1] / "fixtures" / "evds"
 BASE = "https://evds3.tcmb.gov.tr/igmevdsms-dis/"
 SERIES = "TP.TUKFIY2025.GENEL"
 COLUMN = "TP_TUKFIY2025_GENEL"
@@ -23,7 +26,9 @@ START, END = YearMonth(2025, 1), YearMonth(2026, 11)
 
 
 def _body(*rows: tuple[str, object]) -> bytes:
-    items = [{"Tarih": period, COLUMN: value, "UNIXTIME": 0} for period, value in rows]
+    items = [
+        {"Tarih": period, COLUMN: value, "UNIXTIME": {"$numberLong": "0"}} for period, value in rows
+    ]
     return json.dumps({"totalCount": len(items), "items": items}).encode()
 
 
@@ -107,3 +112,41 @@ def test_rejected_key_is_reported_without_the_key(source: EvdsCpiSource) -> None
     with pytest.raises(SourceError, match="HTTP 403") as failure:
         source.fetch(SERIES, START, END)
     assert KEY not in str(failure.value)
+
+
+def _recorded(source: EvdsCpiSource, series: str, file: str) -> list[CpiPoint]:
+    body = (FIXTURES / file).read_bytes()
+    url = f"{BASE}series={series}&startDate=01-01-2005&endDate=01-11-2026&type=json"
+    with respx.mock:
+        respx.get(url).respond(200, content=body, headers={"Content-Type": "application/json"})
+        result = source.fetch(series, YearMonth(2005, 1), END)
+    assert result.raw[0].body == body
+    return result.points
+
+
+def test_recorded_response_parses_completely(source: EvdsCpiSource) -> None:
+    points = {p.period: p.index for p in _recorded(source, SERIES, "tp_tukfiy2025_genel.json")}
+
+    assert len(points) == 262
+    assert (min(points), max(points)) == (YearMonth(2005, 1), YearMonth(2026, 10))
+    assert points[YearMonth(2005, 1)] == Decimal("3.596523")
+    assert points[YearMonth(2025, 1)] == Decimal("88.578291")
+    assert points[YearMonth(2026, 10)] == Decimal("140.77")
+
+
+def test_recorded_old_base_chains_onto_the_new_base_within_rounding(source: EvdsCpiSource) -> None:
+    """K-43: yeni baz eski serinin sabit katlısıdır; Aralık 2025 zincirlemesi tutar."""
+    new = CpiSeries(_recorded(source, SERIES, "tp_tukfiy2025_genel.json"))
+    old = CpiSeries(_recorded(source, "TP.FG.J0", "tp_fg_j0.json"))
+    link = YearMonth(2025, 12)
+    linked = chain_link(old, new, link=link)
+
+    # Eski seri 2, yeni seri 2025'e kadar 6 ondalıkla yayımlanıyor; k de yuvarlanmış değerlerden.
+    def rounding(period: YearMonth) -> Decimal:
+        return Decimal("0.005") / old.index(period) + Decimal("0.0000005") / new.index(period)
+
+    periods = [p for p in old.periods() if p <= link]
+    assert len(periods) == 252
+    for period in periods:
+        deviation = abs(linked.index(period) / new.index(period) - 1)
+        assert deviation <= rounding(period) + rounding(link), period

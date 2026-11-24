@@ -433,7 +433,12 @@ Kaynaktan bağımsız veri kuralları:
 - Seri kodları, bağlantı ayı ve taban URL config'tedir. EVDS sürüm değişikliği ya da TÜİK baz yılı güncellemesi koda dokunmadan karşılanır.
 - Yüzde değişim değil endeks seviyesi saklanır. Her dönem hesabı endeks oranından türetilir.
 - TÜİK, Ocak 2026 verisinden itibaren TÜFE'yi 2025=100 bazında yayımlıyor. TÜİK, 2005–2025 geçmişini de 2025=100 bazında yeniden yayımladı. Bunu zincir endeks yapısını ve manşet oranları değiştirmeden yaptı: 2025 aylarının yeni baz değerleri, eski serinin sabit bir katsayıyla çarpılmış halidir.
-- **M3'te 2025=100 serisi tüm geçmişiyle doğrudan çekilir; çalışma anında zincirleme yapılmaz (K-43).** Seri kodu `TP.TUKFIY2025.GENEL`, 2005-01'den başlıyor (ikincil). Anahtarla doğrulanacaklar: seri metaverisindeki başlangıç tarihi ve Ocak 2025 değerinin TÜİK'teki 88,578291 ile eşleşmesi. Eski `TP.FG.J0` (2003=100) arşive alınmış ve 2026-01'de durmuş (ikincil).
+- **M3'te 2025=100 serisi tüm geçmişiyle doğrudan çekilir; çalışma anında zincirleme yapılmaz (K-43).** Canlı doğrulama (2026-11-24, K-70):
+  - `TP.TUKFIY2025.GENEL` seri bilgisinde başlangıç `01-01-2005`; veride ilk dönem 2005-01, son dönem 2026-10, 262 dönem, boş değer yok.
+  - Ocak 2025 değeri `88.57829100`; TÜİK tablosundaki 88,578291 ile aynı.
+  - Eski `TP.FG.J0` (2003=100) arşivde ("(Arşiv)"), son dönemi 2026-01. Ortak 253 dönemin (2005-01 – 2026-01) hepsinde yeni/eski oranı, yayımlanan değerlerin yuvarlama sınırı içinde sabit (k ≈ 0,0314146405). Aralık 2025 zincirlemesi Ocak 2025'i 88,578291235 olarak üretiyor. `chain_link` yedeği bu kayıtlı verilerle test ediliyor.
+  - Yanıt biçimi: `{"totalCount": N, "items": [...]}`; `Tarih` "YYYY-M" (ay sıfırla doldurulmaz); değerler 8 ondalığa dolgulanmış metin (`"88.57829100"`); `UNIXTIME` `{"$numberLong": "…"}`. Yayımlanan gerçek kesinlik 2005–2025 için 6, 2026'dan itibaren 2 ondalık.
+  - Kayıtlı yanıtlar `tests/fixtures/evds/` altında; kontrat testleri bunlarla çalışır.
 - Aralık 2025 zincirlemesi (chain-linking) test edilmiş bir yedek olarak kalır; yeni bazda geçmiş bulunamazsa kullanılır. Zincirleme tek bir çakışma ayında yapılır: **Aralık 2025**. Bu ayda iki serinin de değeri vardır.
   - Eski seri, k = E_yeni(Aralık 2025) / E_eski(Aralık 2025) katsayısıyla yeni baza (2025=100) taşınır.
   - Aralık 2025 ve öncesi eski seriden (× k), sonrası yeni seriden alınır. Oranlar baz seçiminden bağımsızdır.
@@ -887,6 +892,7 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-67 | Geliştirme kapısındaki mutabakat için `ft reconcile FILE.csv` (tarih, kod, değer): kalem başına fark ve ±0,01 TL'ye göre geçti/kaldı. Değerler aracı kurum ekstrelerinden kullanıcıdan gelir | "±0,01 TL/kalem" elle karşılaştırmayla tekrarlanabilir değildi | Test, Yol haritası |
 | K-68 | TEFAS fiyat kaynağı: kullanıcının TEFAS sitesinden tarayıcıyla indirdiği dosya `ft price import` ile `source=tefas` olarak içe aktarılır; tek tük günler `ft price set` ile. Paralel olarak Takasbank'tan yazılı izin istenir; ücretli sağlayıcı yok. Biçim örnek dosyayla belirlenir; Excel kütüphanesi gerekirse sorulur. Fixture rastgele public bir fondan | robots.txt API'yi kapatıyor (K-60); insanın tarayıcıyla indirmesi otomatik erişim değildir | Veri toplama |
 | K-69 | Kadans: TEFAS için senkronizasyon timer'ı yok. Aylık ritüel maaş günü hatırlatmasıyla başlar ("fiyat dosyasını indir, `ft price import` çalıştır"); dağılım sapması değerlendirmesi içe aktarmanın ardından çalışır. Haftalık rapor isteğe bağlı, varsayılan kapalı. EVDS otomatik kalır | Fiyatlar elle indirildiği için günlük senkronizasyon ve haftalık rapor anlamını yitirdi | Zamanlama, Raporlama |
+| K-70 | K-61'i tamamlar: EVDS3 canlı doğrulandı (2026-11-24). `TP.TUKFIY2025.GENEL` 2005-01'den başlıyor (seri bilgisi ve veri), Ocak 2025 = 88,578291; `TP.FG.J0` ile oran 253 ortak dönemde yuvarlama sınırı içinde sabit. Yanıt biçimi ve kesinlik (2025'e kadar 6, 2026'dan itibaren 2 ondalık) kayıtlı yanıtlarla testlerde | K-43'ün dayandığı iki varsayım (tam geçmiş EVDS3'te, yeni baz eski serinin sabit katlısı) birincil veriyle doğrulandı | Veri toplama |
 
 ## Planı kodlama ajanıyla uygulama
 
