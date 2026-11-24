@@ -824,7 +824,7 @@ En değerli varlık finansal hesaplar değil, çünkü sistem onlara hiç erişm
   - Çekirdek: tefas.gov.tr, evds3.tcmb.gov.tr (geçiş süresince evds2.tcmb.gov.tr), api.telegram.org, ping servisi (ör. hc-ping.com), yedek hedefi ve OpenClaw makinesi (anlık görüntü aktarımı). Kurulum ve güncelleme sırasında PyPI ve işletim sistemi depoları.
   - OpenClaw makinesi: LLM sağlayıcısı, api.telegram.org, www.tcmb.gov.tr.
 
-### Kurulum (M4, K-91, K-97, K-98, K-99)
+### Kurulum (M4, K-91, K-97, K-98, K-99, K-100)
 
 Hedef: evdeki, her zaman açık, 64 bit Debian tabanlı bir Linux cihaz (Raspberry Pi OS 64 bit, Ubuntu Server ya da Debian 12+; systemd 252 ve üstü). Komutlar `sudo` yetkili bir kullanıcıyla çalıştırılır.
 
@@ -898,13 +898,15 @@ Hedef: evdeki, her zaman açık, 64 bit Debian tabanlı bir Linux cihaz (Raspber
    restrict,command="/usr/bin/rrsync -ro /var/lib/finans/backups/" ssh-ed25519 AAAA… mac-yedek
    ```
 
-   Mac'te çekme komutu; rrsync yolları yedek dizinine göre çözer, `finans@SUNUCU:/` yedek dizininin kendisidir:
+   Mac'te çekme GNU rsync ile yapılır (K-100). macOS'un `/usr/bin/rsync`'i openrsync'tir; rrsync onun komutunu "invalid rsync-command syntax or options" diye reddeder. SSH girişi çalışsa da çekme başarısız olur. GNU rsync Homebrew ile kurulur (`brew install rsync`, `/opt/homebrew/bin/rsync`).
+
+   Çekme komutu; rrsync yolları yedek dizinine göre çözer, `finans@SUNUCU:/` yedek dizininin kendisidir:
 
    ```sh
-   rsync -a --ignore-existing --exclude '.*' -e "ssh -i ~/.ssh/finans_yedek" finans@SUNUCU:/ ~/Yedekler/finans/
+   /opt/homebrew/bin/rsync -a --ignore-existing --exclude '.*' -e "ssh -i ~/.ssh/finans_yedek" finans@SUNUCU:/ ~/Yedekler/finans/
    ```
 
-   Zamanlama önerisi: Mac'te launchd ile her gün 09:30, sunucudaki 03:00 yedeğinden sonra (`~/Library/LaunchAgents/` altında bir plist'te `StartCalendarInterval` Hour 9, Minute 30 ve `ProgramArguments` olarak yukarıdaki komut); Mac uykudaysa iş uyanınca bir kez çalışır.
+   Zamanlama: Mac'te launchd ile her gün 09:30, sunucudaki 03:00 yedeğinden sonra. `~/Library/LaunchAgents/` altında bir plist'te `StartCalendarInterval` Hour 9, Minute 30 kullanılır. `ProgramArguments` yukarıdaki komuttur ve rsync tam yoluyla yazılır, çünkü launchd'nin PATH'inde Homebrew yoktur. Mac uykudaysa iş uyanınca bir kez çalışır. Aylık geri yükleme testi (adım 9) için ayrıca ayın 1'inde bildirim gösteren bir launchd hatırlatması kurulur.
 
 9. Aylık geri yükleme testi (Mac'te; age gizli anahtarı yalnızca Mac'tedir). Betik özeti doğrular, yedeği 700 izinli geçici bir dizine çözer, `integrity_check` ve tablo sayılarını gösterir, çıkarken geçici dizini siler:
 
@@ -1102,6 +1104,7 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-97 | Barındırma evdeki 64 bit Debian tabanlı Linux cihaz, systemd. Birimler tek şablon `finans-job@.service` ve iş başına `finans-<iş>.timer`; ayarlar `/etc/finans/finans.env`, sırlar `/etc/finans/credstore/` ve LoadCredential (credential adı ayar adı, boş dosya tanımsız). Elle komutlar `deploy/ft-finans` (systemd-run, aynı kullanıcı ve sırlar). Maaş günü timer'ı her gün 09:00; mesaj yalnızca maaş gününden sonraki 3 gün içinde, değilse job_run'a "atlandı: pencere geçti". Mac yedekleri `restrict` ve `rrsync -ro` ile sınırlı bir SSH anahtarıyla çeker | systemd ayın olmayan gününde tetiklenmez; ilk kurulumda geçmiş ayın maaş günü mesajı gitmesin; tek şablon birimlerin birbirinden sapmasını önler | Zamanlama, Kurulum, Güvenlik |
 | K-98 | K-92'ye ek: cihaz başka projelerle paylaşıldığı için M5 sertleştirmesinin bir kısmı M4 birimlerine çekilir: `NoNewPrivileges=yes`, `PrivateTmp=yes`, `ProtectSystem=strict`, `ReadWritePaths=/var/lib/finans`, `ProtectHome=yes`. `deploy/ft-finans` aynı ayarlarla çalışır. Yazılan her yol (veritabanı, kilitler, yedekler, şifresiz geçici kopya, migration yedeği) `/var/lib/finans` altındadır; `/etc/finans` ve `/opt/finans` yalnızca okunur. `finans` kullanıcısı docker grubunda olmaz. Kalan risk: birim sertleştirmesi root seviyesindeki bir saldırıya karşı korumaz; cihazdaki finans.db'nin güvenliği aynı cihazdaki diğer projelerin sertleştirmesine (docker grubu, CI anahtarı, Chromium) bağlıdır; bkz. açık soru "Paylaşılan cihazın sertleştirmesi". Çıkış allowlist'i ve diğer ayarlar M5'te kalır | Bizim işimiz kötüye kullanılırsa zarar sınırlansın; beş ayar ucuz ve işlerin davranışını değiştirmiyor. Kalan risk açıkça yazılmazsa birim ayarları yanlış bir güven verir | Güvenlik |
 | K-99 | Sistem saat dilimi değiştirilmez; kurulumda yalnızca NTP açılır (Kurulum'daki `timedatectl set-timezone` adımı kaldırıldı). Timer'lar Europe/Istanbul'u açıkça yazar (K-80); uygulama UTC anı alıp mantıksal tarihi ve gösterilen saatleri İstanbul saatine çevirerek hesaplar. Sistem saat dilimi UTC, +14 ya da −8 iken `ft job run`'ın mantıksal tarihi ve `ft job list`'in saatleri değişmez; test bunu kanıtlar | Sistem saat dilimini değiştirmek gereksiz ve aynı cihazdaki diğer projeleri etkiler | Zamanlama, Test |
+| K-100 | K-82 ve K-97'ye ek: Mac yedekleri GNU rsync ile çeker (Homebrew, `/opt/homebrew/bin/rsync`); launchd işinde rsync tam yoluyla yazılır. macOS'un `/usr/bin/rsync`'i (openrsync) kullanılmaz | Kurulumda openrsync'in komutu rrsync tarafından reddedildi ("invalid rsync-command syntax or options"); SSH girişi çalıştığı halde çekme başarısız oluyordu. Homebrew rsync ile çekme ve `shasum -c` doğrulaması geçti | Kurulum, Yedek |
 
 ## Planı kodlama ajanıyla uygulama
 
