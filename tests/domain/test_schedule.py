@@ -17,7 +17,9 @@ def _at(year: int, month: int, day: int, hour: int, minute: int) -> datetime:
     ("job", "now", "expected"),
     [
         ("sync-prices", _at(2026, 11, 24, 21, 30), date(2026, 11, 24)),
-        ("sync-prices", _at(2026, 11, 24, 21, 29), date(2026, 11, 23)),
+        ("sync-prices", _at(2026, 11, 24, 21, 29), date(2026, 11, 24)),
+        ("sync-prices", _at(2026, 11, 24, 12, 0), date(2026, 11, 24)),
+        ("sync-prices", _at(2026, 11, 24, 11, 59), date(2026, 11, 23)),
         ("sync-prices", _at(2026, 11, 28, 12, 0), date(2026, 11, 27)),
         ("sync-prices", _at(2026, 11, 30, 8, 0), date(2026, 11, 27)),
         ("weekly-report", _at(2026, 11, 29, 20, 0), date(2026, 11, 29)),

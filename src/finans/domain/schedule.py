@@ -12,7 +12,8 @@ from finans.domain.models import DomainError
 from finans.domain.numeric import in_domain_context
 
 JOBS: Final = ("sync-prices", "sync-cpi", "weekly-report", "monthly-report", "payday", "backup")
-SYNC_PRICES_AT: Final = time(21, 30)
+# K-122: hafta içi iki çalışma; mantıksal gün ilkiyle başlar, ikincisi aynı günü yeniden dener.
+SYNC_PRICES_TIMES: Final = (time(12, 0), time(21, 30))
 SYNC_CPI_AT: Final = time(10, 30)
 SYNC_CPI_DAYS: Final = (3, 4, 5)
 WEEKLY_REPORT_AT: Final = time(20, 0)
@@ -58,7 +59,7 @@ def _slots(job: str, now: datetime, payday: int) -> Iterator[datetime]:
 def _slot_time(job: str, day: date, payday: int) -> time | None:
     match job:
         case "sync-prices":
-            return SYNC_PRICES_AT if day.weekday() < _SATURDAY else None
+            return SYNC_PRICES_TIMES[0] if day.weekday() < _SATURDAY else None
         case "sync-cpi":
             return SYNC_CPI_AT if day.day in SYNC_CPI_DAYS else None
         case "weekly-report":

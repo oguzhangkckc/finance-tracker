@@ -2,6 +2,7 @@
 Description=finans-takip: TEFAS fiyat senkronu ve sapma alarmları
 
 [Timer]
+OnCalendar=Mon..Fri 12:00 Europe/Istanbul
 OnCalendar=Mon..Fri 21:30 Europe/Istanbul
 Persistent=true
 Unit=finans-job@sync-prices.service

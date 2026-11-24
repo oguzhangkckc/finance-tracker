@@ -12,28 +12,28 @@ from finans.domain.schedule import (
     PAYDAY_AT,
     SYNC_CPI_AT,
     SYNC_CPI_DAYS,
-    SYNC_PRICES_AT,
+    SYNC_PRICES_TIMES,
     WEEKLY_REPORT_AT,
 )
 from finans.settings import Settings
 
 DEPLOY = Path(__file__).resolve().parents[2] / "deploy"
 UNITS = DEPLOY / "systemd"
-CALENDARS = {
-    "sync-prices": "Mon..Fri 21:30 Europe/Istanbul",
-    "sync-cpi": "*-*-03..05 10:30 Europe/Istanbul",
-    "weekly-report": "Sun 20:00 Europe/Istanbul",
-    "monthly-report": "*-*-05..10 11:00 Europe/Istanbul",
-    "payday": "*-*-* 09:00 Europe/Istanbul",
-    "backup": "*-*-* 03:00 Europe/Istanbul",
+CALENDARS: dict[str, tuple[str, ...]] = {
+    "sync-prices": ("Mon..Fri 12:00 Europe/Istanbul", "Mon..Fri 21:30 Europe/Istanbul"),
+    "sync-cpi": ("*-*-03..05 10:30 Europe/Istanbul",),
+    "weekly-report": ("Sun 20:00 Europe/Istanbul",),
+    "monthly-report": ("*-*-05..10 11:00 Europe/Istanbul",),
+    "payday": ("*-*-* 09:00 Europe/Istanbul",),
+    "backup": ("*-*-* 03:00 Europe/Istanbul",),
 }
-TIMES: dict[str, time] = {
-    "sync-prices": SYNC_PRICES_AT,
-    "sync-cpi": SYNC_CPI_AT,
-    "weekly-report": WEEKLY_REPORT_AT,
-    "monthly-report": MONTHLY_REPORT_AT,
-    "payday": PAYDAY_AT,
-    "backup": BACKUP_AT,
+TIMES: dict[str, tuple[time, ...]] = {
+    "sync-prices": SYNC_PRICES_TIMES,
+    "sync-cpi": (SYNC_CPI_AT,),
+    "weekly-report": (WEEKLY_REPORT_AT,),
+    "monthly-report": (MONTHLY_REPORT_AT,),
+    "payday": (PAYDAY_AT,),
+    "backup": (BACKUP_AT,),
 }
 SECRETS = [
     "ft_evds_api_key",
@@ -72,6 +72,10 @@ def _one(entries: list[tuple[str, str]], key: str) -> str:
     return value
 
 
+def _calendars(entries: list[tuple[str, str]]) -> tuple[str, ...]:
+    return tuple(value for name, value in entries if name == "OnCalendar")
+
+
 def test_every_job_has_a_persistent_timer_in_istanbul_time() -> None:
     timers = sorted(
         path.name for path in UNITS.glob("*.timer") if not path.name.startswith("finans-sanal-")
@@ -79,7 +83,7 @@ def test_every_job_has_a_persistent_timer_in_istanbul_time() -> None:
     assert timers == sorted(f"finans-{job}.timer" for job in JOBS)
     for job in JOBS:
         unit = _unit(UNITS / f"finans-{job}.timer")
-        assert _one(unit["Timer"], "OnCalendar") == CALENDARS[job]
+        assert _calendars(unit["Timer"]) == CALENDARS[job]
         assert _one(unit["Timer"], "Persistent") == "true"
         assert _one(unit["Timer"], "Unit") == f"finans-job@{job}.service"
         assert _one(unit["Install"], "WantedBy") == "timers.target"
@@ -87,16 +91,16 @@ def test_every_job_has_a_persistent_timer_in_istanbul_time() -> None:
 
 @pytest.mark.parametrize("job", JOBS)
 def test_timer_time_matches_the_schedule_behind_logical_dates(job: str) -> None:
-    clock = re.search(r"(\d\d):(\d\d) Europe/Istanbul$", CALENDARS[job])
-    assert clock is not None
-    assert time(int(clock[1]), int(clock[2])) == TIMES[job]
+    clocks = [re.search(r"(\d\d):(\d\d) Europe/Istanbul$", c) for c in CALENDARS[job]]
+    assert all(clocks)
+    assert tuple(time(int(c[1]), int(c[2])) for c in clocks if c) == TIMES[job]
 
 
 def test_timer_days_match_the_schedule() -> None:
     cpi = f"*-*-0{min(SYNC_CPI_DAYS)}..0{max(SYNC_CPI_DAYS)} "
     monthly = f"*-*-0{MONTHLY_REPORT_DAYS[0]}..{MONTHLY_REPORT_DAYS[-1]} "
-    assert CALENDARS["sync-cpi"].startswith(cpi)
-    assert CALENDARS["monthly-report"].startswith(monthly)
+    assert CALENDARS["sync-cpi"][0].startswith(cpi)
+    assert CALENDARS["monthly-report"][0].startswith(monthly)
 
 
 def test_service_runs_the_single_entry_point_as_its_own_user() -> None:
@@ -184,15 +188,15 @@ SANAL_SECRETS = ["ft_evds_api_key", "ft_telegram_bot_token"]
 def test_sanal_timers_follow_the_real_calendar_and_run_after_the_real_jobs() -> None:
     timers = sorted(path.name for path in UNITS.glob("finans-sanal-*.timer"))
     assert timers == sorted(f"finans-sanal-{job}.timer" for job in SANAL_JOBS)
-    # K-121: sanal fiyat senkronu gerçeğinden sonra; iki profilin TEFAS istekleri üst üste binmez.
+    # K-121, K-122: sanal fiyat senkronu gerçeğinden sonra; istekler üst üste binmez.
     calendars = {
         **CALENDARS,
-        "sync-prices": "Mon..Fri 21:45 Europe/Istanbul",
-        "backup": "*-*-* 03:15 Europe/Istanbul",
+        "sync-prices": ("Mon..Fri 12:15 Europe/Istanbul", "Mon..Fri 21:45 Europe/Istanbul"),
+        "backup": ("*-*-* 03:15 Europe/Istanbul",),
     }
     for job in SANAL_JOBS:
         unit = _unit(UNITS / f"finans-sanal-{job}.timer")
-        assert _one(unit["Timer"], "OnCalendar") == calendars[job]
+        assert _calendars(unit["Timer"]) == calendars[job]
         assert _one(unit["Timer"], "Persistent") == "true"
         assert _one(unit["Timer"], "Unit") == f"finans-sanal-job@{job}.service"
         assert _one(unit["Install"], "WantedBy") == "timers.target"
