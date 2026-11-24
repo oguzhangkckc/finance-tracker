@@ -153,3 +153,61 @@ def test_quality_thresholds_default_and_merge_with_overrides(tmp_path: Path) -> 
         "default": D("0.10"),
         "hisse": D("0.15"),
     }
+
+
+def test_missing_contribution_is_undefined_and_payday_is_read(tmp_path: Path) -> None:
+    without = VALID.replace("[contribution]\nmonthly = 15000.50\n", "")
+    config = TomlPortfolioSource().load(_write(tmp_path, without))
+    assert (config.monthly_contribution, config.payday) == (None, None)
+
+    zero = VALID.replace("monthly = 15000.50\n", "monthly = 0\npayday = 15\n")
+    config = TomlPortfolioSource().load(_write(tmp_path, zero))
+    assert (config.monthly_contribution, config.payday) == (D(0), 15)
+
+
+@pytest.mark.parametrize(
+    ("contribution", "expected"),
+    [
+        (
+            "monthly = 1\npayday = 32\n",
+            "contribution.payday: 1 ile 31 arasında olmalı; 32 verildi.",
+        ),
+        ('monthly = 1\npayday = "15"\n', "contribution.payday: tam sayı olmalı, '15' verildi."),
+        (
+            "payday = 15\n",
+            "contribution.payday: maaş günü için contribution.monthly da tanımlı olmalı.",
+        ),
+    ],
+)
+def test_payday_problems_are_reported(tmp_path: Path, contribution: str, expected: str) -> None:
+    text = VALID.replace("monthly = 15000.50\n", contribution)
+    assert expected in _issues(tmp_path, text)
+
+
+def test_out_of_allocation_instrument_needs_no_target(tmp_path: Path) -> None:
+    text = VALID + (
+        '\n[[instruments]]\ncode = "ACL"\nkind = "TEFAS_YAT"\n'
+        'asset_class = "acil_durum"\nallocation = false\n'
+    )
+    config = TomlPortfolioSource().load(_write(tmp_path, text))
+    assert config.instruments[-1] == Instrument(
+        "ACL", InstrumentKind.TEFAS_YAT, "acil_durum", allocation=False
+    )
+
+
+def test_allocation_must_be_a_boolean(tmp_path: Path) -> None:
+    text = VALID.replace('name = "Hisse fonu"', 'name = "Hisse fonu"\nallocation = "hayır"')
+    assert "instruments[0].allocation: true ya da false olmalı, 'hayır' verildi." in _issues(
+        tmp_path, text
+    )
+
+
+def test_target_class_needs_an_in_allocation_instrument(tmp_path: Path) -> None:
+    text = VALID.replace(
+        'category = "para_piyasasi"', 'category = "para_piyasasi"\nallocation = false'
+    )
+    expected = (
+        "targets.dusuk_risk: bu sınıfta dağılım içi varlık yok; "
+        "allocation = false olanlar sayılmaz."
+    )
+    assert expected in _issues(tmp_path, text)

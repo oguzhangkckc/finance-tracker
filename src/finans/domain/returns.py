@@ -2,7 +2,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Final
+from typing import Final, Literal
 
 from finans.domain.inflation import CpiSeries, deflator
 from finans.domain.models import ZERO, CashFlow, DomainError, PricePoint, Transaction
@@ -21,6 +21,13 @@ class PeriodReturn:
     rate: Decimal
     annualized: bool
     days: int
+
+
+@dataclass(frozen=True, slots=True)
+class Unavailable:
+    """K-44: "undefined" akış yok, işaret değişmiyor ya da D = 0; "out_of_range" kök yok."""
+
+    reason: Literal["out_of_range", "undefined"]
 
 
 @in_domain_context
@@ -74,16 +81,16 @@ def net_present_value(flows: Sequence[CashFlow], rate: Decimal, *, day_count: in
 
 
 @in_domain_context
-def money_weighted_return(flows: Sequence[CashFlow]) -> PeriodReturn | None:
+def money_weighted_return(flows: Sequence[CashFlow]) -> PeriodReturn | Unavailable:
     if not flows or not _has_sign_change(flows):
-        return None
+        return Unavailable("undefined")
     days = (max(f.on for f in flows) - min(f.on for f in flows)).days
     if days == 0:
-        return None
+        return Unavailable("undefined")
     day_count = YEAR_DAYS if days >= YEAR_DAYS else days
     rate = solve_irr(flows, day_count=day_count, guess=_initial_guess(flows, day_count, days))
     if rate is None:
-        return None
+        return Unavailable("out_of_range")
     return PeriodReturn(rate=rate, annualized=days >= YEAR_DAYS, days=days)
 
 
@@ -155,3 +162,34 @@ def _bisection(flows: Sequence[CashFlow], day_count: int) -> Decimal | None:
         else:
             high = middle
     return (low + high) / 2
+
+
+@in_domain_context
+def real_simple_return(
+    lots: Iterable[Lot], value: Decimal, series: CpiSeries, *, on: date
+) -> Decimal | None:
+    """Her lotun maliyeti değerleme gününün TL'sine çevrilir; dağılım dışı varlıklar için (K-74)."""
+    real_cost = sum(
+        (lot.cost * deflator(series, flow_date=lot.acquired, on=on) for lot in lots), ZERO
+    )
+    return None if real_cost <= ZERO else value / real_cost - 1
+
+
+@in_domain_context
+def modified_dietz(
+    start: Decimal, end: Decimal, flows: Iterable[CashFlow], *, start_day: date, end_day: date
+) -> Decimal | None:
+    """Modified Dietz (K-94): her akış dönemde kaldığı gün oranıyla ağırlıklandırılır.
+
+    Akış işareti K-36'daki gibidir (alım eksi); portföye giren para bunun tersidir.
+    """
+    period = (end_day - start_day).days
+    if period <= 0:
+        raise DomainError(f"Dönem en az bir gün olmalı: {start_day} - {end_day}")
+    if start <= ZERO:
+        return None
+    moves = [(-flow.amount, (end_day - flow.on).days) for flow in flows]
+    base = start + sum((amount * days / period for amount, days in moves), ZERO)
+    if base <= ZERO:
+        return None
+    return (end - start - sum((amount for amount, _ in moves), ZERO)) / base

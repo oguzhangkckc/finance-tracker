@@ -1,11 +1,15 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal
-from typing import Literal
+from decimal import ROUND_FLOOR, Decimal
+from typing import Final, Literal
 
 from finans.domain.models import ZERO, DomainError
 from finans.domain.numeric import in_domain_context
+from finans.domain.portfolio import ONE, AlertThresholds
+
+QUIET_MONTHS: Final = 3
+CENT: Final = Decimal("0.01")
 
 Direction = Literal["above", "below"]
 EventKind = Literal["opened", "resolved"]
@@ -15,6 +19,13 @@ EventKind = Literal["opened", "resolved"]
 class DriftEvent:
     kind: EventKind
     direction: Direction
+
+
+@dataclass(frozen=True, slots=True)
+class ContributionLine:
+    asset_class: str
+    instrument: str
+    amount: Decimal
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,3 +131,74 @@ def allocate_contribution(
     gaps = {name: max(ZERO, targets[name] * total - values[name]) for name in targets}
     gap_sum = sum(gaps.values(), ZERO)
     return {name: contribution * gap / gap_sum for name, gap in gaps.items()}
+
+
+@in_domain_context
+def quiet_threshold(contribution: Decimal | None) -> Decimal:
+    return ZERO if contribution is None else contribution * QUIET_MONTHS
+
+
+@in_domain_context
+def quiet_period_over(
+    value: Decimal, contribution: Decimal | None, *, ended_on: date | None
+) -> bool:
+    """Sessiz dönem bir kez biter ve geri dönmez (K-75)."""
+    return ended_on is not None or value >= quiet_threshold(contribution)
+
+
+@in_domain_context
+def evaluate_portfolio_drift(
+    values: Mapping[str, Decimal],
+    targets: Mapping[str, Decimal],
+    open_directions: Mapping[str, Direction],
+    thresholds: AlertThresholds,
+) -> list[DriftDecision]:
+    current = deviations(weights(values), targets)
+    return [
+        evaluate_drift(
+            name,
+            current[name],
+            open_direction=open_directions.get(name),
+            open_above=thresholds.open_above,
+            close_below=thresholds.close_below,
+        )
+        for name in sorted(targets)
+    ]
+
+
+@in_domain_context
+def round_to_cents(amounts: Mapping[str, Decimal], total: Decimal) -> dict[str, Decimal]:
+    """En büyük kalan (Hamilton) yöntemi; eşit kalanlarda ad sırası (K-37)."""
+    _require_non_negative(amounts, "Tutar")
+    if total != total.quantize(CENT):
+        raise DomainError(f"Toplam kuruşa tam olmalı: {total}")
+    if abs(sum(amounts.values(), ZERO) - total) >= CENT:
+        raise DomainError(f"Tutarların toplamı {total} ile tutmuyor")
+    floors = {name: amount.quantize(CENT, rounding=ROUND_FLOOR) for name, amount in amounts.items()}
+    missing = int((total - sum(floors.values(), ZERO)) / CENT)
+    winners = set(sorted(amounts, key=lambda name: (floors[name] - amounts[name], name))[:missing])
+    return {name: floors[name] + (CENT if name in winners else ZERO) for name in sorted(amounts)}
+
+
+@in_domain_context
+def plan_contribution(
+    funds: Mapping[str, Mapping[str, Decimal]],
+    targets: Mapping[str, Decimal],
+    contribution: Decimal,
+) -> list[ContributionLine]:
+    """Sınıf payı fonlara değerleriyle orantılı, sınıf değeri 0 ise eşit bölünür (K-83)."""
+    empty = sorted(name for name, members in funds.items() if not members)
+    if empty:
+        raise DomainError(f"Dağılım içi fonu olmayan sınıf: {', '.join(empty)}")
+    class_values = {name: sum(members.values(), ZERO) for name, members in funds.items()}
+    shares = allocate_contribution(class_values, targets, contribution)
+    exact: dict[str, Decimal] = {}
+    owner: dict[str, str] = {}
+    for name, members in funds.items():
+        total = class_values[name]
+        for code, value in members.items():
+            exact[code] = shares[name] * (value / total if total > ZERO else ONE / len(members))
+            owner[code] = name
+    rounded = round_to_cents(exact, contribution)
+    ordered = sorted(exact, key=lambda code: (owner[code], code))
+    return [ContributionLine(owner[code], code, rounded[code]) for code in ordered]

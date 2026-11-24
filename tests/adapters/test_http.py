@@ -226,3 +226,28 @@ def test_server_errors_are_not_a_block(client: HttpClient) -> None:
     with pytest.raises(SourceError) as failure:
         client.get_json(URL)
     assert not isinstance(failure.value, SourceBlocked)
+
+
+@respx.mock
+def test_429_reads_retry_after_from_a_telegram_style_body(
+    client: HttpClient, clock: FixedClock
+) -> None:
+    limited = httpx.Response(429, json={"ok": False, "parameters": {"retry_after": 7}})
+    respx.get(URL).side_effect = [limited, OK]
+
+    client.get_json(URL)
+
+    assert clock.slept == [7]
+
+
+@respx.mock
+def test_bot_tokens_in_urls_are_masked_even_when_not_listed(clock: FixedClock) -> None:
+    url = "https://api.telegram.org/bot123456:ABC-def_789/sendMessage"
+    respx.post(url).respond(400, json={"ok": False, "description": "Bad Request: chat not found"})
+
+    with HttpClient(clock) as http, pytest.raises(SourceError) as failure:
+        http.post_json(url, {})
+
+    assert "123456:ABC-def_789" not in str(failure.value)
+    assert "bot***" in str(failure.value)
+    assert "chat not found" in str(failure.value)

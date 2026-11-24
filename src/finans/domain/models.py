@@ -84,6 +84,7 @@ class Instrument:
     asset_class: str
     category: str | None = None
     name: str | None = None
+    allocation: bool = True
 
     def __post_init__(self) -> None:
         if not self.code.strip():

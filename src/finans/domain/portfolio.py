@@ -38,9 +38,10 @@ class QualityThresholds:
 class PortfolioConfig:
     instruments: tuple[Instrument, ...]
     targets: Mapping[str, Decimal]
-    monthly_contribution: Decimal
+    monthly_contribution: Decimal | None
     alerts: AlertThresholds
     quality: QualityThresholds = field(default_factory=QualityThresholds)
+    payday: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +66,7 @@ class InstrumentEntry:
     path: str
     code: str | None
     asset_class: str | None
+    allocation: bool = True
 
 
 def _show(value: Decimal) -> str:
@@ -77,6 +79,8 @@ def validate_portfolio(
     targets: Mapping[str, Decimal | None],
     alerts: AlertThresholds | None,
     contribution: Decimal | None,
+    *,
+    payday: int | None = None,
 ) -> list[ConfigIssue]:
     """Geçersiz değerli hedefler None olarak gelir; yapısal hatası raporlanmış sayılır."""
     issues: list[ConfigIssue] = []
@@ -85,7 +89,8 @@ def validate_portfolio(
     known = ", ".join(sorted(targets))
     first_seen: dict[str, str] = {}
     for entry in entries:
-        if targets and entry.asset_class is not None and entry.asset_class not in targets:
+        in_allocation = entry.allocation and entry.asset_class is not None
+        if targets and in_allocation and entry.asset_class not in targets:
             issues.append(
                 ConfigIssue(
                     f"{entry.path}.asset_class",
@@ -109,6 +114,10 @@ def validate_portfolio(
         issues.append(
             ConfigIssue("contribution.monthly", f"negatif olamaz; {_show(contribution)} verildi.")
         )
+    if payday is not None and not 1 <= payday <= 31:
+        issues.append(
+            ConfigIssue("contribution.payday", f"1 ile 31 arasında olmalı; {payday} verildi.")
+        )
     return issues
 
 
@@ -123,11 +132,13 @@ def _target_issues(
         if value is not None and value < ZERO
     ]
     held = {entry.asset_class for entry in entries if entry.asset_class is not None}
-    issues.extend(
-        ConfigIssue(f"targets.{name}", "bu sınıfta tanımlı varlık yok.")
-        for name in targets
-        if name not in held
-    )
+    in_allocation = {entry.asset_class for entry in entries if entry.allocation}
+    for name in targets:
+        if name not in held:
+            issues.append(ConfigIssue(f"targets.{name}", "bu sınıfta tanımlı varlık yok."))
+        elif name not in in_allocation:
+            message = "bu sınıfta dağılım içi varlık yok; allocation = false olanlar sayılmaz."
+            issues.append(ConfigIssue(f"targets.{name}", message))
     valid = {name: value for name, value in targets.items() if value is not None}
     if len(valid) == len(targets):
         issues.extend(_sum_issue(valid))

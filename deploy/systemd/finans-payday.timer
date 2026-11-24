@@ -1,0 +1,10 @@
+[Unit]
+Description=finans-takip: maaş günü mesajı; her gün denenir, yalnızca 3 günlük pencerede gönderilir
+
+[Timer]
+OnCalendar=*-*-* 09:00 Europe/Istanbul
+Persistent=true
+Unit=finans-job@payday.service
+
+[Install]
+WantedBy=timers.target

@@ -43,6 +43,12 @@ ban-relative-imports = "all"
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101"]
 "scripts/**" = ["T201"]
+# E-posta kontrolü ve testi git'i PATH'ten, sabit argümanlarla çağırır.
+"scripts/check_push_emails.py" = ["S603", "S607"]
+# age işletim sistemi paketidir; sabit argümanlarla çağrılır (K-82).
+"src/finans/adapters/age.py" = ["S603"]
+"tests/adapters/test_age.py" = ["S603"]
+"tests/scripts/**" = ["S603", "S607"]
 
 [tool.mypy]
 strict = true
@@ -95,13 +101,19 @@ allow_indirect_imports = true
 name = "Adapter'lar birbirinden bağımsız"
 type = "independence"
 modules = [
+    "finans.adapters.age",
     "finans.adapters.clock",
     "finans.adapters.csv_statement",
     "finans.adapters.csv_transactions",
     "finans.adapters.evds",
+    "finans.adapters.healthcheck",
+    "finans.adapters.json_log",
+    "finans.adapters.lock",
     "finans.adapters.portfolio_toml",
+    "finans.adapters.render",
     "finans.adapters.sqlite",
     "finans.adapters.tefas",
+    "finans.adapters.telegram",
 ]
 
 [[tool.importlinter.contracts]]
@@ -123,6 +135,8 @@ name = "domain ve ports altyapı kütüphanesi görmez"
 type = "forbidden"
 source_modules = ["finans.domain", "finans.ports"]
 forbidden_modules = ["pydantic", "pydantic_settings", "typer"]
+# K-03: port'lar contracts'ı (pydantic modelleri) kullanabilir; doğrudan import yasak kalır.
+allow_indirect_imports = true
 
 [dependency-groups]
 dev = [
@@ -135,4 +149,5 @@ dev = [
     "pytest-cov>=7.1.0",
     "respx>=0.23.1",
     "ruff>=0.17.6",
+    "syrupy>=7.0.3",
 ]

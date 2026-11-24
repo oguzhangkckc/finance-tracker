@@ -44,7 +44,7 @@ P0 gereksinimler ilk kullanılabilir sürümü (M4) tanımlar; P1 ve P2 sonraki 
 | FR-11 | Dengeleme önerisi: yalnızca yeni birikimle | P0 |
 | FR-12 | OpenClaw skill ve salt okunur sorgu komutları | P1 |
 | FR-13 | PPK karar özeti (LLM, yalnızca tcmb.gov.tr metni) | P2 |
-| FR-14 | Maaş günü hatırlatması | P2 |
+| FR-14 | Maaş günü mesajı: bu ayki katkının sınıf ve fon bazında dağılım önerisi ve işlemleri girme hatırlatması (K-83) | P0 |
 | FR-15 | Satışlı dengeleme önerisi (katkı dağıtıldıktan sonra sapma eşiğin iki katını aşıyorsa) | P2 |
 
 | Fonksiyonel olmayan | Kabul ölçütü |
@@ -56,7 +56,7 @@ P0 gereksinimler ilk kullanılabilir sürümü (M4) tanımlar; P1 ve P2 sonraki 
 | Güvenlik | En az yetki; ajanın veritabanına hiçbir erişimi yok; sırlar log ve LLM bağlamına girmez |
 | Maliyet | Sabit raporlar LLM çağırmaz; LLM sağlayıcısında aylık harcama limiti |
 | Gözlemlenebilirlik | Yapılandırılmış log, iş çalıştırma kaydı, kaçırılan rapor için harici alarm |
-| Taşınabilirlik | Tek SQLite dosyası; tek komutla kurulum; Linux VPS veya ev sunucusu |
+| Taşınabilirlik | Tek SQLite dosyası; tek komutla kurulum; her zaman açık bir Linux makine (VPS ya da ev cihazı), systemd (K-80) |
 
 ## Mimari genel bakış
 
@@ -111,8 +111,9 @@ Python 3.13 ve SQLite üzerine, az bağımlılıklı ve ORM'siz bir yığın se�
 | Kontratlar | pydantic v2 | Dış yanıt doğrulama, JSON Schema üretimi | Elle doğrulama |
 | CLI | Typer | Tip ipuçlarından alt komut ve yardım metni | argparse: daha çok kalıp kod |
 | Ayar ve sır | TOML (portföy) ve pydantic-settings (ortam); üretimde sırlar systemd LoadCredential ile | Ayar ile sır ayrımı, SecretStr ile log'a sızmama; sırlar ortam değişkenlerine ve alt süreçlere geçmez | Tek dosyada her şey |
-| Log | structlog, JSON | journald ile uyumlu, sorgulanabilir | print/logging metni |
-| Zamanlama | systemd timer | Persistent=true ile kaçırılan işleri telafi eder, journald entegrasyonu | cron: kaçırılan işi telafi etmez |
+| Log | Standart `logging` ve küçük bir JSON biçimlendirici; stdout üzerinden journald'a (K-81) | journald ile uyumlu, sorgulanabilir; ek bağımlılık yok | structlog: bu ölçekte gereksiz bağımlılık |
+| Zamanlama | systemd timer; her iş tek giriş noktası `ft job run <iş>` ile (K-80) | Persistent=true ile kaçırılan işleri telafi eder, journald entegrasyonu | cron: kaçırılan işi telafi etmez; launchd: makine her zaman açık değil |
+| Yedek şifreleme | age (işletim sistemi paketi); sunucuda yalnızca açık anahtar (K-82) | Basit, modern; sunucu kendi yedeğini çözemez | gpg: karmaşık anahtar yönetimi |
 | XIRR | Kendi uygulaması (Newton-Raphson ve bisection yedeği) | Yaklaşık 40 satır, bağımlılık yok, test edilebilir | pyxirr: Rust bağımlılığı |
 | Test | pytest, hypothesis, syrupy, respx; saat için enjekte FixedClock; ağ conftest ile kapalı | Özellik tabanlı, snapshot, HTTP mock | time-machine: saat zaten Clock port'uyla enjekte ediliyor |
 | Kalite | ruff, mypy --strict, import-linter, AST tabanlı mimari testleri, pre-commit, pip-audit, CI | Katman kurallarını ve yasakları (float, duvar saati) otomatik zorlama | — |
@@ -159,7 +160,9 @@ finance-tracker/
 │   │   ├── sqlite/              # bağlantı fabrikası, repository'ler, migration çalıştırıcı ve öncesindeki yedek
 │   │   │   └── migrations/      # 0001_init.sql ...; paket verisi, importlib.resources ile okunur
 │   │   ├── snapshot_fs.py       # anlık görüntüleri atomik yazar ve okur
-│   │   ├── telegram.py
+│   │   ├── telegram.py, healthcheck.py
+│   │   ├── age.py               # gece yedeğini açık anahtarla şifreler (K-82)
+│   │   ├── lock.py              # iş kilidi, fcntl.flock
 │   │   └── render/text.py, render/json.py
 │   ├── cli/
 │   │   ├── main.py              # ft: insan arayüzü (okuma ve yazma)
@@ -167,7 +170,8 @@ finance-tracker/
 │   ├── bootstrap.py             # composition root: bağımlılıkları bağlar
 │   └── settings.py
 ├── skills/finans-takip/SKILL.md
-├── deploy/systemd/*.service, *.timer
+├── deploy/systemd/finans-job@.service, finans-<iş>.timer   # şablon `ft job run %i` çağırır (K-80, K-97)
+├── deploy/ft-finans, finans.env.example, check-units.sh     # elle komut, ayar örneği, CI denetimi
 ├── docs/DESIGN.md, docs/ROADMAP.md, docs/agent-output.schema.json
 └── tests/unit, arch, contract, repo, snapshots, live, fixtures, fakes
 ```
@@ -311,7 +315,8 @@ CREATE TABLE raw_payload (               -- hata ayıklama için ham yanıt; 30 
   body        BLOB NOT NULL
 ) STRICT;
 
--- 0004 (M4): job_run, alert, alert_event (K-76 ile 0003'ten kaydı)
+-- 0004 (M4): job_run, alert, alert_event (K-76 ile 0003'ten kaydı), allocation_state;
+-- instrument'e allocation kolonu (K-74)
 CREATE TABLE job_run (                  -- her deneme ayrı satır
   id            INTEGER PRIMARY KEY,
   job           TEXT NOT NULL,
@@ -343,6 +348,13 @@ CREATE TABLE alert_event (               -- olay günlüğü; yalnızca eklenir
   deviation   TEXT NOT NULL,             -- Decimal
   occurred_at TEXT NOT NULL,
   notified_at TEXT
+) STRICT;
+
+-- instrument'e eklenir (0004, K-74): allocation INTEGER NOT NULL DEFAULT 1 CHECK (allocation IN (0, 1))
+
+CREATE TABLE allocation_state (          -- tek satır; sapma alarmlarının sessiz dönemi (K-75, K-87)
+  id             INTEGER PRIMARY KEY CHECK (id = 1),
+  quiet_ended_on TEXT CHECK (quiet_ended_on IS NULL OR date(quiet_ended_on) IS quiet_ended_on)
 ) STRICT;
 ```
 
@@ -377,7 +389,12 @@ Migration dosyaları paketin içinde (`src/finans/adapters/sqlite/migrations/`) 
   - Geri dönüş: ft ve zamanlanmış işler durdurulur; `finans.db-wal` ile `finans.db-shm` silinir ve yedek `finans.db` yerine kopyalanır.
   - Bu kopyalar makinede kalır ve şifrelenmez. Şifreli, makine dışı gece yedeği ayrı bir iştir (M4).
 
-Yedekleme her gece sqlite3 .backup ile alınır, şifrelenip makine dışına kopyalanır; geri yükleme ayda bir test edilir. Bu, migration öncesi alınan yerel kopyadan (K-55) ayrıdır.
+**Gece yedeği (M4, K-82).** `ft job run backup` her gece SQLite backup API'siyle tutarlı bir kopya alır. Kopyayı `age` ile config'teki bütün açık anahtarlara (`FT_BACKUP_AGE_RECIPIENTS`, virgülle ayrılmış `age1…` listesi; ör. Mac'teki anahtar ve parola yöneticisinde saklanan kurtarma anahtarı) şifreler ve sunucudaki yerel yedek dizinine (`FT_BACKUP_DIR`) `finans-<UTC zaman damgası>.db.age` adıyla yazar. Bu, migration öncesi alınan yerel kopyadan (K-55) ayrıdır.
+- Şifresiz kopya veritabanının yanında (`FT_BACKUP_SCRATCH_DIR`), 700 izinli geçici bir dizinde 600 izinle oluşur ve iş başarısız olsa bile silinir; silinemezse iş hata verir. Şifreli dosya geçici adla yazılıp yeniden adlandırılır (600 izin). Son 14 yedek tutulur. 30 günden eski raw_payload kayıtları aynı işte silinir.
+- **Doğrulama ikiye bölünür.** Sunucu, şifrelemeden önce kopyada `PRAGMA integrity_check` çalıştırır ("ok" değilse şifrelemez) ve şifreli dosyanın sha256 özetini yanına `<ad>.sha256` olarak (`shasum -c` biçiminde) yazar. `ft backup verify` sunucudaki kopyaların özetini denetler. Tam geri yükleme testi Mac'te, gizli anahtarla `scripts/verify_backup.sh` ile yapılır: özeti doğrular, çözer, `integrity_check` çalıştırır ve tablo sayılarını gösterir.
+- **age gizli anahtarı sunucuda durmaz.** Sunucu yedeği çözemez. `ft doctor` alıcıların açık anahtar olduğunu ve `.env`, credentials dizini ile yedek dizininde `AGE-SECRET-KEY-` içeren dosya olmadığını denetler; bulursa yalnızca dosya adını yazar.
+- **Makine dışına çıkış çekmeyle olur.** Sunucu yedek hedefi için hiçbir kimlik bilgisi tutmaz; Mac şifreli yedekleri SSH ile çeker. Sunucu ele geçirilse bile Mac'teki kopyalara ulaşamaz.
+- Her başarılı yedekten sonra günlük yedek ping'i gider (K-84).
 
 ## Veri toplama katmanı
 
@@ -597,12 +614,14 @@ Reel XIRR'da her akış E[ref(t)] / E[ref(t_i)] ile çarpılır. Son akışta t_
 - **Dağılım dışı varlık (M4, K-74).** Acil durum fonu gibi takip edilen ama hedef dağılıma girmeyen varlıklar desteklenir.
   - Önerilen biçim: `instruments[]` içinde `allocation = false`. Böyle bir varlık değerlemede ve raporda görünür; ağırlık, sapma, sapma alarmı ve dengeleme hesabına girmez. Config doğrulamasındaki "hedef sınıflar varlık sınıflarıyla birebir aynı" kuralı bu varlıkları saymaz.
   - Rapor dağılım içi, dağılım dışı ve toplam değeri ayrı gösterir.
-  - Para ağırlıklı getiri (nominal ve reel XIRR) yalnızca dağılım içi portföy için hesaplanır. Dağılım dışı her varlık kendi satırında basit reel getiriyle görünür; bu, basit getirinin (K-39) Fisher bağıntısıyla ve TÜFE referans ay kuralıyla reele çevrilmiş halidir.
+  - Para ağırlıklı getiri (nominal ve reel XIRR) yalnızca dağılım içi portföy için hesaplanır. Dağılım dışı her varlık kendi satırında basit reel getiriyle görünür; bu, basit getirinin (K-39) Fisher bağıntısıyla ve TÜFE referans ay kuralıyla reele çevrilmiş halidir. Birden çok lotta her lotun maliyeti değerleme gününün TL'sine çevrilir: r = V / Σ M_i × E[ref(t)] / E[ref(t_i)] − 1 (K-94).
 - **Başlangıçta sessiz sapma alarmları (M4, K-75).** Portföy birkaç aylık katkı büyüklüğüne ulaşana kadar sapma alarmları açılmaz ve bildirilmez; küçük bir portföyde tek bir alım ağırlıkları onlarca puan oynatır.
   - Kural: dağılım içi toplam değer `3 × aylık katkı`nın altındaysa sapma alarmı değerlendirilmez (N = 3). Raporda sapma değerleri ve katkıyla dengeleme önerisi yine gösterilir; alarm bölümünde "Portföy henüz küçük; sapma alarmları 3 aylık katkıya ulaşınca başlar." yazar.
   - Katkı tanımlı değilse (K-56) eşik 0'dır; alarmlar baştan çalışır.
   - Sessiz dönem tek yönlüdür: eşik bir kez aşıldığında kalıcı olarak biter ve bittiği tarih kaydedilir (M4 migration'ında). Portföy sonradan eşiğin altına inse de alarmlar susmaz. Değerlendirme sessiz dönem bittiğinde açık alarm yokmuş gibi başlar (açılma eşiği 5 puan).
   - Test: eşiğin etrafında gidip gelen değerlerde alarm durumu titreşmez; sessiz dönem bir kez biter ve geri dönmez.
+  - Bitiş tarihi tek satırlık `allocation_state` tablosunda tutulur (K-87). Rapordaki not güncel değere değil kaydedilen bitiş tarihine bakar: bitiş tarihi yoksa ve eşik 0'dan büyükse gösterilir (K-95).
+- **Fiyatlar eksikken alarm değerlendirilmez (M4, K-85).** Değerlendirme yalnızca sync-prices "ok" bittiğinde, yani hedef günde bütün aktif fonların fiyatı varken çalışır. "partial"da atlanır ve atlandığı job_run.detail'e yazılır; eksik fiyat ağırlıkları bozar.
 - Dengeleme yalnızca yeni birikimle yapılır, çünkü satış komisyon ve stopaj doğurur. K bu ayki katkı, V toplam değer, h hedef ağırlıktır. K, `portfolio.toml` içinde `[contribution]` bölümünde tanımlanır ve `ft report monthly --contribution` ile geçersiz kılınabilir.
 
 ```latex
@@ -613,6 +632,11 @@ T_c = h_c (V + K), \quad d_c = \max(0,\, T_c - V_c)
 - Katkı tanımlı değilse (`[contribution]` yok ve `--contribution` verilmemiş) aylık raporun dengeleme bölümü öneri göstermez, "Katkı tanımlı değil." yazar; sıfırlarla dolu bir öneri gösterilmez (M4, K-56). M2'de eksik `[contribution]` 0 olarak okunuyor; M4'te "tanımlı değil" ile açıkça yazılmış 0 ayrılır ve `PortfolioConfig.monthly_contribution` `Decimal | None` olur.
 - Katkı açıkça 0 ise (`[contribution]` içinde 0 ya da `--contribution 0`) dengeleme bölümü "Bu ay katkı 0." yazar; sıfırlarla dolu öneri bu durumda da gösterilmez (M4, K-59).
 - a_c tam hassasiyetle hesaplanır. Kuruşa yuvarlama sunum katmanında, toplamı K'ya eşit tutan en büyük kalan (Hamilton) yöntemiyle yapılır (M4).
+- **Maaş günü mesajı (M4, K-83).** `[contribution]` altında `payday` (ayın günü, 1–31; ay daha kısaysa ayın son günü) tanımlanır; `payday` verilmişse `monthly` zorunludur. Maaş günü 09:00'da gönderilen mesaj bu ayki katkının dağılım önerisini içerir:
+  - Sınıf payları `allocate_contribution` ile bulunur. Sınıf payı, sınıftaki dağılım içi fonlara mevcut değerleriyle orantılı bölünür; sınıfın değeri 0 ise eşit bölünür.
+  - Tutarlar Hamilton yöntemiyle kuruşa yuvarlanır; toplam katkıya eşit kalır.
+  - Mesaj "Alımları `ft tx add` ile gir." hatırlatmasıyla biter.
+  - Mesajın tutar gösterimi kendi ayarına bağlıdır: `FT_TELEGRAM_PAYDAY_SHOW_AMOUNTS` (varsayılan false). false iken paylar katkının yüzdesi olarak, true iken TL olarak gösterilir. Bu ayar diğer mesajların gizleme ayarından (K-90) bağımsızdır (K-93). Tutarlar her durumda `ft report payday` ile yerelde görülür.
 - Özellik testleri: Σa = K; a_c ≥ 0; a_c ≤ d_c. Decimal bölmesinin artığı için bu koşullar 1e−20 göreli toleransla sınanır.
   - a_c ≤ d_c, hedefin altındaki sınıflar için V_c + a_c ≤ T_c demektir.
   - Hedefte ya da hedefin üstünde olan sınıflar (d_c = 0) pay almaz. Onlarda V_c + a_c = V_c ≥ T_c olabilir; bu yüzden V_c + a_c ≤ T_c tüm sınıflar için değil, yalnızca d_c > 0 olanlar için sınanır.
@@ -639,18 +663,27 @@ class Report(BaseModel):
 
 Report ve ajan çıktıları `finans.contracts` içindeki pydantic modelleridir. Renderer'lar application'daki `ReportRenderer` port'unu uygular ve bootstrap'ta enjekte edilir.
 
-Haftalık rapor: toplam değer (dağılım içi, dağılım dışı ve toplam ayrı, K-74) ve haftalık değişim, varlık satırları, dağılım ve sapma, açık uyarılar, veri sorunları, tek satırlık sistem sağlığı.
+Haftalık rapor: toplam değer (dağılım içi, dağılım dışı ve toplam ayrı, K-74) ve haftalık değişim (bir önceki Pazar'ın as-of değerlemesine göre; o gün için değerleme yoksa "—", K-88; Modified Dietz ile hesaplanır: (V_1 − V_0 − ΣF) / (V_0 + Σ w_i·F_i), F portföye giren para (alım artı, satış eksi), w_i = akışın dönemde kaldığı gün / dönem günü; V_0 = 0 ya da payda ≤ 0 ise "—", K-94), varlık satırları, dağılım ve sapma, açık uyarılar, veri sorunları, tek satırlık sistem sağlığı.
 
 Aylık rapor: haftalık içeriğe ek olarak kullanılan TÜFE dönemleri ve yıllık enflasyon, lot bazlı reel getiri, nominal ve reel XIRR (bir yıldan kısa dönemde "Dönem getirisi (para ağırlıklı, yıllık değil)" etiketiyle), bu ayki katkı için yalnızca katkıyla dengeleme önerisi (katkı tanımlı değilse yalnızca "Katkı tanımlı değil.", açıkça 0 ise yalnızca "Bu ay katkı 0." notu; K-56, K-59). Para birimi biçimi (1.234,56 TL) `locale` modülüyle değil, kendi biçimlendiricimizle üretilir.
+
+**Rapor kuralları (M4, K-95).**
+- **Eksik fiyat.** Fiyatı olmayan varlık değerlenmez; raporda "fiyat yok, değeri bilinmiyor" yazar ve toplam "bilinen değer … toplam eksik" olarak gösterilir. Değişim ve basit getiri hesaplanmaz. Dağılım içi bir varlığın fiyatı yoksa dağılım, sapma, alarm değerlendirmesi (K-85), katkı planı ve para ağırlıklı getiri hesaplanmaz; maaş günü mesajı öneri yerine eksik fiyatı bildirir.
+- **Kapsam etiketleri.** Getiri satırları kapsamını yazar: tüm varlıklar (değişim, basit getiri, gerçekleşmiş K/Z) ya da dağılım içi (para ağırlıklı getiri). Basit getirinin altında tek satırlık açıklama bulunur.
+- **Değişim dönemi.** Haftalık raporda 7 günlük, aylık raporda önceki ayın son gününden bu yana değişim gösterilir; ikisi de Modified Dietz (K-94).
+- **Reel = nominal notu.** Dağılım içi bütün alımlar ve değerleme aynı TÜFE referans dönemine düşüyorsa (deflatör 1) "Alımlar ve değerleme aynı TÜFE dönemine düştüğü için reel getiri henüz nominalle aynı." yazılır.
+- Rapor snapshot'ları elle kurulmuş modelden değil, test veritabanına yazılan işlem, fiyat ve TÜFE ile `build_report`'un uçtan uca çalıştırılmasıyla üretilir.
 
 ### Telegram
 
 - İki ayrı bot kullanılır. Rapor botu yalnızca çekirdekte çalışır ve yalnızca mesaj gönderir; gelen mesajları okumaz (getUpdates yok). Asistan botu OpenClaw tarafındadır. Böylece bir makinenin ele geçirilmesi diğerinin token'ını açığa çıkarmaz.
-- Bot API sendMessage, `parse_mode=HTML` ile kullanılır. Yalnızca `<`, `>` ve `&` kaçışlanır; tablolar hizalı görünsün diye `<pre>` içinde gönderilir.
+- Bot API sendMessage, `parse_mode=HTML` ile kullanılır. Yalnızca `<`, `>` ve `&` kaçışlanır. Mesaj düz HTML metindir; ters tırnaklı komutlar `<code>` olur. Rapor hizalı tablo içermediği için `<pre>` kullanılmaz (K-95, K-22'yi günceller).
 - Token, Telegram API'sinin yapısı gereği URL'de taşınır. Bu yüzden httpx ve httpcore logger'ları WARNING seviyesindedir ve log'larda `bot<rakamlar>:<token>` kalıbı maskelenir. Hata metinleri de log'a ya da job_run.detail'e yazılmadan önce aynı şekilde temizlenir.
 - 4096 karakter sınırı için mesaj, bölüm sınırlarından parçalanır.
 - 429 yanıtında retry_after süresine uyulur.
 - Rapor botu yalnızca allowlist'teki sohbet ID'sine yazar. Asistan botu yalnızca allowlist'teki sohbetten gelen mesajlara cevap verir.
+- **TL tutarlarını gizleme (M4, K-90).** `FT_TELEGRAM_HIDE_AMOUNTS` varsayılan olarak açıktır: Telegram'a giden mesajlarda TL tutarı yer almaz; ağırlıklar, sapmalar, getiriler ve değişimler yüzde olarak gösterilir. Tam tutarlar yalnızca yerelde, `ft report` çıktısındadır. Gizleme renderer seçeneğidir; Report modeli değişmez. Maaş günü mesajı bu ayardan bağımsız, kendi ayarıyla yönetilir (K-93).
+- Bot ve sohbet ID'si kullanıcı tarafından oluşturulur; `ft notify test` ile kurulum doğrulanır (K-89).
 
 ### Bildirim politikası
 
@@ -672,10 +705,19 @@ Deterministik işler systemd timer ile, LLM gerektiren işler OpenClaw'ın zaman
 | monthly-report | Ayın 5'i ile 10'u arası her gün 11:00 | systemd | Hayır | Önceki ayın TÜFE'si gelince bir kez gönderilir; 10'unda hâlâ yoksa bayat-TÜFE uyarısıyla gönderilir |
 | export-snapshot | Her işin sonunda ve her gün 22:00 | iş zinciri ve systemd | Hayır | Ajan JSON'larını yazar ve OpenClaw makinesine iter. Günlük çalışma, 26 saatlik tazelik eşiğinin hafta sonu aşılmamasını sağlar |
 | ppk-summary | PPK günleri 14:30 | OpenClaw | Evet | Kararlar 14:00'te açıklanır; yıllık takvim config'e girilir |
-| payday-reminder | Maaş günü 09:00 | systemd | Hayır | Sabit metin; maaş günü config'te |
-| backup | Her gece 03:00 | systemd | Hayır | Şifreli, makine dışı kopya; 30 günden eski raw_payload kayıtlarını siler |
+| payday | Her gün 09:00; yalnızca maaş gününden sonraki 3 gün içinde gönderir (`[contribution] payday`) | systemd | Hayır | Bu ayki katkının sınıf ve fon bazında dağılım önerisi ve `ft tx add` hatırlatması; pencere geçtiyse job_run'a "atlandı: pencere geçti" (K-83, K-97) |
+| backup | Her gece 03:00 | systemd | Hayır | age ile şifreli kopya yerel yedek dizinine; Mac SSH ile çeker; 30 günden eski raw_payload silinir; başarıda günlük ping (K-82, K-84) |
 
 **Kadans (K-73, K-69'u değiştirir).** TEFAS fiyatları hafta içi her gün 21:30'da `ft sync prices` ile senkronize edilir; dağılım sapması her başarılı senkronizasyondan sonra değerlendirilir. Haftalık rapor isteğe bağlıdır (varsayılan kapalı, M4 kabul süresince açık). EVDS (sync-cpi) otomatik kalır.
+
+**Tek giriş noktası (M4, K-80).** Her zamanlanmış iş `ft job run <iş> [--logical-date YYYY-AA-GG]` ile çalışır; systemd birimleri yalnızca bu komutu çağırır. İş adları: sync-prices, sync-cpi, weekly-report, monthly-report, payday, backup. Alarm değerlendirmesi sync-prices'ın parçasıdır. export-snapshot ve ppk-summary M5'te eklenir.
+
+**İş yürütücünün ayrıntıları (M4, K-96).**
+- sync-prices: hedef günde bütün aktif TEFAS fonlarının fiyatı varsa "ok" ve alarm değerlendirilir; yoksa "partial" ve alarm atlanır (K-85). Bekleyen alarm bildirimleri iki durumda da gönderilir; gönderim başarısızsa iş "partial" olur, olaylar bekler.
+- monthly-report: önceki ayın TÜFE'si yoksa ayın 10'una kadar "partial" döner ve gönderilmez; 10'u ve sonrasında mesajın başına "Not: … TÜFE'si henüz yok; en son dönemle hesaplandı." eklenerek gönderilir.
+- weekly-report `FT_WEEKLY_REPORT_ENABLED` kapalıyken gönderilmez ve "ok" sayılır. Rapor ve maaş günü mesajı Telegram tanımlı değilse iş "failed" olur.
+- Ping (K-84): rapor işleri `FT_HEALTHCHECK_REPORTS_URL`, yedek `FT_HEALTHCHECK_BACKUP_URL`; "ok"da ping, "failed"da `/fail`, "partial"da ping yok. Ping hatası işin sonucunu değiştirmez, detail'e yazılır.
+- İş hatası yakalanır ve sırlardan arındırılmış mesajla job_run'a yazılır; log stderr'e JSON satırıdır (K-81). Kilit dosyaları `FT_LOCK_DIR`'de (varsayılan veritabanının yanındaki `locks/`). `ft job list` son denemeleri gösterir.
 
 İş yürütme kuralları:
 
@@ -684,7 +726,7 @@ Deterministik işler systemd timer ile, LLM gerektiren işler OpenClaw'ın zaman
   - sync-prices: hedef tarihte tüm aktif fonların fiyatı var. Değilse sonuç "partial" olur ve bir sonraki çalıştırma yeniden dener (son fiyattan 7 gün geriden başladığı için boşluk kendiliğinden kapanır).
   - sync-cpi: hedef dönemin TÜFE'si kaydedildi. Değilse sonuç "partial" olur ve yedek gün yeniden dener.
   - Rapor işleri: rapor gönderildi demektir. Kısmi veriyle gönderilmiş rapor da "ok"tur ve tekrar gönderilmez.
-- Mantıksal tarih saatten değil, zamanlamadan türetilir. Örneğin pazartesi açılışta telafi olarak çalışan haftalık rapor, pazar gününü raporlar. CLI bunu `--logical-date` ile alır.
+- Mantıksal tarih saatten değil, zamanlamadan türetilir: işin şimdiden önceki son planlı zamanının günü (K-86). Örneğin pazartesi açılışta telafi olarak çalışan haftalık rapor, pazar gününü raporlar. sync-prices için hafta sonu telafisinde son Cuma'dır; weekly-report raporlanan Pazar; monthly-report önceki ayın son günü; sync-cpi hedef dönemin ilk günü (ör. Kasım TÜFE'si için 2026-11-01); payday maaş günü. CLI bunu `--logical-date` ile alır.
 - systemd aynı servisi zaten iki kez çalıştırmaz. Elle çalıştırılan ft ile çakışmayı önlemek için Python'da `fcntl.flock` kullanılır; ikinci örnek beklemeden çıkar. Kilit alınabildiği halde bulunan "running" satırı, ölmüş bir sürecin bayat kaydıdır ve devralınır.
 - systemd timer'larında Persistent=true açıktır: makine kapalıyken kaçırılan iş açılışta bir kez çalışır. Sunucu UTC'de olabileceği için OnCalendar ifadelerinde saat dilimi (Europe/Istanbul) açıkça yazılır.
 - "partial" durumu meşru bir sonuçtur: bir fonun verisi gelmezse rapor yine gider, eksik açıkça yazılır.
@@ -763,32 +805,123 @@ En değerli varlık finansal hesaplar değil, çünkü sistem onlara hiç erişm
 
 | Tehdit | Senaryo | Önlem |
 | --- | --- | --- |
-| Sır sızıntısı | Token log'a, repo'ya, hata metnine ya da LLM bağlamına düşer | Üretimde systemd LoadCredential, geliştirmede .env (izin 600); SecretStr; log redaction; anahtarlar mümkün olan her yerde HTTP başlığında. Telegram token'ı URL'de taşınmak zorunda olduğu için httpx logger'ı WARNING seviyesinde ve hata metinleri temizlenerek kaydedilir. Ajan makinesinde çekirdek sırları yok |
+| Sır sızıntısı | Token log'a, repo'ya, hata metnine ya da LLM bağlamına düşer | Üretimde systemd LoadCredential, geliştirmede .env (izin 600); SecretStr; log redaction; age gizli anahtarı sunucuda durmaz (K-82); anahtarlar mümkün olan her yerde HTTP başlığında. Telegram token'ı URL'de taşınmak zorunda olduğu için httpx logger'ı WARNING seviyesinde ve hata metinleri temizlenerek kaydedilir. Ajan makinesinde çekirdek sırları yok |
 | Prompt injection | Okunan sayfada ya da araç çıktısında gizli talimat | Ajan veritabanına erişemez, yalnızca anlık görüntü okur; web gezinme kapalı; PPK metni tek domain'den script ile; oranlar kodla çıkarılır ve sayı kontrolünden geçer; şüpheli metinde uyarı |
 | Kötü amaçlı skill veya paket | Topluluk skill'i ya da PyPI paketi zararlı | Topluluk skill'i kurulmaz; bağımlılıklar hash'li kilitli ve az; pip-audit CI'da |
 | Açık gateway | OpenClaw gateway internete açık kalır | Yalnızca localhost; uzaktan erişim Tailscale veya WireGuard ile; güvenlik duvarı |
 | Yetkisiz Telegram erişimi | Başkası bota yazıp veri sorgular | İki ayrı bot; rapor botu mesaj okumaz. Asistan botunda kullanıcı ID allowlist'i; bilinmeyen sohbetler sessizce yok sayılır |
 | Veri bütünlüğü | Yanlış fiyat yanlış karara yol açar | Şema doğrulama, kalite kontrolleri, provenance, raporda veri sorunları bölümü |
 | Maliyet patlaması | Ajan döngüye girip token yakar | Sağlayıcıda harcama limiti, cron sıklık sınırı |
-| Veri kaybı | Disk arızası | Gece yedeği, şifreli makine dışı kopya, aylık geri yükleme testi |
+| Veri kaybı | Disk arızası | Gece yedeği; age ile şifreli; Mac SSH ile çeker, sunucu hedefe kimlik bilgisi tutmaz; aylık geri yükleme testi Mac'te (K-82) |
 
 ### Dağıtım sertleştirmesi
 
 - İki makine. Çekirdek makinede finans kullanıcısı veritabanına yazar. OpenClaw kişisel verilerin bulunduğu ana makinede değil; ayrı bir VM, VPS ya da ev sunucusunda, openclaw kullanıcısıyla çalışır ve yalnızca anlık görüntü dizinini okur.
 - systemd birimlerinde ProtectSystem=strict, ProtectHome=read-only, NoNewPrivileges=true, PrivateTmp=true ve dar ReadWritePaths. Sırlar LoadCredential ile verilir.
+  - M4 birimleri yalnızca `LoadCredential=` kullanır (EVDS anahtarı, Telegram token'ı, ping URL'leri); diğer sertleştirme ayarları ve çıkış allowlist'i M5'tedir (K-92).
 - Çıkış trafiği allowlist'i (nftables ya da filtreleyen bir proxy) makine bazında tutulur:
   - Çekirdek: tefas.gov.tr, evds3.tcmb.gov.tr (geçiş süresince evds2.tcmb.gov.tr), api.telegram.org, ping servisi (ör. hc-ping.com), yedek hedefi ve OpenClaw makinesi (anlık görüntü aktarımı). Kurulum ve güncelleme sırasında PyPI ve işletim sistemi depoları.
   - OpenClaw makinesi: LLM sağlayıcısı, api.telegram.org, www.tcmb.gov.tr.
+
+### Kurulum (M4, K-91, K-97)
+
+Hedef: evdeki, her zaman açık, 64 bit Debian tabanlı bir Linux cihaz (Raspberry Pi OS 64 bit, Ubuntu Server ya da Debian 12+; systemd 252 ve üstü). Komutlar `sudo` yetkili bir kullanıcıyla çalıştırılır.
+
+1. **Saat dilimi ve NTP.** Zamanlayıcılar saat dilimini kendileri yazar; NTP mantıksal tarihin doğru gün üzerinden yürümesi için gerekir. Raspberry Pi'de gerçek zamanlı saat olmadığı için şarttır; işler `time-sync.target` sonrasında başlar.
+
+   ```sh
+   sudo timedatectl set-timezone Europe/Istanbul
+   sudo timedatectl set-ntp true
+   timedatectl status   # "System clock synchronized: yes" ve "NTP service: active" beklenir
+   ```
+
+2. **Paketler.** `age` ve `rrsync` (rsync paketinde) Debian 12, Raspberry Pi OS (bookworm) ve Ubuntu 24.04 depolarındadır. uv resmi kurulum betiğiyle `/usr/local/bin`'e kurulur.
+
+   ```sh
+   sudo apt update && sudo apt install age git rsync sqlite3 curl
+   curl -LsSf https://astral.sh/uv/install.sh | sudo env UV_INSTALL_DIR=/usr/local/bin sh
+   ```
+
+3. **Ayrı kullanıcı ve dizinler.** `finans` kullanıcısının parolası yoktur; kabuk yalnızca yedek çekme anahtarının zorunlu komutu (adım 8) için gerekir. SSH'de parola girişi kapalı olmalıdır (`PasswordAuthentication no`).
+
+   ```sh
+   sudo useradd --system --create-home --home-dir /var/lib/finans --shell /bin/sh finans
+   sudo passwd -l finans
+   sudo install -d -o finans -g finans -m 700 /var/lib/finans /var/lib/finans/backups /var/lib/finans/locks
+   sudo install -d -o finans -g finans -m 755 /opt/finans
+   sudo install -d -o root -g finans -m 750 /etc/finans
+   sudo install -d -o root -g root -m 700 /etc/finans/credstore
+   ```
+
+4. **Kod ve Python 3.13.** Python uv'nin kurduğu sürümdür (K-01); servis kullanıcısı erişebilsin diye `/opt/finans` altında tutulur. Güncelleme aynı iki komutla yapılır (`git pull`, `uv sync`).
+
+   ```sh
+   sudo -u finans git clone https://github.com/<github-kullanıcı>/finance-tracker.git /opt/finans
+   cd /opt/finans && sudo -u finans env UV_PYTHON_INSTALL_DIR=/opt/finans/.python uv sync --locked --no-dev
+   ```
+
+5. **Ayarlar ve sırlar.**
+   - `/etc/finans/finans.env` (root:finans, 640) `deploy/finans.env.example`'dan hazırlanır; iki age açık anahtarı `FT_BACKUP_AGE_RECIPIENTS`'e, sohbet ID'si `FT_TELEGRAM_CHAT_ID`'ye yazılır. Bu dosyaya sır yazılmaz.
+   - `/etc/finans/portfolio.toml` (root:finans, 640) Mac'teki dosyanın kopyasıdır.
+   - Sırlar `/etc/finans/credstore/` altında (root:root, 600), dosya adı credential adıdır: `ft_evds_api_key`, `ft_telegram_bot_token`, `ft_healthcheck_reports_url`, `ft_healthcheck_backup_url`. Kullanılmayan sır için boş dosya bırakılır; dosya hiç yoksa systemd işi başlatmaz (K-92).
+   - age gizli anahtarı sunucuya hiç gelmez; `ft doctor` denetler (K-82).
+
+6. **Elle komutlar ve ilk erişim denemesi.** `deploy/ft-finans`, `ft`'yi işlerle aynı kullanıcı, ayar ve sırlarla (`systemd-run`) çalıştırır. İlk iş `doctor` ve `sync cpi` ile erişim denemesidir (K-91); TEFAS erişimini `sync prices` ile kullanıcı dener (K-71), Telegram'ı `notify test` doğrular (K-89).
+
+   ```sh
+   sudo /opt/finans/deploy/ft-finans db migrate
+   sudo /opt/finans/deploy/ft-finans config apply
+   sudo /opt/finans/deploy/ft-finans doctor
+   sudo /opt/finans/deploy/ft-finans sync cpi
+   sudo /opt/finans/deploy/ft-finans notify test
+   ```
+
+7. **Zamanlayıcılar.** Her timer `finans-job@<iş>.service` şablonunu çağırır; şablon yalnızca `ft job run <iş>` çalıştırır (K-80). Sonuçlar `ft-finans job list` ve journald'da görülür.
+
+   ```sh
+   sudo cp /opt/finans/deploy/systemd/finans-* /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now finans-sync-prices.timer finans-sync-cpi.timer \
+     finans-weekly-report.timer finans-monthly-report.timer finans-payday.timer finans-backup.timer
+   systemctl list-timers 'finans-*'
+   journalctl -u 'finans-job@*' --since today
+   ```
+
+8. **Mac'in yedek çekmesi (SSH anahtarı).** Sunucu yedek hedefi için kimlik bilgisi tutmaz; Mac çeker (K-82). Mac'te yalnızca bu iş için bir anahtar oluşturulur; açık anahtar sunucuda `/var/lib/finans/.ssh/authorized_keys`'e (dizin 700, dosya 600, sahibi finans) zorunlu komutla eklenir, böylece anahtar yalnızca yedek dizinini okuyabilir.
+
+   ```sh
+   ssh-keygen -t ed25519 -f ~/.ssh/finans_yedek -C mac-yedek     # Mac'te
+   ```
+
+   ```text
+   restrict,command="/usr/bin/rrsync -ro /var/lib/finans/backups/" ssh-ed25519 AAAA… mac-yedek
+   ```
+
+   Mac'te çekme komutu; rrsync yolları yedek dizinine göre çözer, `finans@SUNUCU:/` yedek dizininin kendisidir:
+
+   ```sh
+   rsync -a --ignore-existing --exclude '.*' -e "ssh -i ~/.ssh/finans_yedek" finans@SUNUCU:/ ~/Yedekler/finans/
+   ```
+
+   Zamanlama önerisi: Mac'te launchd ile her gün 09:30, sunucudaki 03:00 yedeğinden sonra (`~/Library/LaunchAgents/` altında bir plist'te `StartCalendarInterval` Hour 9, Minute 30 ve `ProgramArguments` olarak yukarıdaki komut); Mac uykudaysa iş uyanınca bir kez çalışır.
+
+9. Aylık geri yükleme testi (Mac'te; age gizli anahtarı yalnızca Mac'tedir). Betik özeti doğrular, yedeği 700 izinli geçici bir dizine çözer, `integrity_check` ve tablo sayılarını gösterir, çıkarken geçici dizini siler:
+
+   ```sh
+   scripts/verify_backup.sh ~/Yedekler/finans/finans-<zaman>.db.age ~/.config/age/finans.txt
+   ```
+
+   Kurtarma anahtarı parola yöneticisinde durur. Onunla da ara sıra deneme, anahtar diske yazılmadan yapılır: anahtarı panoya kopyalayıp `scripts/verify_backup.sh <yedek> <(pbpaste)`, ardından panoyu temizle. Sunucuda `ft backup verify` yalnızca özetleri denetler.
 
 ## Gözlemlenebilirlik ve operasyon
 
 Bu sistemde en tehlikeli arıza sessiz olanıdır: rapor gelmez ve kimse fark etmez. Bu yüzden başarı da aktif olarak raporlanır.
 
-- Log: structlog ile JSON, journald'a. Her satırda job, run_id, logical_date ve varsa instrument alanı bulunur. httpx ve httpcore logger'ları WARNING seviyesindedir (bkz. Telegram).
+- Log: standart `logging` ile JSON satırları, stdout üzerinden journald'a (K-81). Her satırda job, run_id, logical_date ve varsa instrument alanı bulunur. httpx ve httpcore logger'ları WARNING seviyesindedir (bkz. Telegram).
 - İş kaydı: job_run tablosu durum, süre ve sayaçları (çekilen kayıt, hata sayısı) tutar.
-- Dead man's switch: her başarılı rapordan sonra harici bir ping servisine (healthchecks.io gibi, self-host edilebilir) sinyal gönderilir. Beklenen sinyal gelmezse servis ayrı bir kanaldan (e-posta) haber verir.
+- Dead man's switch (K-84): harici bir ping servisinde (healthchecks.io gibi, self-host edilebilir) iki ayrı kontrol. Rapor kontrolü her başarılı rapor gönderiminden sonra (haftalık rapor açıksa haftalık, değilse aylık), yedek kontrolü her başarılı gece yedeğinden sonra ping alır; ikincisi makinenin ayakta olduğunu da günlük gösterir. Başarısız işte `/fail` ping'i gönderilir. Ping URL'leri sırdır (LoadCredential). Beklenen sinyal gelmezse servis ayrı bir kanaldan (e-posta) haber verir.
 - ft doctor komutu: config doğrulama, şema sürümü, sırların varlığı, kaynaklara erişim, son başarılı senkronizasyon zamanları. Kurulumdan sonra ve her sorun anında ilk çalıştırılan komuttur. M3'te takip edilen her varlığın son fiyat tarihini ve TÜFE'nin son dönemini gösterir; bayatlık `ft data check` ile aynı eşiklerle (K-28) uyarı verir, ayrıntı orada.
-- Haftalık rapora tek satırlık sistem sağlığı eklenir: son fiyat ve TÜFE senkron zamanı, son 7 gündeki başarısız iş sayısı.
+- Haftalık rapora tek satırlık sistem sağlığı eklenir: son fiyat ve TÜFE çekim zamanı (veriden, `fetched_at`; elle çalıştırılan senkronizasyonlar da sayılır) ve son 7 gündeki başarısız iş sayısı (job_run) (K-95).
 - Ham yanıtlar 30 gün saklanır; bir hesap yanlış çıkarsa o günün verisi yeniden işlenebilir.
 
 ## Test stratejisi
@@ -805,6 +938,7 @@ Hesap doğruluğu bu projenin tek vazgeçilmez kalitesidir; test ağırlığı d
 | Repository | Geçici SQLite | Migration'lar ve öncesindeki yedek, upsert idempotency, Decimal gidiş-dönüş, revizyon kaydı |
 | Rapor | syrupy snapshot | Metin ve JSON çıktının bilinçsiz değişmemesi |
 | Ajan kontratı | jsonschema | ft-agent çıktısının yayımlanan şemaya uyması; iki bayatlık sinyalinin birbirinden bağımsız çalışması (taze snapshot ve eski fiyat; eski snapshot ve taze fiyat) |
+| Zamanlama birimleri | pytest ve CI'da systemd-analyze | Birim dosyaları ayrıştırılır: her timer'da Persistent=true ve Europe/Istanbul; ExecStart'taki iş adları `ft job run`'da tanımlı; LoadCredential adları ayarlarla eşleşir. CI'da `systemd-analyze calendar` ve `verify` (K-80) |
 | Canlı smoke | `make live` (pytest -m live, CI dışı) | Gerçek uç noktaların hâlâ beklenen biçimde yanıt vermesi; haftada bir timer ile (M4). EVDS: referans ay değeri (2025-01 = 88,578291) ve serinin son iki ay içinde yayımlanmış olması. Anahtar `.env`'den ya da LoadCredential'dan okunur, yoksa test atlanır. TEFAS canlı testi yok; istekleri kullanıcı çalıştırır (K-71) |
 
 Hedefler: domain katmanında %95+ satır kapsamı, mypy --strict temiz, CI süresi 2 dakikanın altında.
@@ -815,7 +949,7 @@ Kabul testi: canlıya geçmeden önce bir ay boyunca aynı işlemleri bir tablod
 
 Mutabakat `ft reconcile EKSTRE.csv` ile yapılır (K-67, K-78). Dosya ekstreden elle doldurulur: `date,code,units,price,value`; `price` isteğe bağlıdır. Aracı kuruma özel ayrıştırıcı yazılmaz; gerçek ekstre görülünce karar verilir. Her kalemde kayıtların o günkü değerlemesiyle (`ft value --on` ile aynı hesap) adet, fiyat ve değer ayrı karşılaştırılır:
 
-- **Adet farkı:** eksik ya da yanlış girilmiş işlem.
+- **Adet farkı:** eksik ya da yanlış girilmiş işlem. Fark, ekstre gününe kadarki son 5 işlem gününde (ekstre günü dahil) girilmiş tek bir işlemin adediyle birebir ve doğru yönde açıklanıyorsa (alış kayıtlarda fazlalık, satış eksiklik olarak) mesaj "olası valör farkı (işlem #id, tarih)" olur; kalem yine uyumsuzdur (K-79).
 - **Fiyat farkı:** ekstre başka bir günün fiyatını kullanmış. Ekstre fiyatıyla (K-64'teki son basamak kuralı) ya da fiyat yoksa değerle (±0,01 TL) eşleşen TEFAS fiyatı ekstre gününün ±5 işlem günü içinde aranır; bulunan gün ve işlem günü farkı gösterilir.
 - **Yalnızca değer farkı:** adet ve fiyat aynı, değer tolerans dışı; yuvarlama. Az basamaklı ekstre fiyatı birden çok günle eşleşebildiği için önce hem fiyatı hem değeri tutan gün aranır; bulunursa fark fiyat farkıdır.
 
@@ -847,7 +981,7 @@ En büyük teknik risk TEFAS uç noktasının resmi olmaması, en büyük proje 
 Açık sorular:
 
 - [x] Satışlarda FIFO mu, ortalama maliyet mi? FIFO (K-18).
-- [ ] Barındırma: ev sunucusu mu, VPS mi? TEFAS API'si kullanıldığı için (K-71) barındırma adayında `scripts/record_tefas.py` kullanıcı tarafından çalıştırılır; Türkiye IP'li bir bağlantıdan 14 isteğin hepsi 200 döndü.
+- [x] Barındırma: evdeki, her zaman açık, 64 bit Debian tabanlı bir Linux cihaz, systemd ile (K-97); kurulum adımları Kurulum bölümünde. TEFAS istekleri ev bağlantısından (Türkiye IP'si) gider; denemede 14 isteğin hepsi 200 döndü (K-71).
 - [ ] Hangi LLM sağlayıcısı ve aylık bütçe ne olacak?
 - [x] TEFAS fiyat kaynağı: JSON API, istekleri kullanıcı çalıştırır (K-71). Dosya içe aktarma yazılmaz.
 - [x] Takasbank'tan TEFAS API'si için izin: istenmeyecek; kullanıcı kararıyla başlandı (K-73).
@@ -945,6 +1079,25 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-76 | `txn.unit_price_scale` (migration 0003, M3): girilen birim fiyatın ondalık basamak sayısı; `ft tx add` ve `ft tx import` girilen metinden doldurur, repository okurken fiyatı bu basamağa geri getirir. Boşsa kayıtlı hal geçerli; geriye dönük doldurma yok. K-49'u günceller: M4 tabloları (job_run, alert, alert_event) 0004'e kayar | Kanonik metin sondaki sıfırları atıyor; 1.7200 olarak girilen fiyat K-64'te 2 basamaklı sayılıp kontrol dışı kalıyordu | Veri modeli, Veri kalitesi |
 | K-77 | `ft data check --strict`: en az bir uyarı varsa 1 ile çıkar; bilgi notları etkilemez. Varsayılan davranış (her durumda 0) değişmez | M4'teki zamanlanmış işler veri sorununu çıkış koduyla algılamalı | Veri kalitesi, Zamanlama |
 | K-78 | K-67'yi genişletir: ekstre dosyası `date,code,units,price,value` (`price` isteğe bağlı), ekstreden elle doldurulur; aracı kuruma özel ayrıştırıcı yok. Her kalemde adet, fiyat ve değer ayrı karşılaştırılır; uyuşmazlık adet farkı, fiyat farkı (eşleşen TEFAS fiyat günü ±5 işlem gününde aranıp gösterilir) ya da yalnızca değer farkı (yuvarlama) olarak sınıflanır. Değer toleransı kalem başına ±0,01 TL; ekstrede olmayan pozisyon uyumsuz. Fiyat günü teşhisi "D tarihli fiyat" sorusuna kanıt olarak, dayanağıyla (fiyat ve değer, yalnızca fiyat, yalnızca değer) ayrıca raporlanır | Tek bir değer farkı nedeni göstermiyordu; ekstrenin hangi günün fiyatını kullandığı açık soruyu kapatacak kanıttır | Test, Veri kalitesi |
+| K-79 | K-78'e ek: adet farkı, ekstre gününe kadarki son 5 işlem gününde (ekstre günü dahil) girilmiş tek bir işlemin adediyle birebir ve yönüyle eşleşiyorsa mesaj "olası valör farkı (işlem #id, tarih)" olur; birden çok işlem eşleşirse en yenisi gösterilir. Kalem yine uyumsuz sayılır | Ekstre takas edilmiş payları gösterir; yeni bir işlem ekstreye birkaç gün geç yansıyabilir, bu durum eksik işlemden ayırt edilmeli | Test, Veri kalitesi |
+| K-80 | Sistem her zaman açık bir Linux makinede systemd ile çalışır. Her zamanlanmış iş tek giriş noktası `ft job run <iş> [--logical-date]` ile; birimler `deploy/systemd/finans-<iş>.{service,timer}`. Birim dosyaları testte ayrıştırılarak, CI'da `systemd-analyze calendar` ve `verify` ile doğrulanır | Zamanlama tek yerden ve test edilebilir olsun; geliştirme kapısı "zamanlayıcılar test ortamında doğrulandı" | Zamanlama, Test |
+| K-81 | Rapor snapshot testleri için syrupy (dev); log için structlog yerine standart `logging` ve küçük bir JSON biçimlendirici | Snapshot testi geliştirme kapısında; log için ek bağımlılık gerekmiyor | Teknoloji seçimleri, Gözlemlenebilirlik |
+| K-82 | Gece yedeği: backup API kopyası `age` ile config'teki bütün açık anahtarlara (`FT_BACKUP_AGE_RECIPIENTS` listesi: Mac anahtarı ve kurtarma anahtarı) şifrelenip sunucudaki yerel dizine yazılır (son 14); Mac SSH ile çeker, sunucu hedef için kimlik bilgisi tutmaz. Şifresiz kopya 700 izinli geçici dizinde 600 izinle oluşur, iş başarısız olsa bile silinir. Doğrulama ikiye bölünür: sunucu şifrelemeden önce `integrity_check` çalıştırır ve şifreli dosyanın sha256 özetini kaydeder (`ft backup verify` özetleri denetler); tam geri yükleme testi Mac'te `scripts/verify_backup.sh` ile, gizli anahtarla. age gizli anahtarı sunucuda durmaz; `ft doctor` denetler | Sunucu ele geçirilirse yedekler okunamasın ve makine dışı kopyalara ulaşılamasın; sunucu yedeği çözemediği için içerik doğrulaması anahtarın olduğu yerde yapılır | Veri modeli, Güvenlik, Kurulum |
+| K-83 | FR-14 M4'e alınır: maaş günü (`[contribution] payday`, `monthly` zorunlu) mesajı bu ayki katkının sınıf (`allocate_contribution`) ve fon bazında (sınıf içinde mevcut değerle orantılı, değer 0 ise eşit) dağılım önerisini Hamilton yuvarlamasıyla ve `ft tx add` hatırlatmasıyla gönderir | Sabit hatırlatma K-73'ten sonra amacını yitirdi; katkının nereye gideceği maaş günü gerekli bilgi | Dağılım, Zamanlama |
+| K-84 | Dead man's switch iki kontrol: başarılı rapor gönderimi ve başarılı gece yedeği (günlük) ping alır; başarısız işte `/fail`. Ping URL'leri sır | Haftalık rapor isteğe bağlı olduğundan yalnızca rapor ping'i sessiz arızayı ayda bir yakalardı | Gözlemlenebilirlik |
+| K-85 | Fiyatlar eksikken sapma alarmı değerlendirilmez: yalnızca sync-prices "ok" sonrası; "partial"da atlanır ve job_run.detail'e yazılır | Eksik fiyat ağırlıkları bozar ve yanlış alarm üretir | Dağılım, Zamanlama |
+| K-86 | Mantıksal tarih, işin şimdiden önceki son planlı zamanının günüdür: sync-prices (hafta sonu telafisinde son Cuma), weekly-report Pazar, monthly-report önceki ayın son günü, sync-cpi hedef dönemin ilk günü, payday maaş günü | Telafi çalışmaları doğru günü işlesin; idempotency anahtarı tek anlamlı olsun | Zamanlama |
+| K-87 | Sessiz dönemin bitiş tarihi tek satırlık `allocation_state` tablosunda (0004) | K-75'teki kalıcı bitişin yeri | Veri modeli |
+| K-88 | Haftalık değişim, bir önceki Pazar'ın as-of değerlemesine göre; o gün için değerleme yoksa "—" | Haftalık değişimin tanımı tek anlamlı olsun | Raporlama |
+| K-89 | Telegram botu ve sohbet ID'si kullanıcı tarafından oluşturulur; `ft notify test`'i kullanıcı çalıştırır; Claude token'ın yalnızca tanımlı olup olmadığına bakar | Sır kullanıcıda kalsın | Raporlama, Güvenlik |
+| K-90 | Telegram mesajlarında TL tutarları varsayılan olarak gizli (`FT_TELEGRAM_HIDE_AMOUNTS=true`): yalnızca yüzdeler ve değişimler; tam tutarlar yerelde `ft report`'ta. Maaş günü mesajında paylar katkının yüzdesi olur | Tutarlar Telegram sunucularına ve bildirim önizlemesine düşmesin | Raporlama |
+| K-91 | Kurulum adımı: makine kurulduğunda ilk iş `ft doctor` ve `ft sync cpi` ile erişim denemesi; Mac'te yedek çekme ve geri yükleme testi komutları dokümanda | Erişim ve anahtar sorunları zamanlanmış işten önce görülsün | Kurulum |
+| K-92 | M4 birimlerinde sırlar `LoadCredential=` ile (EVDS, Telegram, ping URL'leri); ProtectSystem ve diğer sertleştirme ile çıkış allowlist'i M5'te | M4 zamanlamayı, M5 sertleştirmeyi kapsar; sırlar baştan ortam değişkenine geçmesin | Güvenlik |
+| K-93 | K-90'a ek: maaş günü mesajının tutar gösterimi ayrı ayarla yönetilir: `FT_TELEGRAM_PAYDAY_SHOW_AMOUNTS` (varsayılan false; false iken paylar katkının yüzdesi). Diğer mesajların gizleme ayarından bağımsız | Maaş günü mesajının asıl içeriği tutarlar; gösterip göstermemek ayrı bir tercih | Raporlama, Dağılım |
+| K-94 | K-88 ve K-74'e ek: haftalık değişim Modified Dietz ile hesaplanır: (V_1 − V_0 − ΣF) / (V_0 + Σ w_i·F_i), w_i = akışın dönemde kaldığı gün / dönem günü; V_0 = 0 ya da payda ≤ 0 ise "—". Dağılım dışı varlığın basit reel getirisinde her lotun maliyeti ayrı ayrı değerleme gününün TL'sine çevrilir | Akışları dönem sonunda sayan formül, katkı portföyden büyükken kazancı yalnızca başlangıç değerine bölüp şişiriyordu (V_0 = 1.000, Pazartesi 10.000 alım, hafta %1 → ~%11); çok lotlu varlıkta reel getiri tek anlamlı olsun | Raporlama, Hesap motoru |
+| K-95 | Rapor kuralları: fiyatı olmayan varlık değerlenmez ve açıkça yazılır; dağılım içinde eksik fiyat varsa dağılım, alarm, katkı planı ve para ağırlıklı getiri atlanır. Sessiz dönem notu kaydedilen bitiş tarihine bakar. Sistem satırı çekim zamanlarını veriden alır. Getiri etiketleri kapsamı yazar; aylık raporda aylık değişim; reel = nominal notu. Telegram mesajı `<pre>` yerine HTML metin, komutlar `<code>` (K-22'yi günceller). Snapshot'lar uçtan uca üretilir | Elle kurulmuş snapshot verisi gerçekte oluşamayacak çelişkiler içeriyordu; eksik fiyat sessizce yanlış dağılım ve alarm üretebilirdi | Raporlama, Test |
+| K-96 | İş yürütücü: sync-prices eksik fiyatta ve bildirim gönderilemezse "partial"; aylık rapor TÜFE beklerken ayın 10'una kadar "partial", sonra notla gönderilir; haftalık rapor kapalıyken "ok"; ping yalnız "ok" ve "failed"da, hatası sonucu değiştirmez; iş hataları arındırılmış mesajla kaydedilir | "partial" yeniden denemeye izin verir, "ok" vermez; gönderilmemiş rapor "ok" sayılmamalı | Zamanlama, Gözlemlenebilirlik |
+| K-97 | Barındırma evdeki 64 bit Debian tabanlı Linux cihaz, systemd. Birimler tek şablon `finans-job@.service` ve iş başına `finans-<iş>.timer`; ayarlar `/etc/finans/finans.env`, sırlar `/etc/finans/credstore/` ve LoadCredential (credential adı ayar adı, boş dosya tanımsız). Elle komutlar `deploy/ft-finans` (systemd-run, aynı kullanıcı ve sırlar). Maaş günü timer'ı her gün 09:00; mesaj yalnızca maaş gününden sonraki 3 gün içinde, değilse job_run'a "atlandı: pencere geçti". Mac yedekleri `restrict` ve `rrsync -ro` ile sınırlı bir SSH anahtarıyla çeker | systemd ayın olmayan gününde tetiklenmez; ilk kurulumda geçmiş ayın maaş günü mesajı gitmesin; tek şablon birimlerin birbirinden sapmasını önler | Zamanlama, Kurulum, Güvenlik |
 
 ## Planı kodlama ajanıyla uygulama
 

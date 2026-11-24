@@ -1,4 +1,5 @@
 import json
+import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -19,6 +20,8 @@ TIMEOUT_SECONDS = 20
 DEFAULT_RETRY_AFTER = 60
 MAX_RETRY_AFTER = 300
 _SECOND = timedelta(seconds=1)
+# Telegram token'ı URL'de taşınır (K-22); listede olmasa da maskelenir.
+_BOT_TOKEN = re.compile(r"bot\d+:[A-Za-z0-9_-]+")
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +76,18 @@ class HttpClient:
 
     def get_json(self, url: str, *, headers: Mapping[str, str] | None = None) -> JsonResponse:
         return self._send("GET", url, headers or {}, None)
+
+    def touch(self, url: str) -> None:
+        """Gövdesine bakılmayan tek istek (ping); başarısızlık SourceError'dur."""
+        self._wait_turn()
+        try:
+            response = self._client.get(url)
+        except httpx.TransportError as exc:
+            raise SourceError(
+                self._redact(f"{url}: bağlantı hatası ({type(exc).__name__})")
+            ) from exc
+        if not response.is_success:
+            raise SourceError(self._redact(f"{url}: HTTP {response.status_code}"))
 
     def post_json(
         self, url: str, payload: object, *, headers: Mapping[str, str] | None = None
@@ -142,6 +157,8 @@ class HttpClient:
         value = response.headers.get("Retry-After", "").strip()
         if value.isdigit():
             return int(value)
+        if not value:
+            return _body_retry_after(response)
         try:
             when = parsedate_to_datetime(value)
         except (TypeError, ValueError):
@@ -153,7 +170,18 @@ class HttpClient:
     def _redact(self, message: str) -> str:
         for secret in self._secrets:
             message = message.replace(secret, "***")
-        return message
+        return _BOT_TOKEN.sub("bot***", message)
+
+
+def _body_retry_after(response: httpx.Response) -> int:
+    """Telegram 429'da bekleme süresini gövdede `parameters.retry_after` olarak verir."""
+    try:
+        payload = json.loads(response.content, parse_float=Decimal)
+    except ValueError:
+        return DEFAULT_RETRY_AFTER
+    parameters = payload.get("parameters") if isinstance(payload, dict) else None
+    seconds = parameters.get("retry_after") if isinstance(parameters, dict) else None
+    return seconds if isinstance(seconds, int) and seconds >= 0 else DEFAULT_RETRY_AFTER
 
 
 def _ceil_seconds(delta: timedelta) -> int:
@@ -165,6 +193,8 @@ def _server_message(response: httpx.Response) -> str:
         payload = json.loads(response.content, parse_float=Decimal)
     except ValueError:
         payload = None
-    if isinstance(payload, dict) and isinstance(payload.get("message"), str):
-        return str(payload["message"])
+    if isinstance(payload, dict):
+        for key in ("message", "description"):
+            if isinstance(payload.get(key), str):
+                return str(payload[key])
     return response.text[:200].strip() or response.reason_phrase

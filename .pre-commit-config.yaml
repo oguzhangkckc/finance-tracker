@@ -10,12 +10,12 @@ repos:
       - id: check-toml
       - id: check-yaml
       - id: detect-private-key
-      # Kayıtlı kaynak yanıtları bayt bayt saklanır; biçim düzeltmesi uygulanmaz.
+      # Kayıtlı kaynak yanıtları ve snapshot'lar bayt bayt saklanır; biçim düzeltmesi uygulanmaz.
       - id: end-of-file-fixer
-        exclude: ^tests/fixtures/
+        exclude: ^tests/(fixtures/|.*/__snapshots__/)
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
-        exclude: ^tests/fixtures/
+        exclude: ^tests/(fixtures/|.*/__snapshots__/)
 
   # Araç sürümleri uv.lock'tan gelir; pre-commit'in ayrı ortamları sürüm kayması yaratmasın.
   - repo: local
@@ -42,6 +42,13 @@ repos:
         language: system
         pass_filenames: false
         files: ^(pyproject\.toml|uv\.lock)$
+      - id: push-emails
+        name: commit e-postaları noreply (push öncesi)
+        entry: uv run --frozen python scripts/check_push_emails.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
       - id: make-check
         name: make check (push öncesi)
         entry: make check

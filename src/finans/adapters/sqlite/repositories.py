@@ -29,7 +29,7 @@ from finans.ports.repositories import (
 )
 from finans.ports.sources import RawPayload
 
-_INSTRUMENT_COLUMNS = "code, kind, asset_class, category, name, active"
+_INSTRUMENT_COLUMNS = "code, kind, asset_class, category, name, active, allocation"
 
 
 def _instrument_id(conn: sqlite3.Connection, code: str) -> int:
@@ -39,12 +39,19 @@ def _instrument_id(conn: sqlite3.Connection, code: str) -> int:
     return int(row[0])
 
 
-def _stored_instrument(row: tuple[str, str, str, str | None, str | None, int]) -> StoredInstrument:
-    code, kind, asset_class, category, name, active = row
-    return StoredInstrument(
-        Instrument(code, InstrumentKind(kind), asset_class, category=category, name=name),
-        active=bool(active),
+def _stored_instrument(
+    row: tuple[str, str, str, str | None, str | None, int, int],
+) -> StoredInstrument:
+    code, kind, asset_class, category, name, active, allocation = row
+    instrument = Instrument(
+        code,
+        InstrumentKind(kind),
+        asset_class,
+        category=category,
+        name=name,
+        allocation=bool(allocation),
     )
+    return StoredInstrument(instrument, active=bool(active))
 
 
 class SqliteInstrumentRepo:
@@ -62,20 +69,21 @@ class SqliteInstrumentRepo:
                 instrument.asset_class,
                 instrument.category,
                 instrument.name,
+                int(instrument.allocation),
             )
             stored = existing.get(instrument.code)
             if stored is None:
                 self._conn.execute(
-                    "INSERT INTO instrument (kind, asset_class, category, name, code)"
-                    " VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO instrument (kind, asset_class, category, name, allocation, code)"
+                    " VALUES (?, ?, ?, ?, ?, ?)",
                     (*values, instrument.code),
                 )
                 added.append(instrument.code)
                 continue
             if stored.instrument != instrument:
                 self._conn.execute(
-                    "UPDATE instrument SET kind = ?, asset_class = ?, category = ?, name = ?"
-                    " WHERE code = ?",
+                    "UPDATE instrument SET kind = ?, asset_class = ?, category = ?, name = ?,"
+                    " allocation = ? WHERE code = ?",
                     (*values, instrument.code),
                 )
                 updated.append(instrument.code)
@@ -323,6 +331,11 @@ class SqlitePriceRepo:
         code, day, price, source = row
         return PricePoint(code, decode_date(day), decode_decimal(price), source)
 
+    def last_fetched_at(self) -> datetime | None:
+        # Zaman damgaları aynı ISO UTC biçiminde; metin sırası zaman sırasıdır.
+        row = self._conn.execute("SELECT max(fetched_at) FROM price").fetchone()
+        return None if row[0] is None else decode_timestamp(row[0])
+
 
 class SqliteCpiRepo:
     def __init__(self, conn: sqlite3.Connection) -> None:
@@ -376,6 +389,12 @@ class SqliteCpiRepo:
             return None
         return CpiPoint(YearMonth.parse(row[0]), decode_decimal(row[1]))
 
+    def last_fetched_at(self, series: str) -> datetime | None:
+        row = self._conn.execute(
+            "SELECT max(fetched_at) FROM cpi WHERE series_code = ?", (series,)
+        ).fetchone()
+        return None if row[0] is None else decode_timestamp(row[0])
+
 
 class SqliteRawPayloadRepo:
     def __init__(self, conn: sqlite3.Connection) -> None:
@@ -394,3 +413,10 @@ class SqliteRawPayloadRepo:
         if cursor.lastrowid is None:
             raise RuntimeError("raw_payload satır numarası alınamadı")
         return cursor.lastrowid
+
+    def delete_before(self, cutoff: datetime) -> int:
+        # Zaman damgaları aynı ISO UTC biçiminde; metin sırası zaman sırasıdır.
+        cursor = self._conn.execute(
+            "DELETE FROM raw_payload WHERE fetched_at < ?", (encode_timestamp(cutoff),)
+        )
+        return cursor.rowcount

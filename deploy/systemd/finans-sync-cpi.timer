@@ -1,0 +1,10 @@
+[Unit]
+Description=finans-takip: TÜFE senkronu; 4'ü ve 5'i yedek
+
+[Timer]
+OnCalendar=*-*-03..05 10:30 Europe/Istanbul
+Persistent=true
+Unit=finans-job@sync-cpi.service
+
+[Install]
+WantedBy=timers.target

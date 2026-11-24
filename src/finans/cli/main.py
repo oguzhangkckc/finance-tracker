@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from pathlib import Path
@@ -10,6 +10,7 @@ import typer
 from pydantic import ValidationError
 
 from finans import bootstrap
+from finans.application.backup import verify_backups
 from finans.application.cpi import CPI_HISTORY_START, CpiSyncReport, sync_cpi
 from finans.application.data_check import DEFAULT_WINDOW, check_data, trade_price_issues
 from finans.application.portfolio_config import ApplyReport, apply_portfolio
@@ -17,6 +18,7 @@ from finans.application.portfolio_view import portfolio_as_of
 from finans.application.price_sync import PriceSyncReport, sync_prices
 from finans.application.prices import set_manual_price
 from finans.application.reconcile import reconcile_statement
+from finans.application.report import ReportKind, build_report, payday_plan
 from finans.application.transactions import (
     add_transaction,
     import_transactions,
@@ -28,6 +30,8 @@ from finans.domain.numeric import canonical_text
 from finans.domain.portfolio import ConfigError, QualityThresholds
 from finans.domain.quality import DataIssue
 from finans.domain.reconcile import PriceDateEvidence
+from finans.domain.schedule import logical_date
+from finans.ports.clock import BUSINESS_TZ
 from finans.ports.repositories import StoredTransaction
 from finans.settings import Settings, load_settings
 
@@ -49,6 +53,16 @@ data_app = typer.Typer(no_args_is_help=True, help="Veri kalitesi.")
 app.add_typer(price_app, name="price")
 app.add_typer(sync_app, name="sync")
 app.add_typer(data_app, name="data")
+report_app = typer.Typer(no_args_is_help=True, help="Raporlar (önizleme).")
+app.add_typer(report_app, name="report")
+notify_app = typer.Typer(no_args_is_help=True, help="Bildirim kanalı (Telegram).")
+app.add_typer(notify_app, name="notify")
+job_app = typer.Typer(
+    no_args_is_help=True, help="Zamanlanmış işler; systemd yalnızca bunları çağırır."
+)
+app.add_typer(job_app, name="job")
+backup_app = typer.Typer(no_args_is_help=True, help="Gece yedeği (K-82).")
+app.add_typer(backup_app, name="backup")
 
 
 class SideChoice(StrEnum):
@@ -486,6 +500,213 @@ def _print_warnings(issues: list[DataIssue]) -> None:
 _SYMBOLS = {"ok": "✓", "warn": "!", "fail": "✗"}
 
 
+@backup_app.command("verify")
+def backup_verify() -> None:
+    """Sunucudaki şifreli yedeklerin sha256 özetini denetler (K-82).
+
+    Sunucu yedeği çözemez; tam geri yükleme testi Mac'te `scripts/verify_backup.sh` ile yapılır.
+    """
+    settings = _load_settings_or_exit()
+    if settings.backup_dir is None:
+        typer.echo("FT_BACKUP_DIR tanımlı değil.", err=True)
+        raise typer.Exit(code=2)
+    checks = verify_backups(settings.backup_dir)
+    if not checks:
+        typer.echo("Yedek yok.")
+    for check in checks:
+        typer.echo(f"{'✓' if check.ok else '✗'} {check.name}: {check.message}")
+    typer.echo("Tam geri yükleme testi Mac'te: scripts/verify_backup.sh <yedek> <age-anahtarı>")
+    if not all(check.ok for check in checks):
+        raise typer.Exit(code=1)
+
+
+class JobChoice(StrEnum):
+    SYNC_PRICES = "sync-prices"
+    SYNC_CPI = "sync-cpi"
+    WEEKLY_REPORT = "weekly-report"
+    MONTHLY_REPORT = "monthly-report"
+    PAYDAY = "payday"
+    BACKUP = "backup"
+
+
+_OUTCOME_LABELS = {
+    "ok": "tamam",
+    "partial": "kısmi",
+    "failed": "başarısız",
+    "skipped": "bu gün için zaten tamamlanmış; atlandı",
+    "busy": "başka bir örnek çalışıyor; beklemeden çıkıldı",
+}
+
+
+@job_app.command("run")
+def job_run(
+    name: Annotated[JobChoice, typer.Argument(help="İş adı")],
+    logical: Annotated[
+        str | None,
+        typer.Option("--logical-date", help="YYYY-AA-GG; verilmezse son planlı çalışmanın günü."),
+    ] = None,
+) -> None:
+    """Bir zamanlanmış işi çalıştırır (K-80); aynı gün için "ok" varsa atlar (K-12)."""
+    settings = _load_settings_or_exit()
+    bootstrap.configure_logging(settings)
+    clock = bootstrap.system_clock()
+    with _user_errors():
+        payday = bootstrap.portfolio_source().load(_portfolio_path(settings, None)).payday
+        day = (
+            _parse_date(logical)
+            if logical is not None
+            else logical_date(name.value, clock.now().astimezone(BUSINESS_TZ), payday=payday)
+        )
+        outcome = bootstrap.run_scheduled_job(settings, clock, name.value, day)
+    typer.echo(f"{name.value} {day}: {_OUTCOME_LABELS[outcome.status]}")
+    for key, value in outcome.detail.items():
+        typer.echo(f"  {key}: {value}")
+    if outcome.status == "failed":
+        raise typer.Exit(code=1)
+
+
+@job_app.command("list")
+def job_list(
+    days: Annotated[int, typer.Option("--days", help="Kaç günlük kayıt.")] = 7,
+) -> None:
+    """Son iş denemelerini gösterir."""
+    settings = _load_settings_or_exit()
+    clock = bootstrap.system_clock()
+    with _user_errors(), bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+        runs = uow.runs.recent(since=clock.now() - timedelta(days=days))
+    if not runs:
+        typer.echo(f"Son {days} günde iş kaydı yok.")
+    for run in runs:
+        started = run.started_at.astimezone(BUSINESS_TZ)
+        typer.echo(
+            f"#{run.id} {run.job} {run.logical_date} {run.status} ({started:%Y-%m-%d %H:%M})"
+        )
+
+
+@notify_app.command("test")
+def notify_test() -> None:
+    """Telegram kurulumunu doğrulamak için kısa bir mesaj gönderir (K-89)."""
+    settings = _load_settings_or_exit()
+    with _user_errors(), bootstrap.notifier(settings, bootstrap.system_clock()) as channel:
+        channel.send("finans-takip: Telegram bağlantısı çalışıyor.", silent=False)
+    typer.echo("Test mesajı gönderildi.")
+
+
+@app.command("alerts")
+def alerts_command() -> None:
+    """Açık sapma alarmlarını ve sessiz dönemin durumunu gösterir (K-46, K-75)."""
+    settings = _load_settings_or_exit()
+    with _user_errors(), bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+        states = uow.alerts.list_open()
+        ended = uow.allocation_state.quiet_ended_on()
+    typer.echo(
+        f"Sessiz dönem: {ended} tarihinde bitti" if ended else "Sessiz dönem: sürüyor (K-75)"
+    )
+    if not states:
+        typer.echo("Açık alarm yok.")
+    for state in states:
+        side = "üstünde" if state.direction == "above" else "altında"
+        last = (
+            "yok" if state.last_notified_at is None else f"{state.last_notified_at:%Y-%m-%d %H:%M}"
+        )
+        typer.echo(
+            f"{state.fingerprint.removeprefix('drift:')}: hedefin {side}, açılış "
+            f"{state.opened_at:%Y-%m-%d %H:%M} UTC, son bildirim {last}"
+        )
+
+
+class ReportFormat(StrEnum):
+    TEXT = "text"
+    JSON = "json"
+
+
+ReportOnOption = Annotated[
+    str | None, typer.Option("--on", help="YYYY-AA-GG; verilmezse son planlı rapor günü (K-86).")
+]
+ReportFormatOption = Annotated[ReportFormat, typer.Option("--format", help="text ya da json")]
+HideAmountsOption = Annotated[
+    bool, typer.Option("--hide-amounts", help="Telegram görünümü: TL tutarlarını gizle (K-90).")
+]
+ContributionOption = Annotated[
+    str | None, typer.Option("--contribution", help="Bu ayki katkı; config'teki değerin yerine.")
+]
+
+
+@report_app.command("weekly")
+def report_weekly(
+    on: ReportOnOption = None,
+    fmt: ReportFormatOption = ReportFormat.TEXT,
+    hide_amounts: HideAmountsOption = False,
+) -> None:
+    """Haftalık raporu gösterir; gönderim zamanlanmış işin (weekly-report) işidir."""
+    _show_report("weekly", on, None, fmt, hide_amounts)
+
+
+@report_app.command("monthly")
+def report_monthly(
+    on: ReportOnOption = None,
+    contribution: ContributionOption = None,
+    fmt: ReportFormatOption = ReportFormat.TEXT,
+    hide_amounts: HideAmountsOption = False,
+) -> None:
+    """Aylık raporu gösterir: XIRR, lotlar, enflasyon ve katkıyla dengeleme."""
+    _show_report("monthly", on, contribution, fmt, hide_amounts)
+
+
+@report_app.command("payday")
+def report_payday(
+    on: Annotated[str | None, typer.Option("--on", help="YYYY-AA-GG; verilmezse bugün.")] = None,
+    contribution: ContributionOption = None,
+    fmt: ReportFormatOption = ReportFormat.TEXT,
+    hide_amounts: HideAmountsOption = False,
+) -> None:
+    """Bu ayki katkının sınıf ve fon bazında dağılım önerisi (K-83)."""
+    settings = _load_settings_or_exit()
+    clock = bootstrap.system_clock()
+    day = clock.today() if on is None else _parse_date(on)
+    with _user_errors():
+        config = bootstrap.portfolio_source().load(_portfolio_path(settings, None))
+        amount = (
+            config.monthly_contribution
+            if contribution is None
+            else _parse_decimal("--contribution", contribution)
+        )
+        with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+            plan = payday_plan(uow, config, on=day, contribution=amount)
+    renderer = bootstrap.report_renderer(fmt.value, payday_amounts=not hide_amounts)
+    typer.echo(renderer.payday(plan))
+
+
+def _show_report(
+    kind: ReportKind, on: str | None, contribution: str | None, fmt: ReportFormat, hide: bool
+) -> None:
+    settings = _load_settings_or_exit()
+    clock = bootstrap.system_clock()
+    with _user_errors():
+        config = bootstrap.portfolio_source().load(_portfolio_path(settings, None))
+        day = (
+            logical_date(f"{kind}-report", clock.now().astimezone(BUSINESS_TZ))
+            if on is None
+            else _parse_date(on)
+        )
+        amount = (
+            config.monthly_contribution
+            if contribution is None
+            else _parse_decimal("--contribution", contribution)
+        )
+        with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+            report = build_report(
+                uow,
+                config,
+                kind=kind,
+                logical_date=day,
+                contribution=amount,
+                now=clock.now(),
+                cpi_series=settings.cpi_series,
+            )
+    typer.echo(bootstrap.report_renderer(fmt.value, hide_amounts=hide).report(report))
+
+
 @app.command("doctor")
 def doctor() -> None:
     """Kurulumu ve verinin tutarlılığını kontrol eder; yalnızca hatalar 1 ile çıkar."""
@@ -583,6 +804,7 @@ def _user_errors() -> Iterator[None]:
         bootstrap.MigrationError,
         bootstrap.SetupError,
         bootstrap.SourceError,
+        bootstrap.NotifyError,
     ) as exc:
         typer.echo(f"Hata: {exc}", err=True)
         raise typer.Exit(code=1) from exc

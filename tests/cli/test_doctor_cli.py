@@ -60,3 +60,20 @@ def test_loose_env_permissions_are_a_warning(portfolio: Path, tmp_path: Path) ->
     result = runner.invoke(app, ["doctor"])
     assert result.exit_code == 0, result.output
     assert "! .env izinleri: 644; 600 olmalı (chmod 600 .env)" in result.output
+
+
+def test_age_secret_key_on_the_server_fails_without_showing_it(
+    portfolio: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert runner.invoke(app, ["config", "apply"]).exit_code == 0
+    monkeypatch.setenv("FT_BACKUP_DIR", str(tmp_path / "yedek"))
+    monkeypatch.setenv("FT_BACKUP_AGE_RECIPIENTS", "age1mac, age1kurtarma")
+    secret = "AGE-SECRET-KEY-1DENEME"  # noqa: S105 - sahte test değeri
+    (tmp_path / ".env").write_text(f"# {secret}\n", encoding="utf-8")
+    os.chmod(tmp_path / ".env", 0o600)
+
+    result = runner.invoke(app, ["doctor"])
+
+    assert result.exit_code == 1
+    assert "✗ age gizli anahtarı: sunucuda bulundu, kaldır: .env" in result.output
+    assert secret not in result.output

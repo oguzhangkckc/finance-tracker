@@ -11,6 +11,8 @@ docs/DESIGN.md tek doğruluk kaynağıdır; alınmış kararlar oradaki "Karar k
 - Bitti tanımı: `make check` yeşil (ruff, mypy --strict, import-linter, pytest).
 - Kontrol komutlarının (`make check`, pytest, ruff, mypy, lint-imports) çıktısı pipe'lanmaz. Çıktı gerekiyorsa dosyaya yazılır; çıkış kodu doğrudan kontrol edilir ve commit ya da push yalnızca 0 ise yapılır. `cmd | grep … && git commit` biçimi grep'in çıkış koduna baktığı için yasak.
 - Push öncesinde pre-commit'in pre-push aşaması `make check`'i çalıştırır (`uv run pre-commit install` iki hook'u da kurar).
+- Commit e-postası bu repoda GitHub noreply adresidir (`git config --local user.email`); genel (`--global`) Git ayarına dokunulmaz. Kişisel e-posta adresi hiçbir dosyaya yazılmaz.
+- pre-push aşaması `make check`'ten önce `scripts/check_push_emails.py`'yi çalıştırır: uzakta olmayan her commit'in yazar ve committer e-postası noreply kalıbında değilse push durur ve düzeltme komutu gösterilir. Bu kontrol `--no-verify` ile atlanmaz.
 
 ## Kod kuralları
 
