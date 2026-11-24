@@ -29,6 +29,15 @@ def test_exact_division_leaves_nothing_over() -> None:
     )
 
 
+def test_a_quotient_rounded_up_at_28_digits_never_buys_more_than_the_amount() -> None:
+    amount = D("2." + "9" * 30)
+
+    split = units_for_amount(amount, D(1), YAT)
+
+    assert split.units == D(2)
+    assert split.spent <= amount
+
+
 def test_amount_below_one_unit_is_rejected() -> None:
     with pytest.raises(DomainError, match="en az bir pay"):
         units_for_amount(D(1), D("1.5"), YAT)
