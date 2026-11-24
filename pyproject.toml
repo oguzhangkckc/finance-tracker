@@ -43,6 +43,9 @@ ban-relative-imports = "all"
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101"]
 "scripts/**" = ["T201"]
+# E-posta kontrolü ve testi git'i PATH'ten, sabit argümanlarla çağırır.
+"scripts/check_push_emails.py" = ["S603", "S607"]
+"tests/scripts/**" = ["S603", "S607"]
 
 [tool.mypy]
 strict = true
