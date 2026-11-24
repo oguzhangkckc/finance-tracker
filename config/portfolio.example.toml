@@ -1,0 +1,61 @@
+# finans-takip portföy tanımı: ÖRNEK. Fon kodları (X ile başlayan) ve tutarlar hayalidir.
+# Gerçek dosya config/portfolio.toml'dur ve repoya girmez; sunucuda /etc/finans/portfolio.toml (K-09).
+# Doğrulama: ft config check   Uygulama: ft config apply
+
+# Dağılım içi varlık sınıflarının hedef ağırlıkları; toplam tam 1 olmalı.
+[targets]
+hisse_tr = 0.30
+hisse_yabanci = 0.15
+dusuk_risk = 0.40
+altin = 0.15
+
+# Aylık katkı (TL) ve maaş günü (1–31; ay daha kısaysa ayın son günü).
+# monthly yazılmazsa katkı "tanımlı değil" sayılır (K-56); payday için monthly zorunludur (K-83).
+[contribution]
+monthly = 10000
+payday = 15
+
+# Sapma alarmı eşikleri; yazılmazsa bu varsayılanlar geçerlidir.
+[alerts]
+open_above = 0.05
+close_below = 0.03
+reminder_days = 7
+
+# Günlük fiyat sıçraması eşikleri: önce category, sonra asset_class, sonra default (K-66).
+# Varsayılanlar para_piyasasi = 0.01 ve default = 0.10; gerekirse açıp ekle:
+# [quality.jump]
+# hisse_tr = 0.15
+
+# kind: TEFAS_YAT, TEFAS_EMK, TEFAS_BYF ya da MANUAL (elle değerlenen varlık).
+[[instruments]]
+code = "XHT"
+kind = "TEFAS_YAT"
+asset_class = "hisse_tr"
+name = "Örnek Türkiye hisse fonu"
+
+[[instruments]]
+code = "XHY"
+kind = "TEFAS_YAT"
+asset_class = "hisse_yabanci"
+name = "Örnek yabancı hisse fonu"
+
+[[instruments]]
+code = "XPP"
+kind = "TEFAS_YAT"
+asset_class = "dusuk_risk"
+category = "para_piyasasi"
+name = "Örnek para piyasası fonu"
+
+[[instruments]]
+code = "XAL"
+kind = "TEFAS_YAT"
+asset_class = "altin"
+name = "Örnek altın fonu"
+
+# Dağılım dışı varlık: takip edilir ve raporda ayrı gösterilir; dağılım, sapma ve dengelemeye girmez (K-74).
+[[instruments]]
+code = "XAC"
+kind = "TEFAS_YAT"
+asset_class = "acil_durum"
+allocation = false
+name = "Örnek acil durum fonu"
