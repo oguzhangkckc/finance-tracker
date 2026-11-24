@@ -28,6 +28,7 @@ from finans.domain.models import (
 from finans.domain.portfolio import AlertThresholds, PortfolioConfig
 from finans.domain.returns import net_present_value
 from finans.ports.repositories import AlertState
+from tests.support import report_scenario as scenario
 from tests.support.decimals import is_close
 
 D = Decimal
@@ -232,3 +233,16 @@ def test_payday_plan_needs_a_contribution(db: Path) -> None:
         pytest.raises(DomainError, match="Katkı tanımlı değil"),
     ):
         payday_plan(uow, CONFIG, on=SUNDAY, contribution=None)
+
+
+def test_report_ignores_data_issues_of_trades_after_its_date(migrated_db: Path) -> None:
+    scenario.seed(migrated_db)
+    with SqliteUnitOfWork(migrated_db) as uow:
+        late = Transaction("XHT", date(2026, 12, 2), Side.BUY, Decimal(1), Decimal(12))
+        uow.transactions.add(late, external_ref=None, note=None, created_at=scenario.NOW)
+
+    november = scenario.report(migrated_db, "monthly", date(2026, 11, 30))
+    december = scenario.report(migrated_db, "weekly", date(2026, 12, 6))
+
+    assert not [issue for issue in november.data_issues if issue.day == date(2026, 12, 2)]
+    assert [issue for issue in december.data_issues if issue.day == date(2026, 12, 2)]
