@@ -10,6 +10,7 @@ import typer
 from pydantic import ValidationError
 
 from finans import bootstrap
+from finans.application.cpi import CPI_HISTORY_START, CpiSyncReport, sync_cpi
 from finans.application.portfolio_config import ApplyReport, apply_portfolio
 from finans.application.portfolio_view import portfolio_as_of
 from finans.application.prices import set_manual_price
@@ -19,7 +20,7 @@ from finans.application.transactions import (
     void_transaction,
 )
 from finans.cli._common import VersionOption
-from finans.domain.models import DomainError, Side, Transaction
+from finans.domain.models import DomainError, Side, Transaction, YearMonth
 from finans.domain.numeric import canonical_text
 from finans.domain.portfolio import ConfigError
 from finans.ports.repositories import StoredTransaction
@@ -37,7 +38,9 @@ price_app = typer.Typer(
 app.add_typer(db_app, name="db")
 app.add_typer(config_app, name="config")
 app.add_typer(tx_app, name="tx")
+sync_app = typer.Typer(no_args_is_help=True, help="Dış kaynaklardan veri çekme.")
 app.add_typer(price_app, name="price")
+app.add_typer(sync_app, name="sync")
 
 
 class SideChoice(StrEnum):
@@ -236,6 +239,43 @@ def value(
         typer.echo(f"Fiyatı eksik: {', '.join(valuation.missing_prices)}")
 
 
+@sync_app.command("cpi")
+def sync_cpi_command(
+    start: Annotated[
+        str | None,
+        typer.Option("--from", help="İlk dönem, YYYY-AA; verilmezse bütün geçmiş (2005-01)."),
+    ] = None,
+) -> None:
+    """TÜFE'yi EVDS3'ten çeker; değişen dönemler revizyon olarak yazılır."""
+    settings = _load_settings_or_exit()
+    first = CPI_HISTORY_START if start is None else _parse_period(start)
+    clock = bootstrap.system_clock()
+    with _user_errors(), bootstrap.cpi_source(settings, clock) as source:
+        report = sync_cpi(
+            source,
+            lambda: bootstrap.open_unit_of_work(settings),
+            series=settings.cpi_series,
+            base=settings.cpi_base,
+            start=first,
+            end=YearMonth.of(clock.today()),
+            now=clock.now(),
+        )
+    _print_cpi_sync(report)
+
+
+def _print_cpi_sync(report: CpiSyncReport) -> None:
+    typer.echo(
+        f"TÜFE {report.series}: {report.received} dönem alındı; eklenen {report.inserted}, "
+        f"değişmeyen {report.unchanged}, revize {len(report.revised)}"
+    )
+    for revision in report.revised:
+        typer.echo(
+            f"Revize {revision.period}: {canonical_text(revision.old)} → "
+            f"{canonical_text(revision.new)}"
+        )
+    typer.echo(f"Son dönem: {report.latest or 'yok'}")
+
+
 _SYMBOLS = {"ok": "✓", "warn": "!", "fail": "✗"}
 
 
@@ -278,6 +318,14 @@ def _parse_date(text: str) -> date:
         typer.echo(f"Tarih YYYY-AA-GG biçiminde olmalı, {text!r} verildi.", err=True)
         raise typer.Exit(code=2)
     return value
+
+
+def _parse_period(text: str) -> YearMonth:
+    try:
+        return YearMonth.parse(text)
+    except DomainError:
+        typer.echo(f"Dönem YYYY-AA biçiminde geçerli bir ay olmalı, {text!r} verildi.", err=True)
+        raise typer.Exit(code=2) from None
 
 
 def _parse_decimal(name: str, text: str) -> Decimal:
@@ -323,7 +371,12 @@ def _user_errors() -> Iterator[None]:
         for issue in exc.issues:
             typer.echo(f"  - {issue}", err=True)
         raise typer.Exit(code=1) from exc
-    except (DomainError, bootstrap.MigrationError, bootstrap.SetupError) as exc:
+    except (
+        DomainError,
+        bootstrap.MigrationError,
+        bootstrap.SetupError,
+        bootstrap.SourceError,
+    ) as exc:
         typer.echo(f"Hata: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 

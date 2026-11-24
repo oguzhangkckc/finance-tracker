@@ -1,7 +1,11 @@
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
+from finans.adapters._http import HttpClient
 from finans.adapters.clock import SystemClock
 from finans.adapters.csv_transactions import CsvTransactionFile
+from finans.adapters.evds import EvdsCpiSource
 from finans.adapters.portfolio_toml import TomlPortfolioSource
 from finans.adapters.sqlite.connection import sqlite_version
 from finans.adapters.sqlite.migrate import (
@@ -12,10 +16,15 @@ from finans.adapters.sqlite.migrate import (
     schema_status,
 )
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
-from finans.application.doctor import Check, inactive_holdings_check, portfolio_checks
+from finans.application.doctor import (
+    Check,
+    cpi_check,
+    inactive_holdings_check,
+    portfolio_checks,
+)
 from finans.domain.portfolio import ConfigError, PortfolioConfig
 from finans.ports.clock import Clock
-from finans.ports.sources import PortfolioConfigSource, TransactionFile
+from finans.ports.sources import CpiSource, PortfolioConfigSource, SourceError, TransactionFile
 from finans.ports.unit_of_work import UnitOfWork
 from finans.settings import Settings
 
@@ -23,6 +32,8 @@ __all__ = [
     "MigrationError",
     "MigrationRun",
     "SetupError",
+    "SourceError",
+    "cpi_source",
     "migrate_database",
     "open_unit_of_work",
     "portfolio_source",
@@ -59,6 +70,18 @@ def open_unit_of_work(settings: Settings, *, readonly: bool = False) -> UnitOfWo
     else:
         migrate_database(settings)
     return SqliteUnitOfWork(settings.db_path, readonly=readonly)
+
+
+@contextmanager
+def cpi_source(settings: Settings, clock: Clock) -> Iterator[CpiSource]:
+    if settings.evds_api_key is None:
+        raise SetupError(
+            "FT_EVDS_API_KEY tanımlı değil; EVDS3 hesabındaki API anahtarını .env'e "
+            "(üretimde LoadCredential ile) ekle."
+        )
+    key = settings.evds_api_key.get_secret_value()
+    with HttpClient(clock, secrets=[key]) as http:
+        yield EvdsCpiSource(http, api_key=key, base_url=settings.evds_base_url, clock=clock)
 
 
 def portfolio_source() -> PortfolioConfigSource:
@@ -109,6 +132,8 @@ def run_doctor(settings: Settings) -> list[Check]:
                 checks.append(inactive_holdings_check(uow))
             else:
                 checks.extend(portfolio_checks(uow, config))
+            checks.append(cpi_check(uow, settings.cpi_series, today=SystemClock().today()))
+    checks.append(_evds_key_check(settings))
     checks.append(_env_check(Path(".env")))
     return checks
 
@@ -130,6 +155,12 @@ def _config_check(settings: Settings, checks: list[Check]) -> PortfolioConfig | 
         )
     )
     return config
+
+
+def _evds_key_check(settings: Settings) -> Check:
+    if settings.evds_api_key is None:
+        return Check("EVDS anahtarı", "warn", "FT_EVDS_API_KEY tanımlı değil")
+    return Check("EVDS anahtarı", "ok", "tanımlı")
 
 
 def _env_check(path: Path) -> Check:

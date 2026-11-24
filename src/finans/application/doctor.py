@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Literal
 
+from finans.domain.models import YearMonth
 from finans.domain.numeric import canonical_text
 from finans.domain.portfolio import PortfolioConfig
 from finans.domain.positions import build_positions
@@ -52,3 +53,17 @@ def inactive_holdings_check(uow: UnitOfWork) -> Check:
     if not held:
         return Check("Pasif varlıkta pay", "ok", "yok")
     return Check("Pasif varlıkta pay", "warn", f"{'; '.join(held)} (satış girilebilir)")
+
+
+def cpi_check(uow: UnitOfWork, series: str, *, today: date) -> Check:
+    latest = uow.cpi.latest(series)
+    if latest is None:
+        return Check("TÜFE", "warn", "veri yok; `ft sync cpi` çalıştır")
+    # t ayının TÜFE'si t+1 ayının başında açıklanır; iki aydan eskisi kaçırılmış bir yayındır.
+    if latest.period < YearMonth.of(today).shift(-2):
+        return Check(
+            "TÜFE",
+            "warn",
+            f"{series} son dönem {latest.period}; güncel değil, `ft sync cpi` çalıştır",
+        )
+    return Check("TÜFE", "ok", f"{series} son dönem {latest.period}")
