@@ -177,14 +177,19 @@ def test_environment_example_holds_no_secrets() -> None:
     assert "FT_PROFILE" not in keys
 
 
-SANAL_JOBS = ("sync-cpi", "weekly-report", "monthly-report", "payday", "backup")
+SANAL_JOBS = ("sync-prices", "sync-cpi", "weekly-report", "monthly-report", "payday", "backup")
 SANAL_SECRETS = ["ft_evds_api_key", "ft_telegram_bot_token"]
 
 
-def test_sanal_timers_follow_the_real_calendar_without_price_sync_until_decided() -> None:
+def test_sanal_timers_follow_the_real_calendar_and_run_after_the_real_jobs() -> None:
     timers = sorted(path.name for path in UNITS.glob("finans-sanal-*.timer"))
     assert timers == sorted(f"finans-sanal-{job}.timer" for job in SANAL_JOBS)
-    calendars = {**CALENDARS, "backup": "*-*-* 03:15 Europe/Istanbul"}
+    # K-121: sanal fiyat senkronu gerçeğinden sonra; iki profilin TEFAS istekleri üst üste binmez.
+    calendars = {
+        **CALENDARS,
+        "sync-prices": "Mon..Fri 21:45 Europe/Istanbul",
+        "backup": "*-*-* 03:15 Europe/Istanbul",
+    }
     for job in SANAL_JOBS:
         unit = _unit(UNITS / f"finans-sanal-{job}.timer")
         assert _one(unit["Timer"], "OnCalendar") == calendars[job]
