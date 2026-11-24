@@ -2,6 +2,7 @@ import logging
 import os
 import secrets
 import shutil
+import socket
 import sys
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -38,6 +39,7 @@ from finans.adapters.sqlite.snapshot import SqliteCopier
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.adapters.tefas import TefasPriceSource
 from finans.adapters.telegram import TelegramNotifier
+from finans.adapters.unix_listener import listen_unix
 from finans.application.backup import (
     REAL_PREFIX,
     SANAL_PREFIX,
@@ -95,6 +97,7 @@ __all__ = [
     "system_clock",
     "telegram_renderer",
     "transaction_file",
+    "web_listener",
 ]
 
 
@@ -448,3 +451,8 @@ def _env_check(path: Path) -> Check:
     if mode & 0o077:
         return Check(".env izinleri", "warn", f"{mode:o}; 600 olmalı (chmod 600 .env)")
     return Check(".env izinleri", "ok", f"{mode:o}")
+
+
+def web_listener(settings: Settings) -> socket.socket:
+    """finans-web'in dinlediği tek yer: 0600 izinli Unix soketi, TCP yok (K-101, K-123)."""
+    return listen_unix(settings.web_socket)
