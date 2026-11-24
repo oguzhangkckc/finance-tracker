@@ -1,3 +1,4 @@
+import re
 from collections.abc import Callable
 from decimal import (
     MAX_PREC,
@@ -21,6 +22,12 @@ DOMAIN_CONTEXT: Final = Context(
 
 
 _EXACT = Context(prec=MAX_PREC)
+_EXPONENT: Final = re.compile(r"[+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)[eE][+-]?\d+")
+
+
+def is_exponent_notation(text: str) -> bool:
+    """Ondalık ayırıcı nokta da virgül de olabilir; Excel `1,23457E+11` yazar (K-115)."""
+    return _EXPONENT.fullmatch(text.strip()) is not None
 
 
 def canonical_text(value: Decimal) -> str:

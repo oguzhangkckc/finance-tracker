@@ -71,6 +71,23 @@ def test_row_errors_are_collected_with_line_numbers(tmp_path: Path) -> None:
     ]
 
 
+def test_exponent_notation_points_to_the_excel_column_format(tmp_path: Path) -> None:
+    parsed = _read(
+        tmp_path,
+        HEADER
+        + "2026-01-05,XHT,BUY,1.23457E+11,1,0,,\n"
+        + '2026-01-05,XHT,BUY,"1,23457E+11",1,0,,\n'
+        + "2026-01-05,XHT,BUY,10,1e-2,0,,\n",
+    )
+    excel = "Excel'de sütun biçimini Sayı yap ve dosyayı yeniden kaydet."
+    assert parsed.rows == ()
+    assert [str(issue) for issue in parsed.issues] == [
+        f"satır 2: units: üstel gösterim kullanılamaz (1.23457E+11); {excel}",
+        f"satır 3: units: üstel gösterim kullanılamaz (1,23457E+11); {excel}",
+        f"satır 4: price: üstel gösterim kullanılamaz (1e-2); {excel}",
+    ]
+
+
 def test_missing_file(tmp_path: Path) -> None:
     parsed = CsvTransactionFile().read(tmp_path / "yok.csv")
     assert [str(issue) for issue in parsed.issues] == [f"{tmp_path / 'yok.csv'}: dosya bulunamadı."]

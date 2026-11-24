@@ -23,6 +23,7 @@ def test_amount_keeps_the_entered_places() -> None:
         ("", "units: sayı olmalı, '' verildi."),
         ("1e3", "units: üstel gösterim kullanılamaz; 1e3 yerine 1000 yaz."),
         ("2E-2", "units: üstel gösterim kullanılamaz; 2E-2 yerine 0.02 yaz."),
+        ("1,5e3", "units: üstel gösterim kullanılamaz; 1,5e3 yerine 1500 yaz."),
     ],
 )
 def test_malformed_amounts_say_what_to_write(text: str, message: str) -> None:
