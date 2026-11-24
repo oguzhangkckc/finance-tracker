@@ -141,7 +141,7 @@ def test_sync_prices_reports_each_fund_and_revisions(monkeypatch: pytest.MonkeyP
     _use_prices(monkeypatch, FakePriceSource({"BCO": _prices((date(2026, 11, 20), "1.744"))}))
     first = runner.invoke(app, ["sync", "prices", *RANGE])
     assert first.exit_code == 0, first.output
-    assert "istekler arası en az 10 sn" in first.output
+    assert "TEFAS fiyatları isteniyor (1 fon); istekler arası en az 10 sn." in first.output
     assert (
         "✓ BCO (2026-11-01 ile 2026-11-24 arası): 1 gün alındı; eklenen 1, değişmeyen 0, revize 0"
         in (first.output)
@@ -176,6 +176,7 @@ def test_without_funds_it_says_how_to_add_them(monkeypatch: pytest.MonkeyPatch) 
     result = runner.invoke(app, ["sync", "prices"])
     assert result.exit_code == 0, result.output
     assert "Senkronize edilecek TEFAS fonu yok" in result.output
+    assert "isteniyor" not in result.output
 
 
 @pytest.mark.usefixtures("portfolio")

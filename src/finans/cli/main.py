@@ -299,9 +299,13 @@ def sync_prices_command(
     first = None if start is None else _parse_date(start)
     clock = bootstrap.system_clock()
     last = clock.today() if end is None else _parse_date(end)
-    typer.echo(
-        f"TEFAS fiyatları isteniyor; istekler arası en az {settings.tefas_min_interval_s} sn."
-    )
+
+    def announce(count: int) -> None:
+        typer.echo(
+            f"TEFAS fiyatları isteniyor ({count} fon); istekler arası en az "
+            f"{settings.tefas_min_interval_s} sn."
+        )
+
     with _user_errors(), bootstrap.price_source(settings, clock) as source:
         report = sync_prices(
             source,
@@ -311,6 +315,7 @@ def sync_prices_command(
             end=last,
             backfill=backfill,
             now=clock.now(),
+            on_start=announce,
         )
     _print_price_sync(report)
     if report.funds:

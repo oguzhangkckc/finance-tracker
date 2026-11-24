@@ -80,6 +80,33 @@ def test_targets_are_tefas_funds_in_use_and_start_where_data_is_needed(db: Path)
     assert [fund.code for fund in report.funds] == ["AJH", "BCO", "EOZ", "OLD"]
 
 
+def test_start_is_announced_with_the_fund_count_before_any_request(db: Path) -> None:
+    source = FakePriceSource()
+    announced: list[tuple[int, int]] = []
+
+    sync_prices(
+        source,
+        _opener(db, source.events),
+        end=END,
+        now=NOW,
+        on_start=lambda count: announced.append((count, len(source.calls))),
+    )
+
+    assert announced == [(4, 0)]
+
+
+def test_nothing_is_announced_when_there_is_nothing_to_fetch(migrated_db: Path) -> None:
+    source = FakePriceSource()
+    announced: list[int] = []
+
+    report = sync_prices(
+        source, _opener(migrated_db, source.events), end=END, now=NOW, on_start=announced.append
+    )
+
+    assert announced == []
+    assert report.funds == ()
+
+
 def test_explicit_start_and_backfill_override_the_defaults(db: Path) -> None:
     source = FakePriceSource()
     sync_prices(source, _opener(db, source.events), start=date(2026, 11, 1), end=END, now=NOW)

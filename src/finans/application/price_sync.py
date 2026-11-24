@@ -70,9 +70,12 @@ def sync_prices(
     codes: Sequence[str] | None = None,
     start: date | None = None,
     backfill: bool = False,
+    on_start: Callable[[int], None] | None = None,
 ) -> PriceSyncReport:
     with open_uow() as uow:
         plan = _plan(uow, codes, start, end, backfill)
+    if plan and on_start is not None:
+        on_start(len(plan))
     funds: list[FundSync] = []
     for index, (inst, first) in enumerate(plan):
         # Ağ isteği yazma kilidi alınmadan yapılır; yavaş bir yanıt veritabanını kilitli tutmasın.
