@@ -73,9 +73,9 @@ def test_not_a_number_is_rejected_by_the_domain_check() -> None:
     assert "Hata: units sonlu bir sayı olmalı: NaN" in output
 
 
-def test_exponent_notation_is_accepted() -> None:
+def test_exponent_notation_is_rejected() -> None:
     code, output = _add("1e3", "10")
 
-    assert code == 0, output
-    listed = runner.invoke(app, ["tx", "list"])
-    assert "#1  2026-06-15  XHT  BUY  1000 × 10  komisyon 0" in listed.output
+    assert code == 2
+    assert "units: üstel gösterim kullanılamaz; 1e3 yerine 1000 yaz." in output
+    assert "Kayıtlı işlem yok." in runner.invoke(app, ["tx", "list"]).output

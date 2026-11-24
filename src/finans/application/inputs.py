@@ -14,9 +14,12 @@ def parse_amount(name: str, text: str) -> Decimal:
         fixed = text.replace(",", ".")
         raise InputError(f"{name}: ondalık ayırıcı nokta olmalı; {text} yerine {fixed} yaz.")
     try:
-        return Decimal(text)
+        value = Decimal(text)
     except InvalidOperation:
         raise InputError(f"{name}: sayı olmalı, {text!r} verildi.") from None
+    if "e" in text.lower() and value.is_finite():
+        raise InputError(f"{name}: üstel gösterim kullanılamaz; {text} yerine {value:f} yaz.")
+    return value
 
 
 def parse_day(text: str) -> date:
