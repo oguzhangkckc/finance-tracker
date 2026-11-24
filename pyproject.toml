@@ -111,7 +111,7 @@ source_modules = [
     "finans.settings",
     "finans.cli",
 ]
-forbidden_modules = ["sqlite3", "socket", "urllib", "http"]
+forbidden_modules = ["sqlite3", "socket", "urllib", "http", "httpx"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]

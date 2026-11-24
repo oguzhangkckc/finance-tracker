@@ -43,3 +43,15 @@ def test_fixed_clock_advance(clock: FixedClock) -> None:
 def test_both_clocks_satisfy_the_port() -> None:
     clocks: list[Clock] = [SystemClock(), FixedClock(datetime(2026, 1, 1, tzinfo=UTC))]
     assert all(c.now().tzinfo is not None for c in clocks)
+
+
+def test_system_clock_sleep_of_zero_returns() -> None:
+    SystemClock().sleep(0)
+
+
+def test_fixed_clock_sleep_advances_and_records(clock: FixedClock) -> None:
+    before = clock.now()
+    clock.sleep(30)
+    clock.sleep(0)
+    assert clock.now() - before == timedelta(seconds=30)
+    assert clock.slept == [30, 0]

@@ -48,3 +48,7 @@ class RawPayload:
     request_key: str
     fetched_at: datetime
     body: bytes
+
+
+class SourceError(Exception):
+    """Dış kaynaktan veri alınamadı; mesaj sır içermez."""

@@ -13,3 +13,7 @@ class Clock(Protocol):
     def today(self) -> date:
         """Europe/Istanbul takvim günü."""
         ...
+
+    def sleep(self, seconds: int) -> None:
+        """Bekler; testlerde saat ilerletilir."""
+        ...

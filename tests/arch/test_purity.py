@@ -20,6 +20,7 @@ WALL_CLOCK_CALLS = frozenset(
         "time.localtime",
         "time.gmtime",
         "time.ctime",
+        "time.sleep",
     }
 )
 CURRENT_TIME_WHEN_SINGLE_ARGUMENT = "time.strftime"
@@ -108,6 +109,7 @@ def wall_clock_usages(tree: ast.Module) -> Iterator[int]:
         ("import time\nx = time.ctime()", [2]),
         ("import time\nx = time.strftime('%Y')", [2]),
         ("import time\nx = time.strftime('%Y', t)", []),
+        ("import time\ntime.sleep(1)", [2]),
         ("def f(clock):\n    return clock.now(), clock.today()", []),
         ("from datetime import UTC, datetime\nx = datetime(2026, 1, 1, tzinfo=UTC)", []),
     ],
