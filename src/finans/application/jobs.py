@@ -27,6 +27,7 @@ Outcome = Literal["ok", "partial", "failed", "skipped", "busy"]
 PING_CHECKS: Final = {"weekly-report": "reports", "monthly-report": "reports", "backup": "backup"}
 CPI_WAIT_LAST_DAY: Final = 10
 RAW_PAYLOAD_RETENTION: Final = timedelta(days=30)
+PAYDAY_WINDOW: Final = timedelta(days=3)
 _BOT_TOKEN: Final = re.compile(r"bot\d+:[A-Za-z0-9_-]+")
 _LOG = logging.getLogger("finans.jobs")
 
@@ -236,6 +237,10 @@ def _send_report(ctx: JobContext, kind: ReportKind, day: date, *, note: str | No
 
 
 def _payday(day: date, ctx: JobContext) -> JobResult:
+    """Zamanlayıcı her gün çalışır; mesaj yalnızca maaş gününden sonraki 3 gün içinde gider,
+    böylece ilk kurulumda geçmiş ayın mesajı gönderilmez (K-97)."""
+    if ctx.clock.today() - day > PAYDAY_WINDOW:
+        return JobResult("ok", {"gönderim": "atlandı: pencere geçti", "maaş_günü": str(day)})
     with ctx.open_uow() as uow:
         plan = payday_plan(uow, ctx.config, on=day, contribution=ctx.config.monthly_contribution)
     _send(ctx, ctx.renderer.payday(plan))

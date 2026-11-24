@@ -1,0 +1,10 @@
+[Unit]
+Description=finans-takip: aylık rapor; önceki ayın TÜFE'si gelince bir kez
+
+[Timer]
+OnCalendar=*-*-05..10 11:00 Europe/Istanbul
+Persistent=true
+Unit=finans-job@monthly-report.service
+
+[Install]
+WantedBy=timers.target

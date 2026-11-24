@@ -1,0 +1,10 @@
+[Unit]
+Description=finans-takip: şifreli gece yedeği
+
+[Timer]
+OnCalendar=*-*-* 03:00 Europe/Istanbul
+Persistent=true
+Unit=finans-job@backup.service
+
+[Install]
+WantedBy=timers.target

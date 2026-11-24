@@ -170,7 +170,8 @@ finance-tracker/
 │   ├── bootstrap.py             # composition root: bağımlılıkları bağlar
 │   └── settings.py
 ├── skills/finans-takip/SKILL.md
-├── deploy/systemd/finans-<iş>.service, .timer   # her biri `ft job run <iş>` çağırır (K-80)
+├── deploy/systemd/finans-job@.service, finans-<iş>.timer   # şablon `ft job run %i` çağırır (K-80, K-97)
+├── deploy/ft-finans, finans.env.example, check-units.sh     # elle komut, ayar örneği, CI denetimi
 ├── docs/DESIGN.md, docs/ROADMAP.md, docs/agent-output.schema.json
 └── tests/unit, arch, contract, repo, snapshots, live, fixtures, fakes
 ```
@@ -704,7 +705,7 @@ Deterministik işler systemd timer ile, LLM gerektiren işler OpenClaw'ın zaman
 | monthly-report | Ayın 5'i ile 10'u arası her gün 11:00 | systemd | Hayır | Önceki ayın TÜFE'si gelince bir kez gönderilir; 10'unda hâlâ yoksa bayat-TÜFE uyarısıyla gönderilir |
 | export-snapshot | Her işin sonunda ve her gün 22:00 | iş zinciri ve systemd | Hayır | Ajan JSON'larını yazar ve OpenClaw makinesine iter. Günlük çalışma, 26 saatlik tazelik eşiğinin hafta sonu aşılmamasını sağlar |
 | ppk-summary | PPK günleri 14:30 | OpenClaw | Evet | Kararlar 14:00'te açıklanır; yıllık takvim config'e girilir |
-| payday | Maaş günü 09:00 (`[contribution] payday`) | systemd | Hayır | Bu ayki katkının sınıf ve fon bazında dağılım önerisi ve `ft tx add` hatırlatması (K-83) |
+| payday | Her gün 09:00; yalnızca maaş gününden sonraki 3 gün içinde gönderir (`[contribution] payday`) | systemd | Hayır | Bu ayki katkının sınıf ve fon bazında dağılım önerisi ve `ft tx add` hatırlatması; pencere geçtiyse job_run'a "atlandı: pencere geçti" (K-83, K-97) |
 | backup | Her gece 03:00 | systemd | Hayır | age ile şifreli kopya yerel yedek dizinine; Mac SSH ile çeker; 30 günden eski raw_payload silinir; başarıda günlük ping (K-82, K-84) |
 
 **Kadans (K-73, K-69'u değiştirir).** TEFAS fiyatları hafta içi her gün 21:30'da `ft sync prices` ile senkronize edilir; dağılım sapması her başarılı senkronizasyondan sonra değerlendirilir. Haftalık rapor isteğe bağlıdır (varsayılan kapalı, M4 kabul süresince açık). EVDS (sync-cpi) otomatik kalır.
@@ -822,21 +823,89 @@ En değerli varlık finansal hesaplar değil, çünkü sistem onlara hiç erişm
   - Çekirdek: tefas.gov.tr, evds3.tcmb.gov.tr (geçiş süresince evds2.tcmb.gov.tr), api.telegram.org, ping servisi (ör. hc-ping.com), yedek hedefi ve OpenClaw makinesi (anlık görüntü aktarımı). Kurulum ve güncelleme sırasında PyPI ve işletim sistemi depoları.
   - OpenClaw makinesi: LLM sağlayıcısı, api.telegram.org, www.tcmb.gov.tr.
 
-### Kurulum (M4, K-91)
+### Kurulum (M4, K-91, K-97)
 
-1. Paket ve veritabanı: `uv sync --locked`, `ft db migrate`, `ft config apply`.
-2. Sırlar: geliştirmede `.env` (600), üretimde credentials dizini ve birimlerde `LoadCredential=`.
-3. İlk iş erişim denemesi: `ft doctor`, ardından `ft sync cpi` (EVDS erişimi ve anahtar). TEFAS erişimi `ft sync prices` ile kullanıcı tarafından denenir (K-71).
-4. Telegram: `ft notify test` kullanıcı tarafından çalıştırılır (K-89).
-5. Zamanlama: `deploy/systemd/` birimleri `/etc/systemd/system/`'e kopyalanır; `systemctl enable --now 'finans-*.timer'`; `systemctl list-timers 'finans-*'` ile kontrol edilir.
-6. Mac'te yedek çekme (sunucu yalnızca şifreli dosya tutar; kimlik bilgisi Mac'tedir):
+Hedef: evdeki, her zaman açık, 64 bit Debian tabanlı bir Linux cihaz (Raspberry Pi OS 64 bit, Ubuntu Server ya da Debian 12+; systemd 252 ve üstü). Komutlar `sudo` yetkili bir kullanıcıyla çalıştırılır.
+
+1. **Saat dilimi ve NTP.** Zamanlayıcılar saat dilimini kendileri yazar; NTP mantıksal tarihin doğru gün üzerinden yürümesi için gerekir. Raspberry Pi'de gerçek zamanlı saat olmadığı için şarttır; işler `time-sync.target` sonrasında başlar.
 
    ```sh
-   rsync -a --ignore-existing --exclude '.*' finans@SUNUCU:/var/lib/finans/backups/ ~/Yedekler/finans/
+   sudo timedatectl set-timezone Europe/Istanbul
+   sudo timedatectl set-ntp true
+   timedatectl status   # "System clock synchronized: yes" ve "NTP service: active" beklenir
    ```
 
-   Zamanlama önerisi: Mac'te launchd ile her gün 09:30, sunucudaki 03:00 yedeğinden sonra. `~/Library/LaunchAgents/` altındaki bir plist'te `StartCalendarInterval` (Hour 9, Minute 30) ve `ProgramArguments` olarak yukarıdaki komut; Mac uykudaysa iş uyanınca bir kez çalışır.
-7. Aylık geri yükleme testi (Mac'te; age gizli anahtarı yalnızca Mac'tedir). Betik özeti doğrular, yedeği 700 izinli geçici bir dizine çözer, `integrity_check` ve tablo sayılarını gösterir, çıkarken geçici dizini siler:
+2. **Paketler.** `age` ve `rrsync` (rsync paketinde) Debian 12, Raspberry Pi OS (bookworm) ve Ubuntu 24.04 depolarındadır. uv resmi kurulum betiğiyle `/usr/local/bin`'e kurulur.
+
+   ```sh
+   sudo apt update && sudo apt install age git rsync sqlite3 curl
+   curl -LsSf https://astral.sh/uv/install.sh | sudo env UV_INSTALL_DIR=/usr/local/bin sh
+   ```
+
+3. **Ayrı kullanıcı ve dizinler.** `finans` kullanıcısının parolası yoktur; kabuk yalnızca yedek çekme anahtarının zorunlu komutu (adım 8) için gerekir. SSH'de parola girişi kapalı olmalıdır (`PasswordAuthentication no`).
+
+   ```sh
+   sudo useradd --system --create-home --home-dir /var/lib/finans --shell /bin/sh finans
+   sudo passwd -l finans
+   sudo install -d -o finans -g finans -m 700 /var/lib/finans /var/lib/finans/backups /var/lib/finans/locks
+   sudo install -d -o finans -g finans -m 755 /opt/finans
+   sudo install -d -o root -g finans -m 750 /etc/finans
+   sudo install -d -o root -g root -m 700 /etc/finans/credstore
+   ```
+
+4. **Kod ve Python 3.13.** Python uv'nin kurduğu sürümdür (K-01); servis kullanıcısı erişebilsin diye `/opt/finans` altında tutulur. Güncelleme aynı iki komutla yapılır (`git pull`, `uv sync`).
+
+   ```sh
+   sudo -u finans git clone https://github.com/<github-kullanıcı>/finance-tracker.git /opt/finans
+   cd /opt/finans && sudo -u finans env UV_PYTHON_INSTALL_DIR=/opt/finans/.python uv sync --locked --no-dev
+   ```
+
+5. **Ayarlar ve sırlar.**
+   - `/etc/finans/finans.env` (root:finans, 640) `deploy/finans.env.example`'dan hazırlanır; iki age açık anahtarı `FT_BACKUP_AGE_RECIPIENTS`'e, sohbet ID'si `FT_TELEGRAM_CHAT_ID`'ye yazılır. Bu dosyaya sır yazılmaz.
+   - `/etc/finans/portfolio.toml` (root:finans, 640) Mac'teki dosyanın kopyasıdır.
+   - Sırlar `/etc/finans/credstore/` altında (root:root, 600), dosya adı credential adıdır: `ft_evds_api_key`, `ft_telegram_bot_token`, `ft_healthcheck_reports_url`, `ft_healthcheck_backup_url`. Kullanılmayan sır için boş dosya bırakılır; dosya hiç yoksa systemd işi başlatmaz (K-92).
+   - age gizli anahtarı sunucuya hiç gelmez; `ft doctor` denetler (K-82).
+
+6. **Elle komutlar ve ilk erişim denemesi.** `deploy/ft-finans`, `ft`'yi işlerle aynı kullanıcı, ayar ve sırlarla (`systemd-run`) çalıştırır. İlk iş `doctor` ve `sync cpi` ile erişim denemesidir (K-91); TEFAS erişimini `sync prices` ile kullanıcı dener (K-71), Telegram'ı `notify test` doğrular (K-89).
+
+   ```sh
+   sudo /opt/finans/deploy/ft-finans db migrate
+   sudo /opt/finans/deploy/ft-finans config apply
+   sudo /opt/finans/deploy/ft-finans doctor
+   sudo /opt/finans/deploy/ft-finans sync cpi
+   sudo /opt/finans/deploy/ft-finans notify test
+   ```
+
+7. **Zamanlayıcılar.** Her timer `finans-job@<iş>.service` şablonunu çağırır; şablon yalnızca `ft job run <iş>` çalıştırır (K-80). Sonuçlar `ft-finans job list` ve journald'da görülür.
+
+   ```sh
+   sudo cp /opt/finans/deploy/systemd/finans-* /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now finans-sync-prices.timer finans-sync-cpi.timer \
+     finans-weekly-report.timer finans-monthly-report.timer finans-payday.timer finans-backup.timer
+   systemctl list-timers 'finans-*'
+   journalctl -u 'finans-job@*' --since today
+   ```
+
+8. **Mac'in yedek çekmesi (SSH anahtarı).** Sunucu yedek hedefi için kimlik bilgisi tutmaz; Mac çeker (K-82). Mac'te yalnızca bu iş için bir anahtar oluşturulur; açık anahtar sunucuda `/var/lib/finans/.ssh/authorized_keys`'e (dizin 700, dosya 600, sahibi finans) zorunlu komutla eklenir, böylece anahtar yalnızca yedek dizinini okuyabilir.
+
+   ```sh
+   ssh-keygen -t ed25519 -f ~/.ssh/finans_yedek -C mac-yedek     # Mac'te
+   ```
+
+   ```text
+   restrict,command="/usr/bin/rrsync -ro /var/lib/finans/backups/" ssh-ed25519 AAAA… mac-yedek
+   ```
+
+   Mac'te çekme komutu; rrsync yolları yedek dizinine göre çözer, `finans@SUNUCU:/` yedek dizininin kendisidir:
+
+   ```sh
+   rsync -a --ignore-existing --exclude '.*' -e "ssh -i ~/.ssh/finans_yedek" finans@SUNUCU:/ ~/Yedekler/finans/
+   ```
+
+   Zamanlama önerisi: Mac'te launchd ile her gün 09:30, sunucudaki 03:00 yedeğinden sonra (`~/Library/LaunchAgents/` altında bir plist'te `StartCalendarInterval` Hour 9, Minute 30 ve `ProgramArguments` olarak yukarıdaki komut); Mac uykudaysa iş uyanınca bir kez çalışır.
+
+9. Aylık geri yükleme testi (Mac'te; age gizli anahtarı yalnızca Mac'tedir). Betik özeti doğrular, yedeği 700 izinli geçici bir dizine çözer, `integrity_check` ve tablo sayılarını gösterir, çıkarken geçici dizini siler:
 
    ```sh
    scripts/verify_backup.sh ~/Yedekler/finans/finans-<zaman>.db.age ~/.config/age/finans.txt
@@ -912,7 +981,7 @@ En büyük teknik risk TEFAS uç noktasının resmi olmaması, en büyük proje 
 Açık sorular:
 
 - [x] Satışlarda FIFO mu, ortalama maliyet mi? FIFO (K-18).
-- [ ] Barındırma: ev sunucusu mu, VPS mi? Her iki durumda da her zaman açık bir Linux makine ve systemd (K-80); karar kurulum notunu etkiler. TEFAS API'si kullanıldığı için (K-71) barındırma adayında `scripts/record_tefas.py` kullanıcı tarafından çalıştırılır; Türkiye IP'li bir bağlantıdan 14 isteğin hepsi 200 döndü.
+- [x] Barındırma: evdeki, her zaman açık, 64 bit Debian tabanlı bir Linux cihaz, systemd ile (K-97); kurulum adımları Kurulum bölümünde. TEFAS istekleri ev bağlantısından (Türkiye IP'si) gider; denemede 14 isteğin hepsi 200 döndü (K-71).
 - [ ] Hangi LLM sağlayıcısı ve aylık bütçe ne olacak?
 - [x] TEFAS fiyat kaynağı: JSON API, istekleri kullanıcı çalıştırır (K-71). Dosya içe aktarma yazılmaz.
 - [x] Takasbank'tan TEFAS API'si için izin: istenmeyecek; kullanıcı kararıyla başlandı (K-73).
@@ -1028,6 +1097,7 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-94 | K-88 ve K-74'e ek: haftalık değişim Modified Dietz ile hesaplanır: (V_1 − V_0 − ΣF) / (V_0 + Σ w_i·F_i), w_i = akışın dönemde kaldığı gün / dönem günü; V_0 = 0 ya da payda ≤ 0 ise "—". Dağılım dışı varlığın basit reel getirisinde her lotun maliyeti ayrı ayrı değerleme gününün TL'sine çevrilir | Akışları dönem sonunda sayan formül, katkı portföyden büyükken kazancı yalnızca başlangıç değerine bölüp şişiriyordu (V_0 = 1.000, Pazartesi 10.000 alım, hafta %1 → ~%11); çok lotlu varlıkta reel getiri tek anlamlı olsun | Raporlama, Hesap motoru |
 | K-95 | Rapor kuralları: fiyatı olmayan varlık değerlenmez ve açıkça yazılır; dağılım içinde eksik fiyat varsa dağılım, alarm, katkı planı ve para ağırlıklı getiri atlanır. Sessiz dönem notu kaydedilen bitiş tarihine bakar. Sistem satırı çekim zamanlarını veriden alır. Getiri etiketleri kapsamı yazar; aylık raporda aylık değişim; reel = nominal notu. Telegram mesajı `<pre>` yerine HTML metin, komutlar `<code>` (K-22'yi günceller). Snapshot'lar uçtan uca üretilir | Elle kurulmuş snapshot verisi gerçekte oluşamayacak çelişkiler içeriyordu; eksik fiyat sessizce yanlış dağılım ve alarm üretebilirdi | Raporlama, Test |
 | K-96 | İş yürütücü: sync-prices eksik fiyatta ve bildirim gönderilemezse "partial"; aylık rapor TÜFE beklerken ayın 10'una kadar "partial", sonra notla gönderilir; haftalık rapor kapalıyken "ok"; ping yalnız "ok" ve "failed"da, hatası sonucu değiştirmez; iş hataları arındırılmış mesajla kaydedilir | "partial" yeniden denemeye izin verir, "ok" vermez; gönderilmemiş rapor "ok" sayılmamalı | Zamanlama, Gözlemlenebilirlik |
+| K-97 | Barındırma evdeki 64 bit Debian tabanlı Linux cihaz, systemd. Birimler tek şablon `finans-job@.service` ve iş başına `finans-<iş>.timer`; ayarlar `/etc/finans/finans.env`, sırlar `/etc/finans/credstore/` ve LoadCredential (credential adı ayar adı, boş dosya tanımsız). Elle komutlar `deploy/ft-finans` (systemd-run, aynı kullanıcı ve sırlar). Maaş günü timer'ı her gün 09:00; mesaj yalnızca maaş gününden sonraki 3 gün içinde, değilse job_run'a "atlandı: pencere geçti". Mac yedekleri `restrict` ve `rrsync -ro` ile sınırlı bir SSH anahtarıyla çeker | systemd ayın olmayan gününde tetiklenmez; ilk kurulumda geçmiş ayın maaş günü mesajı gitmesin; tek şablon birimlerin birbirinden sapmasını önler | Zamanlama, Kurulum, Güvenlik |
 
 ## Planı kodlama ajanıyla uygulama
 

@@ -244,16 +244,36 @@ def test_monthly_report_waits_for_cpi_until_the_tenth(migrated_db: Path) -> None
     assert notifier.sent[1][0].startswith("Aylık rapor (2026-11-30)")
 
 
-def test_payday_message_is_sent(migrated_db: Path, clock: FixedClock) -> None:
+PAYDAY = date(2026, 11, 15)
+
+
+def _on(day: int) -> FixedClock:
+    return FixedClock(datetime(2026, 11, day, 6, 0, tzinfo=UTC))
+
+
+@pytest.mark.parametrize("day", [15, 18])
+def test_payday_message_is_sent_within_three_days(migrated_db: Path, day: int) -> None:
     scenario.seed(migrated_db)
     notifier = FakeNotifier()
-    context = _context(migrated_db, clock, notifier=notifier)
 
-    result = job_body("payday", date(2026, 11, 15), context)()
+    result = job_body("payday", PAYDAY, _context(migrated_db, _on(day), notifier=notifier))()
 
     assert result.status == "ok"
     assert notifier.sent[0][0].startswith("Maaş günü (2026-11-15)")
     assert "<code>ft tx add</code>" in notifier.sent[0][0]
+
+
+def test_payday_message_after_the_window_is_skipped(migrated_db: Path) -> None:
+    scenario.seed(migrated_db)
+    notifier = FakeNotifier()
+
+    result = job_body("payday", PAYDAY, _context(migrated_db, _on(19), notifier=notifier))()
+
+    assert (result.status, result.detail) == (
+        "ok",
+        {"gönderim": "atlandı: pencere geçti", "maaş_günü": "2026-11-15"},
+    )
+    assert notifier.sent == []
 
 
 def test_cpi_sync_is_ok_only_when_the_target_period_arrives(
@@ -268,11 +288,12 @@ def test_cpi_sync_is_ok_only_when_the_target_period_arrives(
     assert (arrived.status, waiting.status) == ("ok", "partial")
 
 
-def test_messages_without_telegram_fail_clearly(migrated_db: Path, clock: FixedClock) -> None:
+def test_messages_without_telegram_fail_clearly(migrated_db: Path) -> None:
     scenario.seed(migrated_db)
-    body = job_body("payday", date(2026, 11, 15), _context(migrated_db, clock))
+    clock = _on(15)
+    body = job_body("payday", PAYDAY, _context(migrated_db, clock))
 
-    outcome = _run(migrated_db, "payday", date(2026, 11, 15), body, clock)
+    outcome = _run(migrated_db, "payday", PAYDAY, body, clock)
 
     assert outcome.status == "failed"
     assert "JobError: Telegram tanımlı değil" in str(outcome.detail["hata"])

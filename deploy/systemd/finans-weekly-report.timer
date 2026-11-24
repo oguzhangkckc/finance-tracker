@@ -1,0 +1,10 @@
+[Unit]
+Description=finans-takip: haftalık rapor (FT_WEEKLY_REPORT_ENABLED ile açılır)
+
+[Timer]
+OnCalendar=Sun 20:00 Europe/Istanbul
+Persistent=true
+Unit=finans-job@weekly-report.service
+
+[Install]
+WantedBy=timers.target

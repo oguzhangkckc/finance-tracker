@@ -1,0 +1,19 @@
+[Unit]
+Description=finans-takip işi: %i
+Documentation=file:/opt/finans/docs/DESIGN.md
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=finans
+Group=finans
+WorkingDirectory=/var/lib/finans
+EnvironmentFile=/etc/finans/finans.env
+# K-92: sırlar ortam değişkeni değil; credential adı ayar adıdır (FT_ önekiyle, küçük harf).
+# Kullanılmayan sır için boş dosya yeterli; dosya hiç yoksa systemd işi başlatmaz.
+LoadCredential=ft_evds_api_key:/etc/finans/credstore/ft_evds_api_key
+LoadCredential=ft_telegram_bot_token:/etc/finans/credstore/ft_telegram_bot_token
+LoadCredential=ft_healthcheck_reports_url:/etc/finans/credstore/ft_healthcheck_reports_url
+LoadCredential=ft_healthcheck_backup_url:/etc/finans/credstore/ft_healthcheck_backup_url
+ExecStart=/opt/finans/.venv/bin/ft job run %i

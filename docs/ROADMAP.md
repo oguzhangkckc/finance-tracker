@@ -50,6 +50,7 @@ Not: Gece yedeği age ile birden çok açık anahtara şifreli, sunucuda yerel d
 Not: Maaş günü mesajı katkının sınıf ve fon bazında dağılım önerisi ve `ft tx add` hatırlatması (K-83). Telegram'da TL tutarları varsayılan gizli (K-90); maaş günü mesajı için ayrı ayar, varsayılan gizli (K-93).
 Not: Rapor kuralları: eksik fiyat açıkça yazılır ve dağılım, alarm, plan atlanır; kapsam etiketleri; aylık raporda aylık değişim; Telegram'da `<code>`; snapshot'lar uçtan uca (K-95).
 Not: Fiyatlar eksikken alarm değerlendirilmez (K-85); mantıksal tarihler K-86; sessiz dönem `allocation_state`'te (K-87); haftalık değişim önceki Pazar'a göre (K-88).
+Not: Evdeki Debian tabanlı cihazda systemd; tek şablon servis ve iş başına timer, `deploy/ft-finans`, maaş günü 3 günlük pencere, Mac yedekleri rrsync ile çeker (K-97).
 Not: Kurulumda ilk iş `ft doctor` ve `ft sync cpi` (K-91); Telegram kurulumu ve `ft notify test` kullanıcıda (K-89); M4 birimlerinde LoadCredential, sertleştirme M5'te (K-92).
 
 ## M5 · OpenClaw ve güvenlik sertleştirmesi
