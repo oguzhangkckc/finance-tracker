@@ -469,6 +469,17 @@ Her senkronizasyondan sonra çalışır; sonuçlar uyarıya ve raporun "Veri sor
 
 Sıçrama eşikleri `portfolio.toml`'da `[quality.jump]` altında kategori ya da sınıf adıyla, bir de `default` ile tanımlanır (ör. `para_piyasasi = 0.01`, `hisse = 0.15`, `default = 0.10`). Önce kategori, sonra sınıf, sonra `default` aranır. Bayatlık eşikleri (5 işlem günü, 4 takvim günü) kodda sabittir (K-66).
 
+Uygulama ayrıntıları (M3):
+- Kontroller domain'de saf fonksiyonlardır (`domain/quality.py`); `ft data check [--since]` ve her `ft sync prices` sonunda çalışır. Varsayılan pencere son 30 gündür; bayatlık ve işlem fiyatı kontrolleri pencereden bağımsızdır.
+- İşlem günleri, takip edilen TEFAS fonlarından en az birinin fiyatı olan günlerdir. Takip edilen fon: etkin ya da elde payı kalan.
+- Bayatlık (fon): fonun son fiyatından sonra 5 ya da daha fazla işlem günü varsa. Hiç fiyatı olmayan fon da bayattır.
+- Bayatlık (genel): son işlem gününden bugüne 4 takvim gününden fazla geçtiyse.
+- Bayatlık (elle): MANUAL varlığın son fiyatı 14 takvim gününden eskiyse ya da hiç fiyatı yoksa.
+- Sıçrama: fonun kendi serisindeki ardışık iki fiyat arasındaki değişim eşikten büyükse. Varsayılan eşikler `para_piyasasi` %1 ve `default` %10; `[quality.jump]` bunlara eklenir ya da üzerine yazar.
+- Boşluk: fonun ilk ve son fiyatı arasında, diğer fonlarda olup bu fonda olmayan işlem günleri; fon başına tek satırda listelenir.
+- İşlem fiyatı (K-64): girilen fiyatın basamak sayısı, kayıtlı haliyle (sondaki sıfırlar saklanmaz) değerlendirilir. İşlem gününün 7 takvim günü çevresinde hiç fiyat yoksa "kontrol edilemedi" bilgisi verilir. Tarih önerisi için işlem gününün iki yanındaki 5'er işlem günü taranır ve en yakın eşleşen gün önerilir.
+- Sonuçlar "uyarı" ya da "bilgi" düzeyindedir; `ft data check` her durumda 0 ile çıkar, sorun sayısını yazar.
+
 | Kontrol | Kural | Eylem |
 | --- | --- | --- |
 | Bayatlık (fon) | Fonun son fiyatı, veriden çıkarılan 5 işlem gününden eski | Uyarı ve backfill denemesi |
@@ -826,7 +837,8 @@ Açık sorular:
 - [x] Takasbank'tan TEFAS API'si için izin: istenmeyecek; kullanıcı kararıyla başlandı (K-73).
 - [x] Bayatlık eşikleri: günlük senkronizasyonla K-28'deki eşikler (fon için 5 işlem günü, genel 4 takvim günü) geçerli kalır (K-73).
 - [x] M4 kabul kapısı: haftalık rapor kabul süresince açılır; "iki hafta kesintisiz ve doğru rapor" şartı aynen geçerli (K-73).
-- [ ] TEFAS'taki D tarihli fiyat D günü verilen emirlere mi uygulanıyor, yoksa D−1 kapanışından hesaplanıp D günü mü yayımlanıyor? K-11 (`trade_date` fiyatın uygulandığı gün) ve K-64 buna dayanır. İlk gerçek alımın işlem fiyatı ve tarihiyle doğrulanacak. Kanıt (2026-11-24): saat 11:39'da 24.11 tarihli YAT ve EMK fiyatları yayımlanmıştı; D tarihli fiyat D sabahı açıklanıyor.
+- [ ] TEFAS'taki D tarihli fiyat D günü verilen emirlere mi uygulanıyor, yoksa D−1 kapanışından hesaplanıp D günü mü yayımlanıyor? K-11 (`trade_date` fiyatın uygulandığı gün) ve K-64 buna dayanır. İlk gerçek alımın işlem tarihi ve fiyatıyla kapatılacak.
+  - Kanıt (2026-11-24): saat 11:39'da 24.11 tarihli YAT ve EMK fiyatları yayımlanmıştı. Bu yalnızca yayın zamanını gösterir; fiyatın hangi gün verilen emirlere uygulandığını göstermez. Çoğu fonda emir, verildikten sonra açıklanan ilk fiyattan gerçekleşir. Soru açık.
 - [ ] Elle değerlenen varlıklar için v2'de otomatik fiyat kaynağı istenecek mi?
 - [x] GVK geçici 67 stopajında maliyetin FIFO ile bulunduğunun birincil kaynakla doğrulanması: doğrulandı (K-54).
 - [x] EVDS3'te API anahtarı başlıkta mı, parametrede mi? Başlıkta (`key`); kılavuz ve canlı 403 ile doğrulandı (K-61).
