@@ -180,7 +180,7 @@ finance-tracker/
 ├── deploy/systemd/finans-job@.service, finans-<iş>.timer   # şablon `ft job run %i` çağırır (K-80, K-97)
 ├── deploy/systemd/finans-web.service                     # web arayüzü, ağsız ve sertleştirilmiş (K-106)
 ├── deploy/systemd/finans-sanal-job@.service, finans-sanal-<iş>.timer   # sanal portföyün işleri (K-111)
-├── deploy/ft-finans, finans.env.example, check-units.sh     # elle komut, ayar örneği, CI denetimi
+├── deploy/ft-finans, ft-sanal, finans.env.example, check-units.sh   # elle komut (gerçek, sanal), ayar örneği, CI denetimi
 ├── docs/DESIGN.md, docs/ROADMAP.md, docs/agent-output.schema.json
 └── tests/unit, arch, contract, repo, snapshots, live, fixtures, fakes
 ```
@@ -949,6 +949,16 @@ Hedef: evdeki, her zaman açık, 64 bit Debian tabanlı bir Linux cihaz (Raspber
    ```
 
    Kurtarma anahtarı parola yöneticisinde durur. Onunla da ara sıra deneme, anahtar diske yazılmadan yapılır: anahtarı panoya kopyalayıp `scripts/verify_backup.sh <yedek> <(pbpaste)`, ardından panoyu temizle. Sunucuda `ft backup verify` yalnızca özetleri denetler.
+
+10. **Sanal portföy (isteğe bağlı, K-107…K-113).** Sanal veritabanı gerçek veritabanının yanında `sanal.db` olarak kurulur ve işaretlenir; elle komutlar `deploy/ft-sanal` ile çalışır (sanal profil, ping sırları yok). Adım 7'deki kopyalama sanal birimleri de getirir; yalnızca etkinleştirmek gerekir. Sanal `sync-prices` timer'ı fiyat kaynağı kararından sonra eklenir; o zamana kadar fiyatlar kararlaştırılan kaynaktan sanal veritabanına yazılır.
+
+   ```sh
+   sudo /opt/finans/deploy/ft-sanal sanal init
+   sudo systemctl enable --now finans-sanal-sync-cpi.timer finans-sanal-weekly-report.timer \
+     finans-sanal-monthly-report.timer finans-sanal-payday.timer finans-sanal-backup.timer
+   sudo /opt/finans/deploy/ft-sanal sanal al KOD --tutar 5000 --tarih GÜN
+   sudo /opt/finans/deploy/ft-sanal sanal maas-gunu-uygula
+   ```
 
 ## Gözlemlenebilirlik ve operasyon
 
