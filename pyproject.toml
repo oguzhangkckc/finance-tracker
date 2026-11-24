@@ -34,7 +34,7 @@ exclude = ["*.md"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "UP", "SIM", "C4", "DTZ", "S", "PT", "RUF", "TID", "T20", "ERA"]
-allowed-confusables = ["ı"]
+allowed-confusables = ["ı", "×"]
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
@@ -94,6 +94,8 @@ name = "Adapter'lar birbirinden bağımsız"
 type = "independence"
 modules = [
     "finans.adapters.clock",
+    "finans.adapters.csv_transactions",
+    "finans.adapters.portfolio_toml",
     "finans.adapters.sqlite",
 ]
 

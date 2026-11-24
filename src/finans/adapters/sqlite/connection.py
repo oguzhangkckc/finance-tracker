@@ -7,6 +7,11 @@ MIN_SQLITE_VERSION = (3, 37, 0)  # STRICT tablolar
 BUSY_TIMEOUT_MS = 5000
 
 
+def sqlite_version() -> tuple[str, bool]:
+    """Çalışan SQLite sürümü ve STRICT tablolar için yeterli olup olmadığı."""
+    return sqlite3.sqlite_version, sqlite3.sqlite_version_info >= MIN_SQLITE_VERSION
+
+
 def connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
     if sqlite3.sqlite_version_info < MIN_SQLITE_VERSION:
         raise RuntimeError(
@@ -32,9 +37,10 @@ def connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
 
 
 @contextmanager
-def transaction(conn: sqlite3.Connection) -> Iterator[None]:
+def transaction(conn: sqlite3.Connection, *, immediate: bool = True) -> Iterator[None]:
     # autocommit=True iken commit()/rollback() hiçbir şey yapmaz; transaction SQL ile yönetilir.
-    conn.execute("BEGIN IMMEDIATE")
+    # Salt okunur bağlantıda BEGIN IMMEDIATE yazma kilidi istediği için hata verir.
+    conn.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
     try:
         yield
         # Başarısız COMMIT (SQLITE_BUSY, ertelenmiş FK ihlali) transaction'ı açık bırakır.

@@ -6,7 +6,9 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
+from finans import bootstrap
 from finans.adapters.sqlite.connection import connect
+from finans.adapters.sqlite.migrate import Migration, bundled
 from finans.cli.agent import app as agent_app
 from finans.cli.main import app as ft_app
 
@@ -37,6 +39,25 @@ def test_db_migrate_creates_database(monkeypatch: pytest.MonkeyPatch, tmp_path: 
     assert db.exists()
     with closing(connect(db, readonly=True)) as conn:
         assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+
+
+def test_db_migrate_prints_the_backup_taken_before_pending_migrations(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db = tmp_path / "finans.db"
+    monkeypatch.setenv("FT_DB_PATH", str(db))
+    first = runner.invoke(ft_app, ["db", "migrate"])
+    assert first.exit_code == 0, first.output
+    assert "yedek" not in first.output
+    second_migration = Migration(2, "0002_b.sql", "CREATE TABLE b (id INTEGER) STRICT;", "0" * 64)
+    monkeypatch.setattr(bootstrap, "bundled", lambda: [*bundled(), second_migration])
+
+    result = runner.invoke(ft_app, ["db", "migrate"])
+
+    assert result.exit_code == 0, result.output
+    assert "Uygulanan migration'lar: 2" in result.output
+    assert f"Migration öncesi yedek: {tmp_path / 'backups' / 'finans-'}" in result.output
+    assert len(list((tmp_path / "backups").iterdir())) == 1
 
 
 def test_db_migrate_without_settings_exits_with_clear_message() -> None:
