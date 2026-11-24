@@ -804,6 +804,12 @@ def sanal_payday_command(
         str | None,
         typer.Option("--maas-gunu", help="YYYY-AA-GG; verilmezse son maaş günü."),
     ] = None,
+    reapply_voided: Annotated[
+        bool,
+        typer.Option(
+            "--iptalleri-yeniden-uygula", help="İptal edilmiş maaş günü alımlarını yeniden öner."
+        ),
+    ] = False,
 ) -> None:
     """Maaş günü planını sanal alımlara çevirir; önce önizleme, onaylanınca kayıt (K-113)."""
     settings = _load_settings_or_exit()
@@ -820,7 +826,9 @@ def sanal_payday_command(
             else logical_date("payday", clock.now().astimezone(BUSINESS_TZ), payday=config.payday)
         )
         with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
-            plan = plan_payday_purchases(uow, config, payday=day, today=clock.today())
+            plan = plan_payday_purchases(
+                uow, config, payday=day, today=clock.today(), reapply_voided=reapply_voided
+            )
     _print_payday_purchases(plan)
     if not any(line.status == "ready" for line in plan.lines):
         return
@@ -866,6 +874,11 @@ def _payday_line(line: PaydayPurchase, plan: PaydayPurchasePlan) -> str:
         return f"{head} → pencerede fiyat yok; işlem yapılmadı, tutar başka fona aktarılmaz."
     if line.status == "applied":
         return f"{head} → zaten uygulandı."
+    if line.status == "voided":
+        return (
+            f"{head} → iptal edilmiş bir alımı var, uygulanmış sayılır; yeniden yapmak için "
+            "--iptalleri-yeniden-uygula ver."
+        )
     return f"{head} → işlem yapılmadı: {line.reason}"
 
 

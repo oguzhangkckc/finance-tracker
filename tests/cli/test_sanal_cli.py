@@ -397,3 +397,33 @@ def test_payday_purchases_are_previewed_and_written_only_after_confirmation(
     listed = runner.invoke(app, ["tx", "list"]).output
     assert "#1  2026-06-16  XHT  BUY  95 × 10.5" in listed
     assert "ref sanal-maas-gunu:2026-06-15:XHT" in listed
+
+
+@pytest.mark.usefixtures("real_db")
+def test_a_voided_payday_purchase_is_not_offered_again_without_the_option(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    portfolio = tmp_path / "maas.toml"
+    portfolio.write_text(PAYDAY_PORTFOLIO, encoding="utf-8")
+    monkeypatch.setenv("FT_PORTFOLIO_PATH", str(portfolio))
+    monkeypatch.setattr(
+        bootstrap, "system_clock", lambda: FixedClock(datetime(2026, 6, 17, 9, 0, tzinfo=UTC))
+    )
+    _sanal(monkeypatch)
+    assert runner.invoke(app, ["sanal", "init"]).exit_code == 0
+    for day, price in (("2026-06-15", "10.2"), ("2026-06-16", "10.5")):
+        assert runner.invoke(app, ["price", "set", "XHT", day, price]).exit_code == 0
+    command = ["sanal", "maas-gunu-uygula", "--maas-gunu", "2026-06-15"]
+    assert runner.invoke(app, command, input="e\n").exit_code == 0
+    assert runner.invoke(app, ["tx", "void", "1", "--reason", "yanlış fon"]).exit_code == 0
+
+    again = runner.invoke(app, command)
+    asked = runner.invoke(app, [*command, "--iptalleri-yeniden-uygula"], input="e\n")
+
+    assert again.exit_code == 0, again.output
+    assert "iptal edilmiş bir alımı var, uygulanmış sayılır" in again.output
+    assert "Kaydedilsin mi?" not in again.output
+    assert asked.exit_code == 0, asked.output
+    assert "Kaydedildi: 1 sanal alım." in asked.output
+    listed = runner.invoke(app, ["tx", "list", "--all"]).output
+    assert "#2  2026-06-16  XHT  BUY  95 × 10.5" in listed
