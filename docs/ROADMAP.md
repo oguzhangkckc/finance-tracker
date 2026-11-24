@@ -41,8 +41,8 @@ Not: Para ağırlıklı getirinin kökü [−0,99; 10] dışındaysa (alt ya da 
 Not: Katkı tanımlı değilse aylık raporun dengeleme bölümü "Katkı tanımlı değil." yazar, sıfırlarla dolu öneri göstermez; eksik `[contribution]` 0 yerine "tanımlı değil" okunur (K-56).
 Not: Katkı açıkça 0 ise dengeleme bölümü "Bu ay katkı 0." yazar; sıfırlarla dolu öneri gösterilmez (K-59).
 Not: Kadans (K-73, K-69'u değiştirir): TEFAS fiyatları hafta içi her gün 21:30'da `ft sync prices` ile; dağılım sapması her başarılı senkronizasyondan sonra. Haftalık rapor isteğe bağlı, kabul süresince açık; EVDS otomatik.
-Not: Dağılım dışı varlık (ör. acil durum fonu): takip edilir, dağılım, sapma ve dengelemeye girmez (K-74).
-Not: Dağılım içi değer birkaç aylık katkıya (öneri 3) ulaşana kadar sapma alarmları sessiz (K-75).
+Not: Dağılım dışı varlık (ör. acil durum fonu): takip edilir, dağılım, sapma ve dengelemeye girmez; rapor dağılım içi, dışı ve toplam değeri ayrı gösterir; XIRR yalnızca dağılım içi, dağılım dışı varlıklar basit reel getiriyle (K-74).
+Not: Dağılım içi değer 3 aylık katkıya ulaşana kadar sapma alarmları sessiz; katkı tanımlı değilse eşik 0; sessiz dönem bir kez biter ve tarihiyle kaydedilir, geri dönmez; eşik çevresinde titreşme testi (K-75).
 
 ## M5 · OpenClaw ve güvenlik sertleştirmesi
 JSON anlık görüntüleri ve rrsync ile aktarımı (yalnızca çekirdekten dışarı), ft-agent (boru hattı ve veri tazeliği için iki ayrı bayatlık sinyali), JSON Schema kontratı, SKILL.md, PPK özeti akışı (oranlar kodla çıkarılır), asistan botu; iki makine, ayrı OS kullanıcıları, systemd sertleştirme, LoadCredential, makine bazında egress allowlist.

@@ -569,11 +569,13 @@ Reel XIRR'da her akış E[ref(t)] / E[ref(t_i)] ile çarpılır. Son akışta t_
   - Sapma tam sıfırsa işaret değişmiş sayılmaz; açık alarm, kapanma eşiğinin altında kaldığı için normal yoldan kapanır.
 - **Dağılım dışı varlık (M4, K-74).** Acil durum fonu gibi takip edilen ama hedef dağılıma girmeyen varlıklar desteklenir.
   - Önerilen biçim: `instruments[]` içinde `allocation = false`. Böyle bir varlık değerlemede ve raporda görünür; ağırlık, sapma, sapma alarmı ve dengeleme hesabına girmez. Config doğrulamasındaki "hedef sınıflar varlık sınıflarıyla birebir aynı" kuralı bu varlıkları saymaz.
-  - M4 planında karar verilecekler: toplam değerin raporda dağılım içi ve dışı olarak ayrı gösterilmesi; getiri ölçülerinin (basit getiri, XIRR) bu varlıkları içerip içermeyeceği.
+  - Rapor dağılım içi, dağılım dışı ve toplam değeri ayrı gösterir.
+  - Para ağırlıklı getiri (nominal ve reel XIRR) yalnızca dağılım içi portföy için hesaplanır. Dağılım dışı her varlık kendi satırında basit reel getiriyle görünür; bu, basit getirinin (K-39) Fisher bağıntısıyla ve TÜFE referans ay kuralıyla reele çevrilmiş halidir.
 - **Başlangıçta sessiz sapma alarmları (M4, K-75).** Portföy birkaç aylık katkı büyüklüğüne ulaşana kadar sapma alarmları açılmaz ve bildirilmez; küçük bir portföyde tek bir alım ağırlıkları onlarca puan oynatır.
-  - Önerilen kural: dağılım içi toplam değer `N × aylık katkı`nın altındaysa sapma alarmı değerlendirilmez (öneri N = 3, `[alerts]` altında ayarlanabilir). Raporda sapma değerleri ve katkıyla dengeleme önerisi yine gösterilir; alarm bölümünde "Portföy henüz küçük; sapma alarmları N aylık katkıya ulaşınca başlar." yazar.
-  - Eşik aşılınca değerlendirme açık alarm yokmuş gibi başlar (açılma eşiği 5 puan).
-  - M4 planında karar verilecekler: N'nin varsayılanı; katkı tanımlı değilken (K-56) eşiğin nasıl belirleneceği (ör. ayrı bir tutar ayarı).
+  - Kural: dağılım içi toplam değer `3 × aylık katkı`nın altındaysa sapma alarmı değerlendirilmez (N = 3). Raporda sapma değerleri ve katkıyla dengeleme önerisi yine gösterilir; alarm bölümünde "Portföy henüz küçük; sapma alarmları 3 aylık katkıya ulaşınca başlar." yazar.
+  - Katkı tanımlı değilse (K-56) eşik 0'dır; alarmlar baştan çalışır.
+  - Sessiz dönem tek yönlüdür: eşik bir kez aşıldığında kalıcı olarak biter ve bittiği tarih kaydedilir (0003'te). Portföy sonradan eşiğin altına inse de alarmlar susmaz. Değerlendirme sessiz dönem bittiğinde açık alarm yokmuş gibi başlar (açılma eşiği 5 puan).
+  - Test: eşiğin etrafında gidip gelen değerlerde alarm durumu titreşmez; sessiz dönem bir kez biter ve geri dönmez.
 - Dengeleme yalnızca yeni birikimle yapılır, çünkü satış komisyon ve stopaj doğurur. K bu ayki katkı, V toplam değer, h hedef ağırlıktır. K, `portfolio.toml` içinde `[contribution]` bölümünde tanımlanır ve `ft report monthly --contribution` ile geçersiz kılınabilir.
 
 ```latex
@@ -610,7 +612,7 @@ class Report(BaseModel):
 
 Report ve ajan çıktıları `finans.contracts` içindeki pydantic modelleridir. Renderer'lar application'daki `ReportRenderer` port'unu uygular ve bootstrap'ta enjekte edilir.
 
-Haftalık rapor: toplam değer ve haftalık değişim, varlık satırları, dağılım ve sapma, açık uyarılar, veri sorunları, tek satırlık sistem sağlığı.
+Haftalık rapor: toplam değer (dağılım içi, dağılım dışı ve toplam ayrı, K-74) ve haftalık değişim, varlık satırları, dağılım ve sapma, açık uyarılar, veri sorunları, tek satırlık sistem sağlığı.
 
 Aylık rapor: haftalık içeriğe ek olarak kullanılan TÜFE dönemleri ve yıllık enflasyon, lot bazlı reel getiri, nominal ve reel XIRR (bir yıldan kısa dönemde "Dönem getirisi (para ağırlıklı, yıllık değil)" etiketiyle), bu ayki katkı için yalnızca katkıyla dengeleme önerisi (katkı tanımlı değilse yalnızca "Katkı tanımlı değil.", açıkça 0 ise yalnızca "Bu ay katkı 0." notu; K-56, K-59). Para birimi biçimi (1.234,56 TL) `locale` modülüyle değil, kendi biçimlendiricimizle üretilir.
 
@@ -901,8 +903,8 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-71 | K-60'ın "otomatik istek atılmaz" ve K-68'in dosya içe aktarma kararlarını değiştirir: TEFAS fiyatları JSON API'den çekilir (kullanıcı kararı, kişisel ve düşük hacimli kullanım). İstekleri kullanıcı çalıştırır; Claude bu uç noktalara istek atmaz. İstek yapısı açık kaynak istemcilerinkidir (`fonFiyatBilgiGetir` periyod ile, `fonGnlBlgSiraliGetir` tam gövde ve ≤28 gün, 200 içinde `errorMessage`), tarayıcı taklidi ve TLS doğrulamasını kapatma hariç. Engel aşılmaz; `ft price import` yazılmaz | Dosya indirmek her ay elle iş; kayıt API'nin dürüst User-Agent ile çalıştığını ve yanıt biçimini gösterdi | Veri toplama |
 | K-72 | BYF fiyatı `fonGnlBlgSiraliGetir`'in `fiyat` alanından (birim pay değeri) alınır; `fonFiyatBilgiGetir` BYF için borsa bülten fiyatını döndürür (EOZ 23.11: 22.03 = `borsaBultenFiyat`, birim pay değeri 21.968691). BYF geçmişi ≤28 günlük pencerelerle çekilir | DESIGN BYF'yi birim pay değeriyle değerliyor; iki uç nokta BYF'de farklı fiyat veriyor | Veri toplama |
 | K-73 | K-69'u değiştirir: TEFAS fiyatları hafta içi her gün 21:30'da `ft sync prices` ile senkronize edilir (systemd, Persistent=true ile telafi; kullanıcının sunucusunda). Dağılım sapması her başarılı senkronizasyondan sonra değerlendirilir. Haftalık rapor isteğe bağlı (varsayılan kapalı, M4 kabul süresince açık). K-28'deki bayatlık eşikleri geçerli. Takasbank'tan izin istenmez (kullanıcı kararı) | API ile günlük veri fon başına tek istekle alınabiliyor; aylık ritüel yalnızca elle indirme için gerekliydi | Zamanlama, Veri toplama |
-| K-74 | M4: dağılım dışı varlık desteği (ör. acil durum fonu): takip edilir, değerlemede görünür; ağırlık, sapma, alarm ve dengeleme hesabına girmez. Önerilen biçim `allocation = false`; getiri ölçülerine dahil olup olmayacağı M4 planında | Takip edilen her varlık hedef dağılımın parçası değil | Dağılım, Veri modeli |
-| K-75 | M4: dağılım içi toplam değer birkaç aylık katkının (öneri 3) altındayken sapma alarmları açılmaz ve bildirilmez; sapma ve dengeleme önerisi raporda yine görünür. Varsayılan N ve katkı tanımlı değilkenki davranış M4 planında | Küçük portföyde tek alım ağırlıkları onlarca puan oynatır; alarmlar anlamsız gürültü olur | Dağılım, Bildirim |
+| K-74 | M4: dağılım dışı varlık desteği (ör. acil durum fonu): takip edilir, değerlemede görünür; ağırlık, sapma, alarm ve dengeleme hesabına girmez (önerilen biçim `allocation = false`). Rapor dağılım içi, dağılım dışı ve toplam değeri ayrı gösterir. Nominal ve reel XIRR yalnızca dağılım içi portföy için; dağılım dışı varlıklar kendi satırında basit reel getiriyle | Takip edilen her varlık hedef dağılımın parçası değil; acil durum fonunun getirisi yatırım performansını bulandırmamalı | Dağılım, Veri modeli, Raporlama |
+| K-75 | M4: dağılım içi toplam değer 3 aylık katkının altındayken sapma alarmları açılmaz ve bildirilmez (N = 3); sapma ve dengeleme önerisi raporda yine görünür. Katkı tanımlı değilse eşik 0. Sessiz dönem eşik bir kez aşılınca kalıcı olarak biter, tarihi kaydedilir; değer sonradan düşse de alarmlar susmaz. Test: eşik etrafında gidip gelen değerlerde titreşme yok | Küçük portföyde tek alım ağırlıkları onlarca puan oynatır; tek yönlü bitiş eşik çevresinde alarmların açılıp kapanmasını önler | Dağılım, Bildirim |
 
 ## Planı kodlama ajanıyla uygulama
 
