@@ -131,6 +131,8 @@ finance-tracker/
 │   │   ├── models.py            # Instrument, Transaction, Lot, PricePoint, CpiPoint
 │   │   ├── positions.py         # işlemlerden lot ve pozisyon türetme (FIFO)
 │   │   ├── valuation.py         # as-of değerleme
+│   │   ├── quality.py           # veri kalitesi kontrolleri
+│   │   ├── reconcile.py         # ekstre mutabakatı ve fiyat günü teşhisi
 │   │   ├── returns.py           # basit getiri, fon TWR'ı, XIRR, reel getiri
 │   │   ├── inflation.py         # endeks oranları, referans ay kuralı, baz yılı zincirleme
 │   │   └── allocation.py        # dağılım, sapma, histerezis, dengeleme
@@ -150,6 +152,8 @@ finance-tracker/
 │   │   └── jobs.py              # iş kaydı, kilit, idempotency
 │   ├── adapters/
 │   │   ├── _http.py             # ortak httpx istemcisi, retry, kibarlık (bağımsızlık kuralı dışında)
+│   │   ├── _csv.py              # CSV satırı için ortak tarih ve Decimal ayrıştırma (bağımsızlık kuralı dışında)
+│   │   ├── csv_transactions.py, csv_statement.py
 │   │   ├── clock.py             # SystemClock: duvar saatine erişen tek yer
 │   │   ├── tefas.py, evds.py, tcmb_ppk.py
 │   │   ├── sqlite/              # bağlantı fabrikası, repository'ler, migration çalıştırıcı ve öncesindeki yedek
@@ -174,7 +178,7 @@ Katman kuralları (yukarıdan aşağıya: cli → bootstrap → settings → app
 - contracts yalnızca domain'i ve pydantic'i import eder.
 - ports yalnızca domain ve contracts'ı import eder.
 - application domain, contracts ve ports'u import eder; somut adapter ve settings görmez.
-- adapters ports'u uygular; birbirini import etmez. Tek istisna ortak `adapters/_http.py`'dir. Adapter'lar application'ı ve settings'i görmez; ayarlar onlara bootstrap'ta enjekte edilir.
+- adapters ports'u uygular; birbirini import etmez. İstisna alt çizgiyle başlayan ortak modüllerdir (`adapters/_http.py`, `adapters/_csv.py`). Adapter'lar application'ı ve settings'i görmez; ayarlar onlara bootstrap'ta enjekte edilir.
 - cli somut adapter import etmez. Somut sınıflar yalnızca bootstrap.py içinde bağlanır; testler aynı noktadan sahte uygulamaları enjekte eder.
 - Ağ ve SQLite erişimi yalnızca adapters altında yapılabilir; testlerde gerçek ağ kapalıdır.
 - `float` kaynak kodun hiçbir yerinde kullanılmaz. Duvar saatine yalnızca `adapters/clock.py` erişir. Duvar saati sayılanlar: `datetime.now`, `datetime.utcnow`, `datetime.today`, `date.today`, `time.time`, `time.time_ns`, `time.localtime`, `time.gmtime`, `time.ctime` ve zaman argümanı verilmeden çağrılan `time.strftime`.
@@ -809,6 +813,14 @@ Testlerde gerçek ağ, conftest'teki bir fixture ile kapalıdır; yalnızca `-m 
 
 Kabul testi: canlıya geçmeden önce bir ay boyunca aynı işlemleri bir tabloda elle tut ve sistemin rakamlarıyla mutabakat yap. Tolerans kalem başına ±0,01 TL'dir; farkın sebebi yuvarlama yöntemleri olabilir (Excel yarımı yukarı yuvarlar, sistem sunumda banker yuvarlaması kullanır). Geçmiş dönemler için mutabakat, backfill ile çekilen fiyatlar ve eski ekstreler kullanılarak beklemeden yapılabilir. Tolerans dışı bir fark çıkarsa, nedeni bulunmadan milestone kabul edilmez.
 
+Mutabakat `ft reconcile EKSTRE.csv` ile yapılır (K-67, K-78). Dosya ekstreden elle doldurulur: `date,code,units,price,value`; `price` isteğe bağlıdır. Aracı kuruma özel ayrıştırıcı yazılmaz; gerçek ekstre görülünce karar verilir. Her kalemde kayıtların o günkü değerlemesiyle (`ft value --on` ile aynı hesap) adet, fiyat ve değer ayrı karşılaştırılır:
+
+- **Adet farkı:** eksik ya da yanlış girilmiş işlem.
+- **Fiyat farkı:** ekstre başka bir günün fiyatını kullanmış. Ekstre fiyatıyla (K-64'teki son basamak kuralı) ya da fiyat yoksa değerle (±0,01 TL) eşleşen TEFAS fiyatı ekstre gününün ±5 işlem günü içinde aranır; bulunan gün ve işlem günü farkı gösterilir.
+- **Yalnızca değer farkı:** adet ve fiyat aynı, değer tolerans dışı; yuvarlama. Az basamaklı ekstre fiyatı birden çok günle eşleşebildiği için önce hem fiyatı hem değeri tutan gün aranır; bulunursa fark fiyat farkıdır.
+
+Değer toleransı kalem başına ±0,01 TL'dir. Kayıtlarda olup ekstrede olmayan pozisyon da uyumsuz sayılır. Hafta sonu tarihli ekstre son işlem gününün fiyatıyla karşılaştırılır. Fiyat günü teşhisi "D tarihli fiyat" açık sorusuna kanıt olarak ayrı bir bölümde, işlem günü farkına göre gruplanarak raporlanır; her kanıt neye dayandığını taşır (fiyat ve değer, yalnızca fiyat, yalnızca değer). En güçlüsü fiyat ve değerin birlikte tuttuğu kanıttır.
+
 ## Yol haritası
 
 Milestone listesi ve kapıları [ROADMAP.md](ROADMAP.md)'dedir. M4 sonunda sistem günlük kullanımdadır; sonrası isteğe bağlıdır.
@@ -843,6 +855,7 @@ Açık sorular:
 - [x] M4 kabul kapısı: haftalık rapor kabul süresince açılır; "iki hafta kesintisiz ve doğru rapor" şartı aynen geçerli (K-73).
 - [ ] TEFAS'taki D tarihli fiyat D günü verilen emirlere mi uygulanıyor, yoksa D−1 kapanışından hesaplanıp D günü mü yayımlanıyor? K-11 (`trade_date` fiyatın uygulandığı gün) ve K-64 buna dayanır. İlk gerçek alımın işlem tarihi ve fiyatıyla kapatılacak.
   - Kanıt (2026-11-24): saat 11:39'da 24.11 tarihli YAT ve EMK fiyatları yayımlanmıştı. Bu yalnızca yayın zamanını gösterir; fiyatın hangi gün verilen emirlere uygulandığını göstermez. Çoğu fonda emir, verildikten sonra açıklanan ilk fiyattan gerçekleşir. Soru açık.
+  - Kanıt yolu: `ft reconcile`'ın fiyat tarihi bölümü, ekstrenin kullandığı fiyatın ekstre gününe göre kaç işlem günü kaydığını gösterir (K-78). İşlem tarihli ekstre satırlarında bu, emrin hangi günün fiyatından gerçekleştiğini doğrudan verir.
 - [ ] Elle değerlenen varlıklar için v2'de otomatik fiyat kaynağı istenecek mi?
 - [x] GVK geçici 67 stopajında maliyetin FIFO ile bulunduğunun birincil kaynakla doğrulanması: doğrulandı (K-54).
 - [x] EVDS3'te API anahtarı başlıkta mı, parametrede mi? Başlıkta (`key`); kılavuz ve canlı 403 ile doğrulandı (K-61).
@@ -931,6 +944,7 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-75 | M4: dağılım içi toplam değer 3 aylık katkının altındayken sapma alarmları açılmaz ve bildirilmez (N = 3); sapma ve dengeleme önerisi raporda yine görünür. Katkı tanımlı değilse eşik 0. Sessiz dönem eşik bir kez aşılınca kalıcı olarak biter, tarihi kaydedilir; değer sonradan düşse de alarmlar susmaz. Test: eşik etrafında gidip gelen değerlerde titreşme yok | Küçük portföyde tek alım ağırlıkları onlarca puan oynatır; tek yönlü bitiş eşik çevresinde alarmların açılıp kapanmasını önler | Dağılım, Bildirim |
 | K-76 | `txn.unit_price_scale` (migration 0003, M3): girilen birim fiyatın ondalık basamak sayısı; `ft tx add` ve `ft tx import` girilen metinden doldurur, repository okurken fiyatı bu basamağa geri getirir. Boşsa kayıtlı hal geçerli; geriye dönük doldurma yok. K-49'u günceller: M4 tabloları (job_run, alert, alert_event) 0004'e kayar | Kanonik metin sondaki sıfırları atıyor; 1.7200 olarak girilen fiyat K-64'te 2 basamaklı sayılıp kontrol dışı kalıyordu | Veri modeli, Veri kalitesi |
 | K-77 | `ft data check --strict`: en az bir uyarı varsa 1 ile çıkar; bilgi notları etkilemez. Varsayılan davranış (her durumda 0) değişmez | M4'teki zamanlanmış işler veri sorununu çıkış koduyla algılamalı | Veri kalitesi, Zamanlama |
+| K-78 | K-67'yi genişletir: ekstre dosyası `date,code,units,price,value` (`price` isteğe bağlı), ekstreden elle doldurulur; aracı kuruma özel ayrıştırıcı yok. Her kalemde adet, fiyat ve değer ayrı karşılaştırılır; uyuşmazlık adet farkı, fiyat farkı (eşleşen TEFAS fiyat günü ±5 işlem gününde aranıp gösterilir) ya da yalnızca değer farkı (yuvarlama) olarak sınıflanır. Değer toleransı kalem başına ±0,01 TL; ekstrede olmayan pozisyon uyumsuz. Fiyat günü teşhisi "D tarihli fiyat" sorusuna kanıt olarak, dayanağıyla (fiyat ve değer, yalnızca fiyat, yalnızca değer) ayrıca raporlanır | Tek bir değer farkı nedeni göstermiyordu; ekstrenin hangi günün fiyatını kullandığı açık soruyu kapatacak kanıttır | Test, Veri kalitesi |
 
 ## Planı kodlama ajanıyla uygulama
 

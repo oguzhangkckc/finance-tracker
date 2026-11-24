@@ -5,6 +5,7 @@ from pathlib import Path
 
 from finans.adapters._http import HttpClient
 from finans.adapters.clock import SystemClock
+from finans.adapters.csv_statement import CsvStatementFile
 from finans.adapters.csv_transactions import CsvTransactionFile
 from finans.adapters.evds import EvdsCpiSource
 from finans.adapters.portfolio_toml import TomlPortfolioSource
@@ -31,6 +32,7 @@ from finans.ports.sources import (
     PortfolioConfigSource,
     PriceSource,
     SourceError,
+    StatementFile,
     TransactionFile,
 )
 from finans.ports.unit_of_work import UnitOfWork
@@ -47,6 +49,7 @@ __all__ = [
     "portfolio_source",
     "price_source",
     "run_doctor",
+    "statement_file",
     "system_clock",
     "transaction_file",
 ]
@@ -118,6 +121,10 @@ def portfolio_source() -> PortfolioConfigSource:
 
 def system_clock() -> Clock:
     return SystemClock()
+
+
+def statement_file() -> StatementFile:
+    return CsvStatementFile()
 
 
 def transaction_file() -> TransactionFile:

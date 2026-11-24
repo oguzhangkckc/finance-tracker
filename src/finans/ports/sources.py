@@ -5,6 +5,7 @@ from typing import Protocol
 
 from finans.domain.models import CpiPoint, Instrument, PricePoint, Transaction, YearMonth
 from finans.domain.portfolio import PortfolioConfig
+from finans.domain.reconcile import StatementLine
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +33,16 @@ class ParsedTransactions:
 
 class TransactionFile(Protocol):
     def read(self, path: Path) -> ParsedTransactions: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ParsedStatement:
+    lines: tuple[StatementLine, ...]
+    issues: tuple[ImportIssue, ...]
+
+
+class StatementFile(Protocol):
+    def read(self, path: Path) -> ParsedStatement: ...
 
 
 class PortfolioConfigSource(Protocol):

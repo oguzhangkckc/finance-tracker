@@ -16,6 +16,7 @@ from finans.application.portfolio_config import ApplyReport, apply_portfolio
 from finans.application.portfolio_view import portfolio_as_of
 from finans.application.price_sync import PriceSyncReport, sync_prices
 from finans.application.prices import set_manual_price
+from finans.application.reconcile import reconcile_statement
 from finans.application.transactions import (
     add_transaction,
     import_transactions,
@@ -26,6 +27,7 @@ from finans.domain.models import DomainError, InstrumentKind, Side, Transaction,
 from finans.domain.numeric import canonical_text
 from finans.domain.portfolio import ConfigError, QualityThresholds
 from finans.domain.quality import DataIssue
+from finans.domain.reconcile import PriceDateEvidence
 from finans.ports.repositories import StoredTransaction
 from finans.settings import Settings, load_settings
 
@@ -370,6 +372,58 @@ def _print_cpi_sync(report: CpiSyncReport) -> None:
             f"{canonical_text(revision.new)}"
         )
     typer.echo(f"Son dönem: {report.latest or 'yok'}")
+
+
+@app.command("reconcile")
+def reconcile_command(
+    path: Annotated[
+        Path, typer.Argument(help="Ekstre CSV'si: date,code,units,price,value (price isteğe bağlı)")
+    ],
+) -> None:
+    """Aracı kurum ekstresini kayıtlarla karşılaştırır; kalem başına ±0,01 TL (K-67, K-78)."""
+    settings = _load_settings_or_exit()
+    parsed = bootstrap.statement_file().read(path)
+    if parsed.issues:
+        typer.echo(f"Ekstre okunamadı; {len(parsed.issues)} sorun:", err=True)
+        for issue in parsed.issues:
+            typer.echo(f"  - {issue}", err=True)
+        raise typer.Exit(code=1)
+    if not parsed.lines:
+        typer.echo("Ekstrede satır yok.", err=True)
+        raise typer.Exit(code=1)
+    with _user_errors(), bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+        report = reconcile_statement(uow, parsed.lines)
+    for item in report.items:
+        where = f"{item.day} {item.code}" + ("" if item.line is None else f" (satır {item.line})")
+        typer.echo(f"{'✓' if item.ok else '✗'} {where}: {item.message}")
+    _print_price_evidence(report.evidence)
+    total = len(report.items)
+    if report.passed:
+        typer.echo(f"Mutabakat: geçti ({total} kalem, hepsi ±0,01 TL içinde).")
+        return
+    failed = sum(1 for item in report.items if not item.ok)
+    typer.echo(f"Mutabakat: kaldı ({failed}/{total} kalem uyumsuz).")
+    raise typer.Exit(code=1)
+
+
+def _print_price_evidence(evidence: tuple[PriceDateEvidence, ...]) -> None:
+    if not evidence:
+        return
+    typer.echo("Fiyat tarihi kanıtı (açık soru: D tarihli fiyat hangi emirlere uygulanıyor):")
+    for offset in sorted({e.offset for e in evidence}):
+        group = [e for e in evidence if e.offset == offset]
+        typer.echo(f"  {_offset_label(offset)}: {len(group)} kalem")
+        for e in group:
+            typer.echo(
+                f"    {e.code}: ekstre {e.statement_day}, TEFAS fiyatı {e.price_day} ({e.basis})"
+            )
+
+
+def _offset_label(offset: int) -> str:
+    if offset == 0:
+        return "ekstre gününün fiyatı"
+    direction = "önceki" if offset < 0 else "sonraki"
+    return f"{abs(offset)} işlem günü {direction} fiyat"
 
 
 @data_app.command("check")
