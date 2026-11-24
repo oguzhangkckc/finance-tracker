@@ -28,7 +28,7 @@ Geliştirme kapısı: Kontrat testleri yeşil; TEFAS'tan çekilen fiyat geçmiş
 Not: JSON her yerde `json.loads(..., parse_float=Decimal)` ile ayrıştırılır; `response.json()` kullanılmaz; çok basamaklı fiyatla kontrat testi yazılır (K-32).
 Not: TÜFE 2025=100 serisi tüm geçmişiyle doğrudan çekilir; EVDS3'te 2005-01'den itibaren bulunduğu ve eski seriyle oranın sabit olduğu canlı doğrulandı (K-43, K-70). `chain_link` yedek olarak kalır.
 Not: Migration 0002: cpi, cpi_revision, raw_payload; price_revision'a kaynak kolonları (K-49, K-65). TEFAS fiyatları gelince her işlemin birim fiyatı o günün TEFAS fiyatıyla karşılaştırılır; uyuşmazlık büyük olasılıkla yanlış tarih (K-53, eşik K-64).
-Not: Canlı deneme (2026-11-24): TEFAS robots.txt `/api/`'yi otomatik erişime kapatıyor; API'ye ve tarayıcı otomasyonuyla erişilmez, API adapter'ı yazılmaz (K-60). Fiyatlar kullanıcının indirdiği dosyadan ve elle gelir (K-63, K-68); Takasbank'tan izin isteniyor. EVDS3 anahtarı başlıkta, varsayılan TLS yeterli (K-61).
+Not: Canlı deneme (2026-11-24): TEFAS robots.txt `/api/`'yi otomatik erişime kapatıyor; kullanıcı API'yi kendi makinesinde çalıştırmaya karar verdi, tarayıcı otomasyonu yok, engel aşılmaz (K-60, K-71); Takasbank'tan izin istenmedi (K-73). EVDS3 anahtarı başlıkta, varsayılan TLS yeterli (K-61).
 Not: TEFAS JSON API'si kullanılır (K-71): `fonFiyatBilgiGetir` (periyod) ve `fonGnlBlgSiraliGetir` (≤28 gün); BYF birim pay değeri ikincisinden (K-72). Kayıtlar `tests/fixtures/tefas/`.
 Not: HTTP istemci kuralları: dürüst User-Agent, robots.txt kontrolü, `Retry-After` (K-62). Mutabakat için `ft reconcile` (K-67).
 Kabul kapısı: Bir ay canlı veri; elle tutulan tabloyla mutabakat ±0,01 TL/kalem.
@@ -40,7 +40,7 @@ Kabul kapısı: İki hafta kesintisiz ve doğru rapor.
 Not: Para ağırlıklı getirinin kökü [−0,99; 10] dışındaysa (alt ya da üst) rapor basit getiriyi ve "Zamanlama nedeniyle para ağırlıklı getiri anlamlı değil." notunu gösterir; domain sonuç türü bu durumu "hesaplanamadı"dan ayırır (K-44).
 Not: Katkı tanımlı değilse aylık raporun dengeleme bölümü "Katkı tanımlı değil." yazar, sıfırlarla dolu öneri göstermez; eksik `[contribution]` 0 yerine "tanımlı değil" okunur (K-56).
 Not: Katkı açıkça 0 ise dengeleme bölümü "Bu ay katkı 0." yazar; sıfırlarla dolu öneri gösterilmez (K-59).
-Not: Kadans (K-69): TEFAS için senkronizasyon timer'ı yok. Maaş günü hatırlatması aylık ritüeli başlatır ("fiyat dosyasını indir, `ft price import` çalıştır"); dağılım sapması değerlendirmesi içe aktarmanın ardından çalışır. Haftalık rapor isteğe bağlı; EVDS otomatik. Kabul kapısı buna göre yeniden tanımlanacak.
+Not: Kadans (K-73, K-69'u değiştirir): TEFAS fiyatları hafta içi her gün 21:30'da `ft sync prices` ile; dağılım sapması her başarılı senkronizasyondan sonra. Haftalık rapor isteğe bağlı, kabul süresince açık; EVDS otomatik.
 
 ## M5 · OpenClaw ve güvenlik sertleştirmesi
 JSON anlık görüntüleri ve rrsync ile aktarımı (yalnızca çekirdekten dışarı), ft-agent (boru hattı ve veri tazeliği için iki ayrı bayatlık sinyali), JSON Schema kontratı, SKILL.md, PPK özeti akışı (oranlar kodla çıkarılır), asistan botu; iki makine, ayrı OS kullanıcıları, systemd sertleştirme, LoadCredential, makine bazında egress allowlist.
