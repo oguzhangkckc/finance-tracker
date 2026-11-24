@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from finans import bootstrap
 from finans.application.cpi import CPI_HISTORY_START, CpiSyncReport, sync_cpi
+from finans.application.data_check import DEFAULT_WINDOW, check_data, trade_price_issues
 from finans.application.portfolio_config import ApplyReport, apply_portfolio
 from finans.application.portfolio_view import portfolio_as_of
 from finans.application.price_sync import PriceSyncReport, sync_prices
@@ -23,7 +24,8 @@ from finans.application.transactions import (
 from finans.cli._common import VersionOption
 from finans.domain.models import DomainError, Side, Transaction, YearMonth
 from finans.domain.numeric import canonical_text
-from finans.domain.portfolio import ConfigError
+from finans.domain.portfolio import ConfigError, QualityThresholds
+from finans.domain.quality import DataIssue
 from finans.ports.repositories import StoredTransaction
 from finans.settings import Settings, load_settings
 
@@ -40,8 +42,10 @@ app.add_typer(db_app, name="db")
 app.add_typer(config_app, name="config")
 app.add_typer(tx_app, name="tx")
 sync_app = typer.Typer(no_args_is_help=True, help="Dış kaynaklardan veri çekme.")
+data_app = typer.Typer(no_args_is_help=True, help="Veri kalitesi.")
 app.add_typer(price_app, name="price")
 app.add_typer(sync_app, name="sync")
+app.add_typer(data_app, name="data")
 
 
 class SideChoice(StrEnum):
@@ -119,11 +123,12 @@ def tx_add(
         transaction = Transaction(
             code, parsed_date, Side(side.value.upper()), amounts[0], amounts[1], parsed_fee
         )
+        clock = bootstrap.system_clock()
         with bootstrap.open_unit_of_work(settings) as uow:
-            txn_id = add_transaction(
-                uow, transaction, ref=ref, note=note, now=bootstrap.system_clock().now()
-            )
+            txn_id = add_transaction(uow, transaction, ref=ref, note=note, now=clock.now())
+            warnings = trade_price_issues(uow, [(f"#{txn_id}", transaction)], today=clock.today())
     typer.echo(f"İşlem eklendi: #{txn_id}")
+    _print_warnings(warnings)
 
 
 @tx_app.command("list")
@@ -167,10 +172,11 @@ def tx_import(
     """CSV'den işlem içe aktarır; ya bütün satırlar yazılır ya hiçbiri."""
     settings = _load_settings_or_exit()
     parsed = bootstrap.transaction_file().read(path)
+    clock = bootstrap.system_clock()
     with _user_errors(), bootstrap.open_unit_of_work(settings) as uow:
-        report = import_transactions(
-            uow, parsed, now=bootstrap.system_clock().now(), dry_run=dry_run
-        )
+        report = import_transactions(uow, parsed, now=clock.now(), dry_run=dry_run)
+        added = [(f"satır {row.line}", row.transaction) for row in report.added]
+        warnings = [] if report.issues else trade_price_issues(uow, added, today=clock.today())
     if report.issues:
         typer.echo(
             f"İçe aktarma durduruldu; hiçbir işlem yazılmadı. {len(report.issues)} sorun:",
@@ -181,6 +187,7 @@ def tx_import(
         raise typer.Exit(code=1)
     verb, skip = ("Eklenecek", "atlanacak") if dry_run else ("Eklendi", "atlandı")
     typer.echo(f"{verb}: {len(report.added)}, {skip} (zaten var): {len(report.skipped)}")
+    _print_warnings(warnings)
 
 
 @price_app.command("set")
@@ -299,6 +306,12 @@ def sync_prices_command(
             now=clock.now(),
         )
     _print_price_sync(report)
+    if report.funds:
+        since = min(fund.start for fund in report.funds)
+        with _user_errors(), bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+            issues = check_data(uow, quality=_quality(settings), today=last, since=since)
+        typer.echo("Veri kalitesi:")
+        _print_issues(issues)
     if not report.ok:
         raise typer.Exit(code=1)
 
@@ -341,6 +354,53 @@ def _print_cpi_sync(report: CpiSyncReport) -> None:
             f"{canonical_text(revision.new)}"
         )
     typer.echo(f"Son dönem: {report.latest or 'yok'}")
+
+
+@data_app.command("check")
+def data_check(
+    since: Annotated[
+        str | None,
+        typer.Option("--since", help="YYYY-AA-GG; sıçrama ve boşluk penceresi, varsayılan 30 gün."),
+    ] = None,
+) -> None:
+    """Fiyat verisini ve işlem fiyatlarını denetler; sorun olsa da 0 ile çıkar."""
+    settings = _load_settings_or_exit()
+    first = None if since is None else _parse_date(since)
+    today = bootstrap.system_clock().today()
+    quality = _quality(settings)
+    with _user_errors(), bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+        issues = check_data(
+            uow, quality=quality, today=today, since=first or today - DEFAULT_WINDOW
+        )
+    _print_issues(issues)
+
+
+def _quality(settings: Settings) -> QualityThresholds:
+    if settings.portfolio_path is None:
+        return QualityThresholds()
+    try:
+        return bootstrap.portfolio_source().load(settings.portfolio_path).quality
+    except ConfigError:
+        typer.echo(
+            "Not: portfolio.toml okunamadı; varsayılan eşikler kullanıldı (`ft config check`).",
+            err=True,
+        )
+        return QualityThresholds()
+
+
+def _print_issues(issues: list[DataIssue]) -> None:
+    if not issues:
+        typer.echo("Veri sorunu yok.")
+        return
+    for issue in issues:
+        typer.echo(f"{'!' if issue.level == 'warn' else '·'} {issue}")
+    warnings = sum(1 for issue in issues if issue.level == "warn")
+    typer.echo(f"{warnings} uyarı, {len(issues) - warnings} bilgi")
+
+
+def _print_warnings(issues: list[DataIssue]) -> None:
+    for issue in issues:
+        typer.echo(f"{'Uyarı' if issue.level == 'warn' else 'Bilgi'}: {issue}")
 
 
 _SYMBOLS = {"ok": "✓", "warn": "!", "fail": "✗"}
