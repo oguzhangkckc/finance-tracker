@@ -38,7 +38,9 @@ Kabul kapısı: Bir ay canlı veri; elle tutulan tabloyla mutabakat ±0,01 TL/ka
 ## M4 · Rapor ve bildirim (ilk kullanılabilir sürüm)
 Report modeli, metin ve JSON render, aylık raporda XIRR ve yalnızca katkıyla dengeleme, Telegram (rapor botu), uyarı tekilleştirme; systemd timer'ları, job_run, dead man's switch, yedekleme.
 Geliştirme kapısı: Snapshot ve iş testleri yeşil; zamanlayıcılar test ortamında doğrulandı.
-Kabul kapısı: İki hafta kesintisiz ve doğru rapor.
+Kapının kanıtı: uçtan uca rapor snapshot'ları `tests/e2e`; iş yürütücü `tests/application/test_jobs.py`; birim dosyaları `tests/deploy` ve CI'daki `units` işi (`deploy/check-units.sh`, systemd-analyze calendar ve verify).
+Kabul kapısı: İki hafta kesintisiz ve doğru rapor; süre cihazdaki kurulumla başlar.
+İlk commit (M3 düzeltmeleri): mutabakatta adet farkı son 5 işlem gününde girilmiş tek bir işlemle eşleşiyorsa "olası valör farkı" gösterilir (K-79).
 Not: Para ağırlıklı getirinin kökü [−0,99; 10] dışındaysa (alt ya da üst) rapor basit getiriyi ve "Zamanlama nedeniyle para ağırlıklı getiri anlamlı değil." notunu gösterir; domain sonuç türü bu durumu "hesaplanamadı"dan ayırır (K-44).
 Not: Katkı tanımlı değilse aylık raporun dengeleme bölümü "Katkı tanımlı değil." yazar, sıfırlarla dolu öneri göstermez; eksik `[contribution]` 0 yerine "tanımlı değil" okunur (K-56).
 Not: Katkı açıkça 0 ise dengeleme bölümü "Bu ay katkı 0." yazar; sıfırlarla dolu öneri gösterilmez (K-59).
@@ -49,12 +51,13 @@ Not: Her zaman açık Linux makine ve systemd; her iş `ft job run <iş>` ile; b
 Not: Gece yedeği age ile birden çok açık anahtara şifreli, sunucuda yerel dizinde; şifrelemeden önce integrity_check, şifreli dosyanın sha256 özeti; Mac SSH ile çeker ve `scripts/verify_backup.sh` ile tam geri yükleme testi yapar; gizli anahtar sunucuda durmaz (K-82). Dead man's switch: rapor ve günlük yedek ping'i (K-84).
 Not: Maaş günü mesajı katkının sınıf ve fon bazında dağılım önerisi ve `ft tx add` hatırlatması (K-83). Telegram'da TL tutarları varsayılan gizli (K-90); maaş günü mesajı için ayrı ayar, varsayılan gizli (K-93).
 Not: Rapor kuralları: eksik fiyat açıkça yazılır ve dağılım, alarm, plan atlanır; kapsam etiketleri; aylık raporda aylık değişim; Telegram'da `<code>`; snapshot'lar uçtan uca (K-95).
-Not: Fiyatlar eksikken alarm değerlendirilmez (K-85); mantıksal tarihler K-86; sessiz dönem `allocation_state`'te (K-87); haftalık değişim önceki Pazar'a göre (K-88).
+Not: Fiyatlar eksikken alarm değerlendirilmez (K-85); mantıksal tarihler K-86; sessiz dönem `allocation_state`'te (K-87); haftalık değişim önceki Pazar'a göre, Modified Dietz ile (K-88, K-94).
+Not: İş sonuçları: eksik fiyat ya da gönderilemeyen bildirim "partial"; aylık rapor TÜFE'yi ayın 10'una kadar bekler; ping yalnız "ok" ve "failed"da (K-96).
 Not: Evdeki Debian tabanlı cihazda systemd; tek şablon servis ve iş başına timer, `deploy/ft-finans`, maaş günü 3 günlük pencere, Mac yedekleri rrsync ile çeker (K-97).
 Not: Kurulumda ilk iş `ft doctor` ve `ft sync cpi` (K-91); Telegram kurulumu ve `ft notify test` kullanıcıda (K-89); M4 birimlerinde LoadCredential, sertleştirme M5'te (K-92).
 
 ## M5 · OpenClaw ve güvenlik sertleştirmesi
-JSON anlık görüntüleri ve rrsync ile aktarımı (yalnızca çekirdekten dışarı), ft-agent (boru hattı ve veri tazeliği için iki ayrı bayatlık sinyali), JSON Schema kontratı, SKILL.md, PPK özeti akışı (oranlar kodla çıkarılır), asistan botu; iki makine, ayrı OS kullanıcıları, systemd sertleştirme, LoadCredential, makine bazında egress allowlist.
+JSON anlık görüntüleri ve rrsync ile aktarımı (yalnızca çekirdekten dışarı), ft-agent (boru hattı ve veri tazeliği için iki ayrı bayatlık sinyali), JSON Schema kontratı, SKILL.md, PPK özeti akışı (oranlar kodla çıkarılır), asistan botu; iki makine, ayrı OS kullanıcıları, systemd sertleştirme (LoadCredential M4'te geldi, K-92), makine bazında egress allowlist.
 Geliştirme kapısı: Güvenlik kontrol listesi tamam; OpenClaw makinesinde veritabanı ve çekirdek sırrı yok; ajanın yazma denemesi reddediliyor.
 
 ## M6 · İleri (ihtiyaç doğarsa)
