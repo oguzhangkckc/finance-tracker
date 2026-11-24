@@ -427,3 +427,63 @@ def test_a_voided_payday_purchase_is_not_offered_again_without_the_option(
     assert "Kaydedildi: 1 sanal alım." in asked.output
     listed = runner.invoke(app, ["tx", "list", "--all"]).output
     assert "#2  2026-06-16  XHT  BUY  95 × 10.5" in listed
+
+
+TWO_FUNDS = """
+[targets]
+hisse = 0.5
+dusuk_risk = 0.5
+
+[contribution]
+monthly = 1000
+payday = 15
+
+[[instruments]]
+code = "XHT"
+kind = "TEFAS_YAT"
+asset_class = "hisse"
+
+[[instruments]]
+code = "XPP"
+kind = "TEFAS_YAT"
+asset_class = "dusuk_risk"
+"""
+
+
+@pytest.mark.usefixtures("real_db")
+def test_preview_shows_a_fund_with_no_share_this_month(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    portfolio = tmp_path / "iki.toml"
+    portfolio.write_text(TWO_FUNDS, encoding="utf-8")
+    monkeypatch.setenv("FT_PORTFOLIO_PATH", str(portfolio))
+    monkeypatch.setattr(
+        bootstrap, "system_clock", lambda: FixedClock(datetime(2026, 6, 17, 9, 0, tzinfo=UTC))
+    )
+    _sanal(monkeypatch)
+    assert runner.invoke(app, ["sanal", "init"]).exit_code == 0
+    for code in ("XHT", "XPP"):
+        for day in ("2026-06-12", "2026-06-16"):
+            assert runner.invoke(app, ["price", "set", code, day, "10"]).exit_code == 0
+    bought = runner.invoke(app, ["sanal", "al", "XHT", "--tutar", "5000", "--tarih", "2026-06-12"])
+    assert bought.exit_code == 0, bought.output
+
+    preview = runner.invoke(
+        app, ["sanal", "maas-gunu-uygula", "--maas-gunu", "2026-06-15"], input="h\n"
+    )
+
+    assert preview.exit_code == 0, preview.output
+    assert "hisse XHT: 0 TL → bu ay alım yok; katkı hedefin altında kalan sınıflara gitti." in (
+        preview.output
+    )
+    assert "dusuk_risk XPP: 1000 TL → fiyat günü 2026-06-16, 100 pay × 10" in preview.output
+
+
+@pytest.mark.usefixtures("real_db")
+def test_unknown_code_lists_the_defined_codes(monkeypatch: pytest.MonkeyPatch) -> None:
+    _ready(monkeypatch)
+
+    result = runner.invoke(app, ["sanal", "al", "KOD", "--tutar", "5000", "--tarih", "2026-06-15"])
+
+    assert result.exit_code == 1
+    assert "KOD tanımlı değil. Tanımlı kodlar: XHT." in result.output

@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 
+from finans.application.codes import unknown_code_message
 from finans.application.report import payday_plan
 from finans.application.transactions import add_transaction
 from finans.domain.models import DomainError, PricePoint, Side, Transaction
@@ -40,9 +41,7 @@ def paper_buy(
 ) -> PaperTrade:
     stored = uow.instruments.get(code)
     if stored is None:
-        raise DomainError(
-            f"{code} tanımlı değil; portfolio.toml'a ekleyip `ft config apply` çalıştır."
-        )
+        raise DomainError(unknown_code_message(uow, code))
     point = _price_on(uow, code, day)
     split = units_for_amount(amount, point.price, stored.instrument.kind)
     tx = Transaction(code, day, Side.BUY, split.units, point.price, fee)
@@ -75,7 +74,7 @@ def _price_on(uow: UnitOfWork, code: str, day: date) -> PricePoint:
     )
 
 
-PaydayStatus = Literal["ready", "pending", "expired", "applied", "voided", "skipped"]
+PaydayStatus = Literal["ready", "nothing", "pending", "expired", "applied", "voided", "skipped"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,7 +121,6 @@ def plan_payday_purchases(
             uow, line.asset_class, line.instrument, line.amount, payday, today, applied, voided
         )
         for line in plan.lines
-        if line.amount > 0
     ]
     return PaydayPurchasePlan(
         payday, window_end, today + timedelta(days=1), plan.missing_prices, lines
@@ -158,6 +156,8 @@ def _purchase(
     voided: set[str | None],
 ) -> PaydayPurchase:
     ref = f"sanal-maas-gunu:{payday.isoformat()}:{code}"
+    if amount <= 0:
+        return PaydayPurchase(asset_class, code, amount, "nothing", ref)
     base = PaydayPurchase(asset_class, code, amount, "applied", ref)
     if ref in applied:
         return base

@@ -3,6 +3,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 
+from finans.application.codes import unknown_code_message
 from finans.domain.models import DomainError, OversellError, Side, Transaction
 from finans.domain.numeric import canonical_text
 from finans.domain.positions import build_positions
@@ -39,9 +40,7 @@ def _key(tx: Transaction) -> _Key:
 def _tradeable_issue(uow: UnitOfWork, tx: Transaction) -> str | None:
     stored = uow.instruments.get(tx.instrument)
     if stored is None:
-        return (
-            f"{tx.instrument} tanımlı değil; portfolio.toml'a ekleyip `ft config apply` çalıştır."
-        )
+        return unknown_code_message(uow, tx.instrument)
     if not stored.active and tx.side is Side.BUY:
         return f"{tx.instrument} pasif; alış girilemez, yalnızca satış girilebilir."
     return None

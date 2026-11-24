@@ -15,19 +15,20 @@ DEFAULT_WINDOW = timedelta(days=30)
 def check_data(
     uow: UnitOfWork, *, quality: QualityThresholds, today: date, since: date
 ) -> list[DataIssue]:
-    """Takip edilen varlıkların fiyat verisini ve kayıtlı işlemlerin fiyatını denetler."""
+    """`today` gününe kadarki fiyatları ve işlemleri denetler; geçmiş tarihli bir rapor kendi
+    gününden sonraki işlemleri görmez."""
     history = price_series(uow, today)
     issues = check_prices(
-        tracked_instruments(uow), history, today=today, since=since, thresholds=quality
+        tracked_instruments(uow, as_of=today), history, today=today, since=since, thresholds=quality
     )
-    trades = [(f"#{s.id}", s.transaction) for s in uow.transactions.list()]
+    trades = [(f"#{s.id}", s.transaction) for s in uow.transactions.list(until=today)]
     issues.extend(_trade_issues(uow, trades, history))
     return issues
 
 
-def tracked_instruments(uow: UnitOfWork) -> list[Instrument]:
-    """Aktif varlıklar ile pasif olup hâlâ pay tutulanlar."""
-    book = build_positions([s.transaction for s in uow.transactions.list()], as_of=date.max)
+def tracked_instruments(uow: UnitOfWork, *, as_of: date = date.max) -> list[Instrument]:
+    """Aktif varlıklar ile pasif olup `as_of` gününde hâlâ pay tutulanlar."""
+    book = build_positions([s.transaction for s in uow.transactions.list()], as_of=as_of)
     return [
         item.instrument
         for item in uow.instruments.list(include_inactive=True)

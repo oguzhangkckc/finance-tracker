@@ -7,7 +7,7 @@ import pytest
 
 from finans.adapters.sqlite.connection import connect
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
-from finans.application.data_check import check_data, trade_price_issues
+from finans.application.data_check import check_data, tracked_instruments, trade_price_issues
 from finans.domain.models import Instrument, InstrumentKind, PricePoint, Side, Transaction
 from finans.domain.portfolio import QualityThresholds
 
@@ -89,3 +89,31 @@ def test_stored_trades_use_the_entered_digits_and_fall_back_without_them(db: Pat
     # #2 (1.7200, 4 basamak) eşleşir; #3 basamak sayısı olmadan kayıtlı, 2 basamak sayılır.
     # Sorunlar işlem tarihine göre sıralı: #3 (19.11), #1 (23.11).
     assert [(issue.ref, issue.level) for issue in trade_issues] == [("#3", "info"), ("#1", "warn")]
+
+
+def test_only_trades_up_to_the_checked_day_are_checked(db: Path) -> None:
+    with SqliteUnitOfWork(db) as uow:
+        uow.transactions.add(
+            Transaction("OLD", date(2026, 11, 17), Side.BUY, D(1), D(5)),
+            external_ref=None,
+            note=None,
+            created_at=NOW,
+        )
+        uow.transactions.add(
+            Transaction("OLD", date(2026, 11, 23), Side.SELL, D(1), D(5)),
+            external_ref=None,
+            note=None,
+            created_at=NOW,
+        )
+
+    with SqliteUnitOfWork(db, readonly=True) as uow:
+        issues = check_data(
+            uow, quality=QualityThresholds(), today=date(2026, 11, 20), since=date(2026, 11, 1)
+        )
+        on_20th = [i.code for i in tracked_instruments(uow, as_of=date(2026, 11, 20))]
+        now = [i.code for i in tracked_instruments(uow)]
+
+    assert not [str(issue) for issue in issues if "2026-11-23" in str(issue)]
+    # OLD pasif; 20.11'de hâlâ elde, o günün denetiminde izlenir; satıştan sonra izlenmez.
+    assert "OLD" in on_20th
+    assert "OLD" not in now

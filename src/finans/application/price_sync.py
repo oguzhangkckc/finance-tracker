@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
+from finans.application.codes import unknown_code_message
 from finans.domain.models import DomainError, Instrument, InstrumentKind, PricePoint
 from finans.domain.positions import build_positions
 from finans.domain.quality import price_matches
@@ -103,7 +104,7 @@ def _plan(
     stored = {item.instrument.code: item for item in uow.instruments.list(include_inactive=True)}
     transactions = uow.transactions.list()
     if codes is not None:
-        selected = [_requested(stored.get(code), code) for code in dict.fromkeys(codes)]
+        selected = [_requested(uow, stored.get(code), code) for code in dict.fromkeys(codes)]
     else:
         book = build_positions([s.transaction for s in transactions], as_of=date.max)
         selected = [
@@ -119,11 +120,9 @@ def _plan(
     return plan
 
 
-def _requested(item: StoredInstrument | None, code: str) -> Instrument:
+def _requested(uow: UnitOfWork, item: StoredInstrument | None, code: str) -> Instrument:
     if item is None:
-        raise DomainError(
-            f"{code} tanımlı değil; portfolio.toml'a ekleyip `ft config apply` çalıştır."
-        )
+        raise DomainError(unknown_code_message(uow, code))
     if item.instrument.kind not in TEFAS_KINDS:
         raise DomainError(f"{code} bir TEFAS fonu değil; fiyatı `ft price set` ile girilir.")
     return item.instrument
