@@ -5,7 +5,13 @@ from pathlib import Path
 import pytest
 
 from finans.adapters.render.text import TextRenderer
-from finans.contracts.report import DataIssueLine, RebalancePlan, Report, ReturnFigure
+from finans.contracts.report import (
+    DataIssueLine,
+    PaydayPlan,
+    RebalancePlan,
+    Report,
+    ReturnFigure,
+)
 from tests.support import report_scenario as scenario
 
 D = Decimal
@@ -65,3 +71,13 @@ def test_html_escapes_text_and_marks_commands_as_code(monthly: Report) -> None:
         report
     )
     assert "! deneme: a < b; `ft sync prices`" in TextRenderer().report(report)
+
+
+def test_sanal_report_and_payday_open_with_the_notice_in_text_only(monthly: Report) -> None:
+    sanal = monthly.model_copy(update={"profile": "sanal"})
+    plan = PaydayPlan(profile="sanal", logical_date=date(2026, 11, 15), contribution=D(0), lines=[])
+
+    assert TextRenderer().report(sanal).splitlines()[0] == "SANAL — gerçek alım değil"
+    assert TextRenderer().payday(plan).splitlines()[0] == "SANAL — gerçek alım değil"
+    assert "SANAL" not in TextRenderer(html=True).report(sanal)
+    assert "SANAL" not in TextRenderer().report(monthly)

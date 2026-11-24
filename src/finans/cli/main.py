@@ -27,6 +27,7 @@ from finans.application.transactions import (
     void_transaction,
 )
 from finans.cli._common import VersionOption
+from finans.contracts.report import SANAL_NOTICE
 from finans.domain.models import DomainError, InstrumentKind, Side, Transaction, YearMonth
 from finans.domain.numeric import canonical_text
 from finans.domain.portfolio import ConfigError, QualityThresholds
@@ -924,7 +925,7 @@ def _portfolio_path(settings: Settings, file: Path | None) -> Path:
 
 def _load_settings_or_exit() -> Settings:
     try:
-        return load_settings()
+        settings = load_settings()
     except ValidationError as exc:
         # Alan hatalarında yalnızca alan adı yazdırılır; değerler sır içerebilir. Alansız
         # hatalar kendi doğrulayıcılarımızdandır ve değer içermez.
@@ -940,3 +941,6 @@ def _load_settings_or_exit() -> Settings:
                 err=True,
             )
         raise typer.Exit(code=2) from exc
+    if bootstrap.is_sanal_profile(settings):
+        typer.echo(SANAL_NOTICE, err=True)
+    return settings

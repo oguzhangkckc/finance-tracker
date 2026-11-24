@@ -1,13 +1,21 @@
 import hashlib
+import json
 import logging
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Literal
 
+import httpx
 import pytest
+import respx
+from pydantic import SecretStr
 from typer.testing import CliRunner
 
+from finans import bootstrap
 from finans.adapters.sqlite.connection import is_sanal
 from finans.cli.main import app
+from finans.settings import Settings
+from tests.fakes.clock import FixedClock
 
 runner = CliRunner()
 PORTFOLIO = """
@@ -284,3 +292,44 @@ def test_paper_trading_needs_the_sanal_profile(real_db: Path, command: list[str]
     assert result.exit_code == 1
     assert "yalnızca sanal profilde" in result.output
     assert _digest(real_db) == before
+
+
+@pytest.mark.usefixtures("real_db")
+def test_the_sanal_profile_announces_itself_on_stderr_and_json_stays_clean(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real = runner.invoke(app, ["tx", "list"])
+    _ready(monkeypatch)
+
+    listed = runner.invoke(app, ["tx", "list"])
+    report = runner.invoke(app, ["report", "weekly", "--on", "2026-06-21", "--format", "json"])
+
+    assert "SANAL" not in real.output
+    assert "SANAL — gerçek alım değil" in listed.stderr
+    assert "SANAL" not in listed.stdout
+    assert report.exit_code == 0, report.output
+    assert json.loads(report.stdout)["profile"] == "sanal"
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("profile", "text"),
+    [("sanal", "\U0001f9ea SANAL — gerçek alım değil\n\nRapor"), ("real", "Rapor")],
+)
+def test_telegram_messages_carry_the_prefix_only_in_the_sanal_profile(
+    tmp_path: Path, clock: FixedClock, profile: Literal["real", "sanal"], text: str
+) -> None:
+    route = respx.post("https://api.telegram.org/bot123456:ABC/sendMessage").mock(
+        return_value=httpx.Response(200, json={"ok": True, "result": {"message_id": 1}})
+    )
+    settings = Settings(
+        db_path=tmp_path / "finans.db",
+        profile=profile,
+        telegram_bot_token=SecretStr("123456:ABC"),
+        telegram_chat_id="42",
+    )
+
+    with bootstrap.notifier(settings, clock) as channel:
+        channel.send("Rapor", silent=True)
+
+    assert json.loads(route.calls.last.request.content)["text"] == text

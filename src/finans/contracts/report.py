@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # K-118: her çıktıda vardır; sanal portföy (K-107) gerçek çıktıyla karışmasın.
 Profile = Literal["real", "sanal"]
+SANAL_NOTICE = "SANAL \u2014 gerçek alım değil"
 
 
 class _Model(BaseModel):

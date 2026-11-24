@@ -52,6 +52,7 @@ from finans.application.doctor import (
     price_check,
 )
 from finans.application.jobs import JobContext, JobOutcome, job_body, run_job
+from finans.contracts.report import SANAL_NOTICE
 from finans.domain.portfolio import ConfigError, PortfolioConfig
 from finans.ports.clock import Clock
 from finans.ports.notifier import Notifier, NotifyError
@@ -212,6 +213,7 @@ def notifier(settings: Settings, clock: Clock) -> Iterator[Notifier]:
             token=secret,
             chat_id=settings.telegram_chat_id,
             base_url=settings.telegram_base_url,
+            prefix=f"\U0001f9ea {SANAL_NOTICE}" if is_sanal_profile(settings) else None,
         )
 
 
