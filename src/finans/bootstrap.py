@@ -76,6 +76,13 @@ def open_unit_of_work(settings: Settings, *, readonly: bool = False) -> UnitOfWo
             raise SetupError(
                 f"Veritabanı bulunamadı ({settings.db_path}); önce `ft db migrate` çalıştır."
             )
+        # Salt okunur açılış migration çalıştırmaz; eski şemada yeni sütunlar okunamaz.
+        status = schema_status(settings.db_path)
+        if status.current != status.latest:
+            raise SetupError(
+                f"Veritabanı şeması güncel değil (sürüm {status.current}, en son "
+                f"{status.latest}); `ft db migrate` çalıştır."
+            )
     else:
         migrate_database(settings)
     return SqliteUnitOfWork(settings.db_path, readonly=readonly)

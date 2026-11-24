@@ -362,8 +362,11 @@ def data_check(
         str | None,
         typer.Option("--since", help="YYYY-AA-GG; sıçrama ve boşluk penceresi, varsayılan 30 gün."),
     ] = None,
+    strict: Annotated[
+        bool, typer.Option("--strict", help="Uyarı varsa 1 ile çık (zamanlanmış işler için).")
+    ] = False,
 ) -> None:
-    """Fiyat verisini ve işlem fiyatlarını denetler; sorun olsa da 0 ile çıkar."""
+    """Fiyat verisini ve işlem fiyatlarını denetler; varsayılan olarak her durumda 0 ile çıkar."""
     settings = _load_settings_or_exit()
     first = None if since is None else _parse_date(since)
     today = bootstrap.system_clock().today()
@@ -373,6 +376,8 @@ def data_check(
             uow, quality=quality, today=today, since=first or today - DEFAULT_WINDOW
         )
     _print_issues(issues)
+    if strict and any(issue.level == "warn" for issue in issues):
+        raise typer.Exit(code=1)
 
 
 def _quality(settings: Settings) -> QualityThresholds:

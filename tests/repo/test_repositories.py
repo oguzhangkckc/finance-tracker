@@ -253,3 +253,30 @@ def test_raw_payload_is_stored_as_bytes(db: Path) -> None:
     with closing(connect(db, readonly=True)) as conn:
         stored = conn.execute("SELECT source, body FROM raw_payload WHERE id = ?", (first,))
         assert stored.fetchone() == ("evds", body)
+
+
+@pytest.mark.parametrize(("entered", "exponent"), [("1.7200", -4), ("12", 0), ("0.142216", -6)])
+def test_entered_price_digits_survive_the_database(
+    uow: SqliteUnitOfWork, entered: str, exponent: int
+) -> None:
+    tx = Transaction("TTE", date(2026, 1, 5), Side.BUY, D(1), D(entered))
+    txn_id = uow.transactions.add(tx, external_ref=None, note=None, created_at=NOW)
+
+    stored = uow.transactions.get(txn_id)
+
+    assert stored is not None
+    assert stored.transaction.unit_price == D(entered)
+    assert stored.transaction.unit_price.as_tuple().exponent == exponent
+
+
+def test_rows_without_a_scale_keep_the_stored_digits(db: Path) -> None:
+    with SqliteUnitOfWork(db) as work:
+        work.instruments.sync([TTE])
+    with closing(connect(db)) as conn:
+        conn.execute(
+            "INSERT INTO txn (instrument_id, trade_date, side, units, unit_price, created_at)"
+            " VALUES (1, '2026-01-05', 'BUY', '1', '1.72', '2026-01-05T00:00:00+00:00')"
+        )
+    with SqliteUnitOfWork(db, readonly=True) as work:
+        [stored] = work.transactions.list()
+    assert stored.transaction.unit_price.as_tuple().exponent == -2

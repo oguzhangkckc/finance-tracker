@@ -1,9 +1,11 @@
+from contextlib import closing
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
+from finans.adapters.sqlite.connection import connect
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.application.data_check import check_data, trade_price_issues
 from finans.domain.models import Instrument, InstrumentKind, PricePoint, Side, Transaction
@@ -63,3 +65,27 @@ def test_new_entries_are_checked_with_the_digits_as_entered(db: Path) -> None:
     # Kayıtta sondaki sıfırlar düşer; girişte 1.7200 dört basamaklı sayılır ve 1.72 ile eşleşir.
     assert checked == []
     assert [issue.level for issue in noted] == ["info"]
+
+
+def test_stored_trades_use_the_entered_digits_and_fall_back_without_them(db: Path) -> None:
+    with SqliteUnitOfWork(db) as uow:
+        uow.transactions.add(
+            Transaction("XHT", date(2026, 11, 19), Side.BUY, D(1), D("1.7200")),
+            external_ref=None,
+            note=None,
+            created_at=NOW,
+        )
+    with closing(connect(db)) as conn:
+        conn.execute(
+            "INSERT INTO txn (instrument_id, trade_date, side, units, unit_price, created_at)"
+            " SELECT id, '2026-11-19', 'BUY', '1', '1.72', '2026-11-24T00:00:00+00:00'"
+            " FROM instrument WHERE code = 'XHT'"
+        )
+
+    with SqliteUnitOfWork(db, readonly=True) as uow:
+        issues = check_data(uow, quality=QualityThresholds(), today=TODAY, since=date(2026, 11, 1))
+
+    trade_issues = [issue for issue in issues if issue.check == "işlem fiyatı"]
+    # #2 (1.7200, 4 basamak) eşleşir; #3 basamak sayısı olmadan kayıtlı, 2 basamak sayılır.
+    # Sorunlar işlem tarihine göre sıralı: #3 (19.11), #1 (23.11).
+    assert [(issue.ref, issue.level) for issue in trade_issues] == [("#3", "info"), ("#1", "warn")]

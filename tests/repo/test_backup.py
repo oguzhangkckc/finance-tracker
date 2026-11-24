@@ -251,7 +251,9 @@ INSERT INTO price_revision VALUES (1, '2026-01-05', '12.4', '12.5', '2026-01-05T
 """
 DATA_QUERIES = (
     "SELECT * FROM instrument ORDER BY id",
-    "SELECT * FROM txn ORDER BY id",
+    # Sonraki migration'lar yeni sütun ekleyebilir; sürüm 1'in sütunları karşılaştırılır.
+    "SELECT id, instrument_id, trade_date, side, units, unit_price, fee, external_ref, note,"
+    " created_at, voided_at, void_reason FROM txn ORDER BY id",
     "SELECT * FROM price ORDER BY instrument_id, price_date",
 )
 

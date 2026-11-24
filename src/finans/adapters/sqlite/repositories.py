@@ -1,6 +1,7 @@
 import sqlite3
 from collections.abc import Sequence
 from datetime import date, datetime
+from decimal import Decimal
 
 from finans.adapters.sqlite.codec import (
     decode_date,
@@ -112,20 +113,56 @@ class SqliteInstrumentRepo:
 
 _TXN_SELECT = """
 SELECT t.id, i.code, t.trade_date, t.side, t.units, t.unit_price, t.fee,
-       t.external_ref, t.note, t.created_at, t.voided_at, t.void_reason
+       t.external_ref, t.note, t.created_at, t.voided_at, t.void_reason, t.unit_price_scale
 FROM txn t JOIN instrument i ON i.id = t.instrument_id
 """
 
 
 _TxnRow = tuple[
-    int, str, str, str, str, str, str, str | None, str | None, str, str | None, str | None
+    int,
+    str,
+    str,
+    str,
+    str,
+    str,
+    str,
+    str | None,
+    str | None,
+    str,
+    str | None,
+    str | None,
+    int | None,
 ]
 
 
+def _scale(value: Decimal) -> int:
+    exponent = value.as_tuple().exponent
+    return -exponent if isinstance(exponent, int) and exponent < 0 else 0
+
+
+def _with_scale(value: Decimal, scale: int | None) -> Decimal:
+    # Kanonik metin sondaki sıfırları atar; girilen basamak sayısı ayrı sütunda tutulur (K-76).
+    if scale is None or scale <= _scale(value):
+        return value
+    return value.quantize(Decimal(1).scaleb(-scale))
+
+
 def _stored_transaction(row: _TxnRow) -> StoredTransaction:
-    (txn_id, code, trade_date, side, units, unit_price, fee, ref, note, created, voided, reason) = (
-        row
-    )
+    (
+        txn_id,
+        code,
+        trade_date,
+        side,
+        units,
+        unit_price,
+        fee,
+        ref,
+        note,
+        created,
+        voided,
+        reason,
+        scale,
+    ) = row
     return StoredTransaction(
         id=txn_id,
         transaction=Transaction(
@@ -133,7 +170,7 @@ def _stored_transaction(row: _TxnRow) -> StoredTransaction:
             trade_date=decode_date(trade_date),
             side=Side(side),
             units=decode_decimal(units),
-            unit_price=decode_decimal(unit_price),
+            unit_price=_with_scale(decode_decimal(unit_price), scale),
             fee=decode_decimal(fee),
         ),
         external_ref=ref,
@@ -153,7 +190,8 @@ class SqliteTransactionRepo:
     ) -> int:
         cursor = self._conn.execute(
             "INSERT INTO txn (instrument_id, trade_date, side, units, unit_price, fee,"
-            " external_ref, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " external_ref, note, created_at, unit_price_scale)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 _instrument_id(self._conn, tx.instrument),
                 encode_date(tx.trade_date),
@@ -164,6 +202,7 @@ class SqliteTransactionRepo:
                 external_ref,
                 note,
                 encode_timestamp(created_at),
+                _scale(tx.unit_price),
             ),
         )
         if cursor.lastrowid is None:

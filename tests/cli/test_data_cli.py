@@ -102,3 +102,34 @@ def test_tx_import_warns_per_line(configured: Path, tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     expected = "Uyarı: [işlem fiyatı] XHT 2026-11-21 satır 2: işlem gününde TEFAS fiyatı yok"
     assert expected in result.output
+
+
+def test_prices_entered_with_trailing_zeros_are_checked_with_all_digits(
+    configured: Path, tmp_path: Path
+) -> None:
+    _prices(configured, "777777")
+    added = runner.invoke(app, ["tx", "add", "buy", "XHT", "1", "1.7200", "--date", "2026-11-19"])
+    assert "Uyarı" not in added.output
+    assert "Bilgi" not in added.output
+    csv = tmp_path / "islemler.csv"
+    csv.write_text("date,code,side,units,price\n2026-11-19,XHT,BUY,2,1.7200\n", encoding="utf-8")
+    assert runner.invoke(app, ["tx", "import", str(csv)]).exit_code == 0
+
+    result = runner.invoke(app, ["data", "check"])
+
+    assert "Veri sorunu yok." in result.output
+
+
+def test_strict_exits_non_zero_only_for_warnings(configured: Path) -> None:
+    _prices(configured, "777777")
+    assert runner.invoke(app, ["data", "check", "--strict"]).exit_code == 0
+
+    runner.invoke(app, ["tx", "add", "buy", "XHT", "1", "1.72", "--date", "2026-11-19"])
+    info_only = runner.invoke(app, ["data", "check", "--strict"])
+    assert "0 uyarı, 1 bilgi" in info_only.output
+    assert info_only.exit_code == 0
+
+    runner.invoke(app, ["tx", "add", "buy", "XHT", "1", "1.7443", "--date", "2026-11-23"])
+    warned = runner.invoke(app, ["data", "check", "--strict"])
+    assert warned.exit_code == 1
+    assert runner.invoke(app, ["data", "check"]).exit_code == 0

@@ -117,3 +117,13 @@ def test_cpi_revision_refers_to_a_stored_period(conn: sqlite3.Connection) -> Non
     conn.execute("INSERT INTO cpi_revision VALUES ('TP.X', '2026-01', '100', '101', ?)", (NOW,))
     with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
         conn.execute("INSERT INTO cpi_revision VALUES ('TP.X', '2026-02', '100', '101', ?)", (NOW,))
+
+
+@pytest.mark.parametrize("scale", [-1, 29])
+def test_unit_price_scale_is_a_sane_digit_count(conn: sqlite3.Connection, scale: int) -> None:
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+        conn.execute(
+            "INSERT INTO txn (instrument_id, trade_date, side, units, unit_price, created_at,"
+            " unit_price_scale) VALUES (1, '2026-01-05', 'BUY', '1', '1.72', ?, ?)",
+            (NOW, scale),
+        )
