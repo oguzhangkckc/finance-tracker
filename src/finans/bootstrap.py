@@ -21,6 +21,7 @@ from finans.adapters.sqlite.migrate import (
 )
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.adapters.tefas import TefasPriceSource
+from finans.adapters.telegram import TelegramNotifier
 from finans.application.doctor import (
     Check,
     cpi_check,
@@ -30,6 +31,7 @@ from finans.application.doctor import (
 )
 from finans.domain.portfolio import ConfigError, PortfolioConfig
 from finans.ports.clock import Clock
+from finans.ports.notifier import Notifier, NotifyError
 from finans.ports.render import ReportRenderer
 from finans.ports.sources import (
     CpiSource,
@@ -45,10 +47,12 @@ from finans.settings import Settings
 __all__ = [
     "MigrationError",
     "MigrationRun",
+    "NotifyError",
     "SetupError",
     "SourceError",
     "cpi_source",
     "migrate_database",
+    "notifier",
     "open_unit_of_work",
     "portfolio_source",
     "price_source",
@@ -56,6 +60,7 @@ __all__ = [
     "run_doctor",
     "statement_file",
     "system_clock",
+    "telegram_renderer",
     "transaction_file",
 ]
 
@@ -128,6 +133,32 @@ def system_clock() -> Clock:
     return SystemClock()
 
 
+@contextmanager
+def notifier(settings: Settings, clock: Clock) -> Iterator[Notifier]:
+    token = settings.telegram_bot_token
+    if token is None or settings.telegram_chat_id is None:
+        raise SetupError(
+            "FT_TELEGRAM_BOT_TOKEN ve FT_TELEGRAM_CHAT_ID tanımlı olmalı; botu ve sohbet "
+            "ID'sini sen oluşturup .env'e (üretimde LoadCredential ile) eklersin (K-89)."
+        )
+    secret = token.get_secret_value()
+    with HttpClient(clock, secrets=[secret]) as http:
+        yield TelegramNotifier(
+            http,
+            token=secret,
+            chat_id=settings.telegram_chat_id,
+            base_url=settings.telegram_base_url,
+        )
+
+
+def telegram_renderer(settings: Settings) -> ReportRenderer:
+    return TextRenderer(
+        hide_amounts=settings.telegram_hide_amounts,
+        payday_amounts=settings.telegram_payday_show_amounts,
+        html=True,
+    )
+
+
 def report_renderer(
     fmt: str = "text", *, hide_amounts: bool = False, payday_amounts: bool = True
 ) -> ReportRenderer:
@@ -184,6 +215,7 @@ def run_doctor(settings: Settings) -> list[Check]:
             checks.append(price_check(uow, today=today))
             checks.append(cpi_check(uow, settings.cpi_series, today=today))
     checks.append(_evds_key_check(settings))
+    checks.append(_telegram_check(settings))
     checks.append(_env_check(Path(".env")))
     return checks
 
@@ -205,6 +237,16 @@ def _config_check(settings: Settings, checks: list[Check]) -> PortfolioConfig | 
         )
     )
     return config
+
+
+def _telegram_check(settings: Settings) -> Check:
+    if settings.telegram_bot_token is None or settings.telegram_chat_id is None:
+        return Check(
+            "Telegram",
+            "warn",
+            "FT_TELEGRAM_BOT_TOKEN ya da FT_TELEGRAM_CHAT_ID tanımlı değil; bildirim gönderilemez",
+        )
+    return Check("Telegram", "ok", "token ve sohbet ID'si tanımlı")
 
 
 def _evds_key_check(settings: Settings) -> Check:

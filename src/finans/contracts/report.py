@@ -138,6 +138,16 @@ class Report(_Model):
     health: SystemHealth
 
 
+class AlertNotice(_Model):
+    """Bildirilecek sapma olayı ya da açık alarm hatırlatması (K-46)."""
+
+    kind: Literal["opened", "resolved", "reminder"]
+    asset_class: str
+    direction: Literal["above", "below"]
+    deviation: Decimal | None
+    opened_at: datetime
+
+
 class PaydayLine(_Model):
     asset_class: str
     instrument: str

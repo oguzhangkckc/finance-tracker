@@ -106,6 +106,7 @@ modules = [
     "finans.adapters.render",
     "finans.adapters.sqlite",
     "finans.adapters.tefas",
+    "finans.adapters.telegram",
 ]
 
 [[tool.importlinter.contracts]]

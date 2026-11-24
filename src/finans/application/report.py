@@ -4,6 +4,12 @@ from decimal import Decimal
 from typing import Literal
 
 from finans.application.data_check import check_data
+from finans.application.portfolio_view import (
+    class_values,
+    in_allocation,
+    instruments_by_code,
+    missing_in_allocation,
+)
 from finans.contracts.report import (
     AlertLine,
     AllocationLine,
@@ -61,7 +67,7 @@ def build_report(
     Fiyatı olmayan varlık değerlenmez; dağılım içinde böyle bir varlık varsa dağılım, katkı
     planı ve para ağırlıklı getiri hesaplanmaz (K-85, K-95).
     """
-    instruments = _instruments(uow)
+    instruments = instruments_by_code(uow)
     transactions = [s.transaction for s in uow.transactions.list(until=logical_date)]
     history = PriceHistory(uow.prices.history(until=logical_date))
     book = build_positions(transactions, as_of=logical_date)
@@ -69,13 +75,13 @@ def build_report(
     points = uow.cpi.points(cpi_series)
     series = CpiSeries(points) if points and kind == "monthly" else None
     missing = sorted(valuation.missing_prices)
-    skipped = [code for code in missing if _in_allocation(code, instruments)]
+    skipped = missing_in_allocation(valuation, instruments)
 
     split = _split(valuation, instruments)
     allocation = (
         []
         if skipped
-        else _allocation(_class_values(valuation, instruments, config.targets), config.targets)
+        else _allocation(class_values(valuation, instruments, config.targets), config.targets)
     )
     current = {line.asset_class: line.deviation for line in allocation}
     since = logical_date - WEEK if kind == "weekly" else logical_date.replace(day=1) - DAY
@@ -144,13 +150,13 @@ def payday_plan(
     """Maaş günü mesajı: katkının sınıf ve fon bazında dağılımı (K-83)."""
     if contribution is None:
         raise DomainError("Katkı tanımlı değil; [contribution] altında monthly gerekli.")
-    instruments = _instruments(uow)
+    instruments = instruments_by_code(uow)
     transactions = [s.transaction for s in uow.transactions.list(until=on)]
     valuation = value_book(
         build_positions(transactions, as_of=on), PriceHistory(uow.prices.history(until=on)), on
     )
     skipped = [
-        code for code in sorted(valuation.missing_prices) if _in_allocation(code, instruments)
+        code for code in sorted(valuation.missing_prices) if in_allocation(code, instruments)
     ]
     if skipped:
         return PaydayPlan(
@@ -172,20 +178,12 @@ def payday_plan(
     )
 
 
-def _instruments(uow: UnitOfWork) -> dict[str, Instrument]:
-    return {s.instrument.code: s.instrument for s in uow.instruments.list(include_inactive=True)}
-
-
-def _in_allocation(code: str, instruments: Mapping[str, Instrument]) -> bool:
-    return code not in instruments or instruments[code].allocation
-
-
 def _split(valuation: Valuation, instruments: Mapping[str, Instrument]) -> ValueSplit:
     inside = sum(
         (
             h.value
             for h in valuation.holdings
-            if h.value is not None and _in_allocation(h.instrument, instruments)
+            if h.value is not None and in_allocation(h.instrument, instruments)
         ),
         ZERO,
     )
@@ -216,19 +214,6 @@ def _with_change(
             ),
         }
     )
-
-
-def _class_values(
-    valuation: Valuation, instruments: Mapping[str, Instrument], targets: Mapping[str, Decimal]
-) -> dict[str, Decimal]:
-    values = dict.fromkeys(targets, ZERO)
-    for holding in valuation.holdings:
-        instrument = instruments.get(holding.instrument)
-        if instrument is None or not instrument.allocation or holding.value is None:
-            continue
-        if instrument.asset_class in values:
-            values[instrument.asset_class] += holding.value
-    return values
 
 
 def _allocation(
@@ -296,7 +281,7 @@ def _holdings(
     lines = []
     for holding in sorted(valuation.holdings, key=lambda h: h.instrument):
         instrument = instruments.get(holding.instrument)
-        inside = _in_allocation(holding.instrument, instruments)
+        inside = in_allocation(holding.instrument, instruments)
         real = None
         if not inside and series is not None and holding.value is not None:
             real = real_simple_return(
@@ -367,7 +352,7 @@ def _with_money_weighted(
         return summary.model_copy(
             update={"money_weighted": missing, "real_money_weighted": missing}
         )
-    inside = [tx for tx in transactions if _in_allocation(tx.instrument, instruments)]
+    inside = [tx for tx in transactions if in_allocation(tx.instrument, instruments)]
     flows = portfolio_cash_flows(inside, terminal_value=split.in_allocation, on=on)
     if series is None:
         return summary.model_copy(update={"money_weighted": _figure(money_weighted_return(flows))})

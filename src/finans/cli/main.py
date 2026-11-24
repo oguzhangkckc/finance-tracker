@@ -54,6 +54,8 @@ app.add_typer(sync_app, name="sync")
 app.add_typer(data_app, name="data")
 report_app = typer.Typer(no_args_is_help=True, help="Raporlar (önizleme).")
 app.add_typer(report_app, name="report")
+notify_app = typer.Typer(no_args_is_help=True, help="Bildirim kanalı (Telegram).")
+app.add_typer(notify_app, name="notify")
 
 
 class SideChoice(StrEnum):
@@ -491,6 +493,38 @@ def _print_warnings(issues: list[DataIssue]) -> None:
 _SYMBOLS = {"ok": "✓", "warn": "!", "fail": "✗"}
 
 
+@notify_app.command("test")
+def notify_test() -> None:
+    """Telegram kurulumunu doğrulamak için kısa bir mesaj gönderir (K-89)."""
+    settings = _load_settings_or_exit()
+    with _user_errors(), bootstrap.notifier(settings, bootstrap.system_clock()) as channel:
+        channel.send("finans-takip: Telegram bağlantısı çalışıyor.", silent=False)
+    typer.echo("Test mesajı gönderildi.")
+
+
+@app.command("alerts")
+def alerts_command() -> None:
+    """Açık sapma alarmlarını ve sessiz dönemin durumunu gösterir (K-46, K-75)."""
+    settings = _load_settings_or_exit()
+    with _user_errors(), bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+        states = uow.alerts.list_open()
+        ended = uow.allocation_state.quiet_ended_on()
+    typer.echo(
+        f"Sessiz dönem: {ended} tarihinde bitti" if ended else "Sessiz dönem: sürüyor (K-75)"
+    )
+    if not states:
+        typer.echo("Açık alarm yok.")
+    for state in states:
+        side = "üstünde" if state.direction == "above" else "altında"
+        last = (
+            "yok" if state.last_notified_at is None else f"{state.last_notified_at:%Y-%m-%d %H:%M}"
+        )
+        typer.echo(
+            f"{state.fingerprint.removeprefix('drift:')}: hedefin {side}, açılış "
+            f"{state.opened_at:%Y-%m-%d %H:%M} UTC, son bildirim {last}"
+        )
+
+
 class ReportFormat(StrEnum):
     TEXT = "text"
     JSON = "json"
@@ -680,6 +714,7 @@ def _user_errors() -> Iterator[None]:
         bootstrap.MigrationError,
         bootstrap.SetupError,
         bootstrap.SourceError,
+        bootstrap.NotifyError,
     ) as exc:
         typer.echo(f"Hata: {exc}", err=True)
         raise typer.Exit(code=1) from exc

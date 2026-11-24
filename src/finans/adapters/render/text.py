@@ -11,6 +11,7 @@ from decimal import ROUND_HALF_EVEN, Decimal
 
 from finans.contracts.report import (
     AlertLine,
+    AlertNotice,
     DataIssueLine,
     HoldingLine,
     PaydayPlan,
@@ -104,6 +105,24 @@ class TextRenderer:
                 amount = f"{money(line.amount)} ({share})" if show else f"katkının {share}"
                 lines.append(f"{line.asset_class} {line.instrument}: {amount}")
             lines.append("Alımları `ft tx add` ile gir.")
+        return self._markup("\n".join(lines))
+
+    def alerts(self, notices: list[AlertNotice]) -> str:
+        lines = ["Sapma uyarıları"]
+        for notice in notices:
+            gap = "" if notice.deviation is None else f", sapma {points(notice.deviation)}"
+            above = notice.direction == "above"
+            if notice.kind == "opened":
+                verb = "hedefin üstüne çıktı" if above else "hedefin altına düştü"
+                lines.append(f"{notice.asset_class}: {verb}{gap}")
+            elif notice.kind == "resolved":
+                lines.append(f"{notice.asset_class}: sapma düzeldi{gap}")
+            else:
+                side = "üstünde" if above else "altında"
+                lines.append(
+                    f"Hatırlatma: {notice.asset_class} hâlâ hedefin {side}{gap}"
+                    f" (açılış {_local(notice.opened_at)})"
+                )
         return self._markup("\n".join(lines))
 
     def _markup(self, text: str) -> str:
