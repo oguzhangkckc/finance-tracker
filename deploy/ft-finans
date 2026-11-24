@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sunucuda elle ft komutu: zamanlanmış işlerle aynı kullanıcı, ayar ve sırlarla (K-97).
+# Sunucuda elle ft komutu: zamanlanmış işlerle aynı kullanıcı, ayar, sır ve sertleştirmeyle (K-97, K-98).
 # Kullanım: sudo /opt/finans/deploy/ft-finans doctor
 set -euo pipefail
 
@@ -12,4 +12,6 @@ exec systemd-run --quiet --pipe --wait --collect \
   --uid=finans --gid=finans --working-directory=/var/lib/finans \
   -p EnvironmentFile=/etc/finans/finans.env \
   "${credentials[@]}" \
+  -p NoNewPrivileges=yes -p PrivateTmp=yes -p ProtectSystem=strict \
+  -p ReadWritePaths=/var/lib/finans -p ProtectHome=yes \
   /opt/finans/.venv/bin/ft "$@"

@@ -1,6 +1,7 @@
 import decimal
 import os
 import socket
+import time
 from collections.abc import Iterator
 from contextlib import closing
 from datetime import UTC, datetime
@@ -45,6 +46,21 @@ def _isolated_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         if key.startswith("FT_") or key == "CREDENTIALS_DIRECTORY":
             monkeypatch.delenv(key)
     monkeypatch.chdir(tmp_path)
+
+
+@pytest.fixture(params=["Europe/Istanbul", "UTC", "Pacific/Kiritimati", "America/Los_Angeles"])
+def system_zone(request: pytest.FixtureRequest) -> Iterator[str]:
+    """Sistem saat dilimi değiştirilmez (K-99); uygulama yerel saate hiç bakmamalı."""
+    zone: str = request.param
+    previous = os.environ.get("TZ")
+    os.environ["TZ"] = zone
+    time.tzset()
+    yield zone
+    if previous is None:
+        del os.environ["TZ"]
+    else:
+        os.environ["TZ"] = previous
+    time.tzset()
 
 
 @pytest.fixture

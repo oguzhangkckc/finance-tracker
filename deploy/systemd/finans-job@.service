@@ -16,4 +16,10 @@ LoadCredential=ft_evds_api_key:/etc/finans/credstore/ft_evds_api_key
 LoadCredential=ft_telegram_bot_token:/etc/finans/credstore/ft_telegram_bot_token
 LoadCredential=ft_healthcheck_reports_url:/etc/finans/credstore/ft_healthcheck_reports_url
 LoadCredential=ft_healthcheck_backup_url:/etc/finans/credstore/ft_healthcheck_backup_url
+# K-98: cihaz başka projelerle paylaşılıyor. Root seviyesindeki bir saldırıya karşı korumaz.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/finans
+ProtectHome=yes
 ExecStart=/opt/finans/.venv/bin/ft job run %i

@@ -19,6 +19,15 @@ def test_system_clock_today_is_istanbul_calendar_day() -> None:
     assert today in {before, after}
 
 
+@pytest.mark.usefixtures("system_zone")
+def test_system_clock_ignores_the_system_zone() -> None:
+    before = datetime.now(BUSINESS_TZ).date()
+    today = SystemClock().today()
+    after = datetime.now(BUSINESS_TZ).date()
+    assert today in {before, after}
+    assert SystemClock().now().utcoffset() == timedelta(0)
+
+
 def test_istanbul_day_starts_three_hours_before_utc_day() -> None:
     clock = FixedClock(datetime(2026, 11, 23, 21, 30, tzinfo=UTC))
     assert clock.today() == date(2026, 11, 24)

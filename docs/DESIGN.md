@@ -728,7 +728,7 @@ Deterministik işler systemd timer ile, LLM gerektiren işler OpenClaw'ın zaman
   - Rapor işleri: rapor gönderildi demektir. Kısmi veriyle gönderilmiş rapor da "ok"tur ve tekrar gönderilmez.
 - Mantıksal tarih saatten değil, zamanlamadan türetilir: işin şimdiden önceki son planlı zamanının günü (K-86). Örneğin pazartesi açılışta telafi olarak çalışan haftalık rapor, pazar gününü raporlar. sync-prices için hafta sonu telafisinde son Cuma'dır; weekly-report raporlanan Pazar; monthly-report önceki ayın son günü; sync-cpi hedef dönemin ilk günü (ör. Kasım TÜFE'si için 2026-11-01); payday maaş günü. CLI bunu `--logical-date` ile alır.
 - systemd aynı servisi zaten iki kez çalıştırmaz. Elle çalıştırılan ft ile çakışmayı önlemek için Python'da `fcntl.flock` kullanılır; ikinci örnek beklemeden çıkar. Kilit alınabildiği halde bulunan "running" satırı, ölmüş bir sürecin bayat kaydıdır ve devralınır.
-- systemd timer'larında Persistent=true açıktır: makine kapalıyken kaçırılan iş açılışta bir kez çalışır. Sunucu UTC'de olabileceği için OnCalendar ifadelerinde saat dilimi (Europe/Istanbul) açıkça yazılır.
+- systemd timer'larında Persistent=true açıktır: makine kapalıyken kaçırılan iş açılışta bir kez çalışır. Sunucu UTC'de olabileceği için OnCalendar ifadelerinde saat dilimi (Europe/Istanbul) açıkça yazılır; sistem saat dilimi değiştirilmez, uygulama tarihleri İstanbul saatine çevirerek hesaplar (K-99).
 - "partial" durumu meşru bir sonuçtur: bir fonun verisi gelmezse rapor yine gider, eksik açıkça yazılır.
 - At-least-once tasarımın bilinen bedeli: rapor gönderildikten sonra, "ok" yazılmadan süreç çökerse rapor bir kez daha gidebilir. Bu kabul edilmiştir.
 - Her iş yapılandırılmış bir özet (çekilen kayıt, hata, süre) üretir ve job_run'a yazar.
@@ -817,20 +817,20 @@ En değerli varlık finansal hesaplar değil, çünkü sistem onlara hiç erişm
 ### Dağıtım sertleştirmesi
 
 - İki makine. Çekirdek makinede finans kullanıcısı veritabanına yazar. OpenClaw kişisel verilerin bulunduğu ana makinede değil; ayrı bir VM, VPS ya da ev sunucusunda, openclaw kullanıcısıyla çalışır ve yalnızca anlık görüntü dizinini okur.
-- systemd birimlerinde ProtectSystem=strict, ProtectHome=read-only, NoNewPrivileges=true, PrivateTmp=true ve dar ReadWritePaths. Sırlar LoadCredential ile verilir.
-  - M4 birimleri yalnızca `LoadCredential=` kullanır (EVDS anahtarı, Telegram token'ı, ping URL'leri); diğer sertleştirme ayarları ve çıkış allowlist'i M5'tedir (K-92).
+- systemd birimlerinde ProtectSystem=strict, ProtectHome=yes, NoNewPrivileges=yes, PrivateTmp=yes ve dar ReadWritePaths. Sırlar LoadCredential ile verilir.
+  - M4 birimleri sırlar için `LoadCredential=` kullanır (K-92). Cihaz başka projelerle paylaşıldığı için `NoNewPrivileges=yes`, `PrivateTmp=yes`, `ProtectSystem=strict`, `ReadWritePaths=/var/lib/finans` ve `ProtectHome=yes` de M4'tedir; `deploy/ft-finans` aynı ayarlarla çalışır (K-98). Çıkış allowlist'i ve diğer ayarlar M5'tedir.
+  - Kalan risk (K-98): birim sertleştirmesi root seviyesindeki bir saldırıya karşı korumaz. Cihazdaki finans.db'nin güvenliği aynı cihazdaki diğer projelerin sertleştirmesine (docker grubu, CI anahtarı, Chromium) bağlıdır; bkz. açık soru "Paylaşılan cihazın sertleştirmesi".
 - Çıkış trafiği allowlist'i (nftables ya da filtreleyen bir proxy) makine bazında tutulur:
   - Çekirdek: tefas.gov.tr, evds3.tcmb.gov.tr (geçiş süresince evds2.tcmb.gov.tr), api.telegram.org, ping servisi (ör. hc-ping.com), yedek hedefi ve OpenClaw makinesi (anlık görüntü aktarımı). Kurulum ve güncelleme sırasında PyPI ve işletim sistemi depoları.
   - OpenClaw makinesi: LLM sağlayıcısı, api.telegram.org, www.tcmb.gov.tr.
 
-### Kurulum (M4, K-91, K-97)
+### Kurulum (M4, K-91, K-97, K-98, K-99)
 
 Hedef: evdeki, her zaman açık, 64 bit Debian tabanlı bir Linux cihaz (Raspberry Pi OS 64 bit, Ubuntu Server ya da Debian 12+; systemd 252 ve üstü). Komutlar `sudo` yetkili bir kullanıcıyla çalıştırılır.
 
-1. **Saat dilimi ve NTP.** Zamanlayıcılar saat dilimini kendileri yazar; NTP mantıksal tarihin doğru gün üzerinden yürümesi için gerekir. Raspberry Pi'de gerçek zamanlı saat olmadığı için şarttır; işler `time-sync.target` sonrasında başlar.
+1. **NTP.** Sistem saat dilimine dokunulmaz (K-99): zamanlayıcılar Europe/Istanbul'u kendileri yazar, uygulama tarihleri İstanbul saatine çevirerek hesaplar; saat dilimini değiştirmek aynı cihazdaki diğer projeleri etkiler. NTP mantıksal tarihin doğru gün üzerinden yürümesi için gerekir. Raspberry Pi'de gerçek zamanlı saat olmadığı için şarttır; işler `time-sync.target` sonrasında başlar.
 
    ```sh
-   sudo timedatectl set-timezone Europe/Istanbul
    sudo timedatectl set-ntp true
    timedatectl status   # "System clock synchronized: yes" ve "NTP service: active" beklenir
    ```
@@ -842,11 +842,12 @@ Hedef: evdeki, her zaman açık, 64 bit Debian tabanlı bir Linux cihaz (Raspber
    curl -LsSf https://astral.sh/uv/install.sh | sudo env UV_INSTALL_DIR=/usr/local/bin sh
    ```
 
-3. **Ayrı kullanıcı ve dizinler.** `finans` kullanıcısının parolası yoktur; kabuk yalnızca yedek çekme anahtarının zorunlu komutu (adım 8) için gerekir. SSH'de parola girişi kapalı olmalıdır (`PasswordAuthentication no`).
+3. **Ayrı kullanıcı ve dizinler.** `finans` kullanıcısının parolası yoktur; kabuk yalnızca yedek çekme anahtarının zorunlu komutu (adım 8) için gerekir. SSH'de parola girişi kapalı olmalıdır (`PasswordAuthentication no`). Kapatmadan önce Mac, Termius ve CI'dan anahtarla girişi doğrula; fiziksel konsol erişimin olduğundan emin ol, sonra kapat. `finans` kullanıcısı docker grubuna eklenmez; docker grubu root'a eşdeğerdir (K-98).
 
    ```sh
    sudo useradd --system --create-home --home-dir /var/lib/finans --shell /bin/sh finans
    sudo passwd -l finans
+   id finans   # docker grubu listede olmamalı
    sudo install -d -o finans -g finans -m 700 /var/lib/finans /var/lib/finans/backups /var/lib/finans/locks
    sudo install -d -o finans -g finans -m 755 /opt/finans
    sudo install -d -o root -g finans -m 750 /etc/finans
@@ -932,13 +933,13 @@ Hesap doğruluğu bu projenin tek vazgeçilmez kalitesidir; test ağırlığı d
 | --- | --- | --- |
 | Domain birim | pytest | XIRR'ın Excel ile üretilmiş referans değerlere eşitliği. Tolerans `math.isclose` ile aynı formüldür ama Decimal ile uygulanır: \|a − b\| ≤ max(1e-6 × max(\|a\|, \|b\|), 1e-8). Sıfıra yakın getiride yalnızca göreli tolerans yanlış alarm verirdi. Ayrıca zincirlenmiş TÜFE'den hesaplanan yıllık oranların TÜİK'in yayımladığı oranlarla eşleşmesi; Fisher; FIFO lot düşümü; bir yıldan kısa dönemde yıllıklandırma yapılmaması |
 | Domain özellik | hypothesis | Dağılım toplamı 1; dengeleme dağıtımı katkıyı aşmaz; XIRR çözümünde NPV ≈ 0; histerezis titreşmez |
-| Takvim ve zaman | pytest ve FixedClock | Hafta sonu ve bayram as-of'u, ay sonu, artık yıl, TÜFE yayın gecikmesi ve referans ay kuralı, 2003=100'den 2025=100'e zincirleme |
+| Takvim ve zaman | pytest ve FixedClock | Hafta sonu ve bayram as-of'u, ay sonu, artık yıl, TÜFE yayın gecikmesi ve referans ay kuralı, 2003=100'den 2025=100'e zincirleme; sistem saat dilimi UTC, +14 ya da −8 iken mantıksal tarihin ve gösterilen saatlerin değişmemesi (K-99) |
 | Mimari | import-linter ve AST testleri | Katman kuralları; domain'in yalnızca standart kütüphaneyi kullanması; float yasağı; duvar saati yasağı (`time.localtime`, `time.gmtime`, `time.ctime` ve zaman argümansız `time.strftime` dahil); her adapter'ın bağımsızlık kuralında listelenmesi |
 | Adapter kontratı | respx ve kayıtlı fixture'lar | EVDS ve TEFAS ayrıştırma (gerçek yanıt kayıtları, K-70, K-71), retry, `Retry-After`, hata kodları, 200 ile dönen HTML ve bozuk yanıt |
 | Repository | Geçici SQLite | Migration'lar ve öncesindeki yedek, upsert idempotency, Decimal gidiş-dönüş, revizyon kaydı |
 | Rapor | syrupy snapshot | Metin ve JSON çıktının bilinçsiz değişmemesi |
 | Ajan kontratı | jsonschema | ft-agent çıktısının yayımlanan şemaya uyması; iki bayatlık sinyalinin birbirinden bağımsız çalışması (taze snapshot ve eski fiyat; eski snapshot ve taze fiyat) |
-| Zamanlama birimleri | pytest ve CI'da systemd-analyze | Birim dosyaları ayrıştırılır: her timer'da Persistent=true ve Europe/Istanbul; ExecStart'taki iş adları `ft job run`'da tanımlı; LoadCredential adları ayarlarla eşleşir. CI'da `systemd-analyze calendar` ve `verify` (K-80) |
+| Zamanlama birimleri | pytest ve CI'da systemd-analyze | Birim dosyaları ayrıştırılır: her timer'da Persistent=true ve Europe/Istanbul; ExecStart'taki iş adları `ft job run`'da tanımlı; LoadCredential adları ayarlarla eşleşir; sertleştirme ayarları servis ve `deploy/ft-finans`'ta aynı, yazılan her yol ReadWritePaths altında (K-98). CI'da `systemd-analyze calendar` ve `verify` (K-80) |
 | Canlı smoke | `make live` (pytest -m live, CI dışı) | Gerçek uç noktaların hâlâ beklenen biçimde yanıt vermesi; haftada bir timer ile (M4). EVDS: referans ay değeri (2025-01 = 88,578291) ve serinin son iki ay içinde yayımlanmış olması. Anahtar `.env`'den ya da LoadCredential'dan okunur, yoksa test atlanır. TEFAS canlı testi yok; istekleri kullanıcı çalıştırır (K-71) |
 
 Hedefler: domain katmanında %95+ satır kapsamı, mypy --strict temiz, CI süresi 2 dakikanın altında.
@@ -991,6 +992,7 @@ Açık sorular:
   - Kanıt (2026-11-24): saat 11:39'da 24.11 tarihli YAT ve EMK fiyatları yayımlanmıştı. Bu yalnızca yayın zamanını gösterir; fiyatın hangi gün verilen emirlere uygulandığını göstermez. Çoğu fonda emir, verildikten sonra açıklanan ilk fiyattan gerçekleşir. Soru açık.
   - Kanıt yolu: `ft reconcile`'ın fiyat tarihi bölümü, ekstrenin kullandığı fiyatın ekstre gününe göre kaç işlem günü kaydığını gösterir (K-78). İşlem tarihli ekstre satırlarında bu, emrin hangi günün fiyatından gerçekleştiğini doğrudan verir.
 - [ ] Elle değerlenen varlıklar için v2'de otomatik fiyat kaynağı istenecek mi?
+- [ ] Paylaşılan cihazın sertleştirmesi (SSH parola girişi, container portlarının bağlanması, IPv6 erişimi): gerçek işlemler girilmeden önce değerlendirilecek. Birim sertleştirmesi root seviyesindeki bir saldırıya karşı korumaz (K-98).
 - [x] GVK geçici 67 stopajında maliyetin FIFO ile bulunduğunun birincil kaynakla doğrulanması: doğrulandı (K-54).
 - [x] EVDS3'te API anahtarı başlıkta mı, parametrede mi? Başlıkta (`key`); kılavuz ve canlı 403 ile doğrulandı (K-61).
 - [x] Anlık görüntülerin OpenClaw makinesine aktarım yöntemi: ayrı anahtar ve rrsync ile, yalnızca çekirdekten dışarı (K-27).
@@ -1098,6 +1100,8 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-95 | Rapor kuralları: fiyatı olmayan varlık değerlenmez ve açıkça yazılır; dağılım içinde eksik fiyat varsa dağılım, alarm, katkı planı ve para ağırlıklı getiri atlanır. Sessiz dönem notu kaydedilen bitiş tarihine bakar. Sistem satırı çekim zamanlarını veriden alır. Getiri etiketleri kapsamı yazar; aylık raporda aylık değişim; reel = nominal notu. Telegram mesajı `<pre>` yerine HTML metin, komutlar `<code>` (K-22'yi günceller). Snapshot'lar uçtan uca üretilir | Elle kurulmuş snapshot verisi gerçekte oluşamayacak çelişkiler içeriyordu; eksik fiyat sessizce yanlış dağılım ve alarm üretebilirdi | Raporlama, Test |
 | K-96 | İş yürütücü: sync-prices eksik fiyatta ve bildirim gönderilemezse "partial"; aylık rapor TÜFE beklerken ayın 10'una kadar "partial", sonra notla gönderilir; haftalık rapor kapalıyken "ok"; ping yalnız "ok" ve "failed"da, hatası sonucu değiştirmez; iş hataları arındırılmış mesajla kaydedilir | "partial" yeniden denemeye izin verir, "ok" vermez; gönderilmemiş rapor "ok" sayılmamalı | Zamanlama, Gözlemlenebilirlik |
 | K-97 | Barındırma evdeki 64 bit Debian tabanlı Linux cihaz, systemd. Birimler tek şablon `finans-job@.service` ve iş başına `finans-<iş>.timer`; ayarlar `/etc/finans/finans.env`, sırlar `/etc/finans/credstore/` ve LoadCredential (credential adı ayar adı, boş dosya tanımsız). Elle komutlar `deploy/ft-finans` (systemd-run, aynı kullanıcı ve sırlar). Maaş günü timer'ı her gün 09:00; mesaj yalnızca maaş gününden sonraki 3 gün içinde, değilse job_run'a "atlandı: pencere geçti". Mac yedekleri `restrict` ve `rrsync -ro` ile sınırlı bir SSH anahtarıyla çeker | systemd ayın olmayan gününde tetiklenmez; ilk kurulumda geçmiş ayın maaş günü mesajı gitmesin; tek şablon birimlerin birbirinden sapmasını önler | Zamanlama, Kurulum, Güvenlik |
+| K-98 | K-92'ye ek: cihaz başka projelerle paylaşıldığı için M5 sertleştirmesinin bir kısmı M4 birimlerine çekilir: `NoNewPrivileges=yes`, `PrivateTmp=yes`, `ProtectSystem=strict`, `ReadWritePaths=/var/lib/finans`, `ProtectHome=yes`. `deploy/ft-finans` aynı ayarlarla çalışır. Yazılan her yol (veritabanı, kilitler, yedekler, şifresiz geçici kopya, migration yedeği) `/var/lib/finans` altındadır; `/etc/finans` ve `/opt/finans` yalnızca okunur. `finans` kullanıcısı docker grubunda olmaz. Kalan risk: birim sertleştirmesi root seviyesindeki bir saldırıya karşı korumaz; cihazdaki finans.db'nin güvenliği aynı cihazdaki diğer projelerin sertleştirmesine (docker grubu, CI anahtarı, Chromium) bağlıdır; bkz. açık soru "Paylaşılan cihazın sertleştirmesi". Çıkış allowlist'i ve diğer ayarlar M5'te kalır | Bizim işimiz kötüye kullanılırsa zarar sınırlansın; beş ayar ucuz ve işlerin davranışını değiştirmiyor. Kalan risk açıkça yazılmazsa birim ayarları yanlış bir güven verir | Güvenlik |
+| K-99 | Sistem saat dilimi değiştirilmez; kurulumda yalnızca NTP açılır (Kurulum'daki `timedatectl set-timezone` adımı kaldırıldı). Timer'lar Europe/Istanbul'u açıkça yazar (K-80); uygulama UTC anı alıp mantıksal tarihi ve gösterilen saatleri İstanbul saatine çevirerek hesaplar. Sistem saat dilimi UTC, +14 ya da −8 iken `ft job run`'ın mantıksal tarihi ve `ft job list`'in saatleri değişmez; test bunu kanıtlar | Sistem saat dilimini değiştirmek gereksiz ve aynı cihazdaki diğer projeleri etkiler | Zamanlama, Test |
 
 ## Planı kodlama ajanıyla uygulama
 
