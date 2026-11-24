@@ -634,7 +634,7 @@ T_c = h_c (V + K), \quad d_c = \max(0,\, T_c - V_c)
   - Sınıf payları `allocate_contribution` ile bulunur. Sınıf payı, sınıftaki dağılım içi fonlara mevcut değerleriyle orantılı bölünür; sınıfın değeri 0 ise eşit bölünür.
   - Tutarlar Hamilton yöntemiyle kuruşa yuvarlanır; toplam katkıya eşit kalır.
   - Mesaj "Alımları `ft tx add` ile gir." hatırlatmasıyla biter.
-  - TL tutarları gizliyken (K-90) mesaj payları katkının yüzdesi olarak gösterir; tutarlar `ft report payday` ile yerelde görülür.
+  - Mesajın tutar gösterimi kendi ayarına bağlıdır: `FT_TELEGRAM_PAYDAY_SHOW_AMOUNTS` (varsayılan false). false iken paylar katkının yüzdesi olarak, true iken TL olarak gösterilir. Bu ayar diğer mesajların gizleme ayarından (K-90) bağımsızdır (K-93). Tutarlar her durumda `ft report payday` ile yerelde görülür.
 - Özellik testleri: Σa = K; a_c ≥ 0; a_c ≤ d_c. Decimal bölmesinin artığı için bu koşullar 1e−20 göreli toleransla sınanır.
   - a_c ≤ d_c, hedefin altındaki sınıflar için V_c + a_c ≤ T_c demektir.
   - Hedefte ya da hedefin üstünde olan sınıflar (d_c = 0) pay almaz. Onlarda V_c + a_c = V_c ≥ T_c olabilir; bu yüzden V_c + a_c ≤ T_c tüm sınıflar için değil, yalnızca d_c > 0 olanlar için sınanır.
@@ -673,7 +673,7 @@ Aylık rapor: haftalık içeriğe ek olarak kullanılan TÜFE dönemleri ve yıl
 - 4096 karakter sınırı için mesaj, bölüm sınırlarından parçalanır.
 - 429 yanıtında retry_after süresine uyulur.
 - Rapor botu yalnızca allowlist'teki sohbet ID'sine yazar. Asistan botu yalnızca allowlist'teki sohbetten gelen mesajlara cevap verir.
-- **TL tutarlarını gizleme (M4, K-90).** `FT_TELEGRAM_HIDE_AMOUNTS` varsayılan olarak açıktır: Telegram'a giden mesajlarda TL tutarı yer almaz; ağırlıklar, sapmalar, getiriler ve değişimler yüzde olarak gösterilir. Tam tutarlar yalnızca yerelde, `ft report` çıktısındadır. Gizleme renderer seçeneğidir; Report modeli değişmez.
+- **TL tutarlarını gizleme (M4, K-90).** `FT_TELEGRAM_HIDE_AMOUNTS` varsayılan olarak açıktır: Telegram'a giden mesajlarda TL tutarı yer almaz; ağırlıklar, sapmalar, getiriler ve değişimler yüzde olarak gösterilir. Tam tutarlar yalnızca yerelde, `ft report` çıktısındadır. Gizleme renderer seçeneğidir; Report modeli değişmez. Maaş günü mesajı bu ayardan bağımsız, kendi ayarıyla yönetilir (K-93).
 - Bot ve sohbet ID'si kullanıcı tarafından oluşturulur; `ft notify test` ile kurulum doğrulanır (K-89).
 
 ### Bildirim politikası
@@ -1009,6 +1009,7 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-90 | Telegram mesajlarında TL tutarları varsayılan olarak gizli (`FT_TELEGRAM_HIDE_AMOUNTS=true`): yalnızca yüzdeler ve değişimler; tam tutarlar yerelde `ft report`'ta. Maaş günü mesajında paylar katkının yüzdesi olur | Tutarlar Telegram sunucularına ve bildirim önizlemesine düşmesin | Raporlama |
 | K-91 | Kurulum adımı: makine kurulduğunda ilk iş `ft doctor` ve `ft sync cpi` ile erişim denemesi; Mac'te yedek çekme ve geri yükleme testi komutları dokümanda | Erişim ve anahtar sorunları zamanlanmış işten önce görülsün | Kurulum |
 | K-92 | M4 birimlerinde sırlar `LoadCredential=` ile (EVDS, Telegram, ping URL'leri); ProtectSystem ve diğer sertleştirme ile çıkış allowlist'i M5'te | M4 zamanlamayı, M5 sertleştirmeyi kapsar; sırlar baştan ortam değişkenine geçmesin | Güvenlik |
+| K-93 | K-90'a ek: maaş günü mesajının tutar gösterimi ayrı ayarla yönetilir: `FT_TELEGRAM_PAYDAY_SHOW_AMOUNTS` (varsayılan false; false iken paylar katkının yüzdesi). Diğer mesajların gizleme ayarından bağımsız | Maaş günü mesajının asıl içeriği tutarlar; gösterip göstermemek ayrı bir tercih | Raporlama, Dağılım |
 
 ## Planı kodlama ajanıyla uygulama
 
