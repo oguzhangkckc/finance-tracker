@@ -618,7 +618,7 @@ Reel XIRR'da her akış E[ref(t)] / E[ref(t_i)] ile çarpılır. Son akışta t_
   - Katkı tanımlı değilse (K-56) eşik 0'dır; alarmlar baştan çalışır.
   - Sessiz dönem tek yönlüdür: eşik bir kez aşıldığında kalıcı olarak biter ve bittiği tarih kaydedilir (M4 migration'ında). Portföy sonradan eşiğin altına inse de alarmlar susmaz. Değerlendirme sessiz dönem bittiğinde açık alarm yokmuş gibi başlar (açılma eşiği 5 puan).
   - Test: eşiğin etrafında gidip gelen değerlerde alarm durumu titreşmez; sessiz dönem bir kez biter ve geri dönmez.
-  - Bitiş tarihi tek satırlık `allocation_state` tablosunda tutulur (K-87).
+  - Bitiş tarihi tek satırlık `allocation_state` tablosunda tutulur (K-87). Rapordaki not güncel değere değil kaydedilen bitiş tarihine bakar: bitiş tarihi yoksa ve eşik 0'dan büyükse gösterilir (K-95).
 - **Fiyatlar eksikken alarm değerlendirilmez (M4, K-85).** Değerlendirme yalnızca sync-prices "ok" bittiğinde, yani hedef günde bütün aktif fonların fiyatı varken çalışır. "partial"da atlanır ve atlandığı job_run.detail'e yazılır; eksik fiyat ağırlıkları bozar.
 - Dengeleme yalnızca yeni birikimle yapılır, çünkü satış komisyon ve stopaj doğurur. K bu ayki katkı, V toplam değer, h hedef ağırlıktır. K, `portfolio.toml` içinde `[contribution]` bölümünde tanımlanır ve `ft report monthly --contribution` ile geçersiz kılınabilir.
 
@@ -665,10 +665,17 @@ Haftalık rapor: toplam değer (dağılım içi, dağılım dışı ve toplam ay
 
 Aylık rapor: haftalık içeriğe ek olarak kullanılan TÜFE dönemleri ve yıllık enflasyon, lot bazlı reel getiri, nominal ve reel XIRR (bir yıldan kısa dönemde "Dönem getirisi (para ağırlıklı, yıllık değil)" etiketiyle), bu ayki katkı için yalnızca katkıyla dengeleme önerisi (katkı tanımlı değilse yalnızca "Katkı tanımlı değil.", açıkça 0 ise yalnızca "Bu ay katkı 0." notu; K-56, K-59). Para birimi biçimi (1.234,56 TL) `locale` modülüyle değil, kendi biçimlendiricimizle üretilir.
 
+**Rapor kuralları (M4, K-95).**
+- **Eksik fiyat.** Fiyatı olmayan varlık değerlenmez; raporda "fiyat yok, değeri bilinmiyor" yazar ve toplam "bilinen değer … toplam eksik" olarak gösterilir. Değişim ve basit getiri hesaplanmaz. Dağılım içi bir varlığın fiyatı yoksa dağılım, sapma, alarm değerlendirmesi (K-85), katkı planı ve para ağırlıklı getiri hesaplanmaz; maaş günü mesajı öneri yerine eksik fiyatı bildirir.
+- **Kapsam etiketleri.** Getiri satırları kapsamını yazar: tüm varlıklar (değişim, basit getiri, gerçekleşmiş K/Z) ya da dağılım içi (para ağırlıklı getiri). Basit getirinin altında tek satırlık açıklama bulunur.
+- **Değişim dönemi.** Haftalık raporda 7 günlük, aylık raporda önceki ayın son gününden bu yana değişim gösterilir; ikisi de Modified Dietz (K-94).
+- **Reel = nominal notu.** Dağılım içi bütün alımlar ve değerleme aynı TÜFE referans dönemine düşüyorsa (deflatör 1) "Alımlar ve değerleme aynı TÜFE dönemine düştüğü için reel getiri henüz nominalle aynı." yazılır.
+- Rapor snapshot'ları elle kurulmuş modelden değil, test veritabanına yazılan işlem, fiyat ve TÜFE ile `build_report`'un uçtan uca çalıştırılmasıyla üretilir.
+
 ### Telegram
 
 - İki ayrı bot kullanılır. Rapor botu yalnızca çekirdekte çalışır ve yalnızca mesaj gönderir; gelen mesajları okumaz (getUpdates yok). Asistan botu OpenClaw tarafındadır. Böylece bir makinenin ele geçirilmesi diğerinin token'ını açığa çıkarmaz.
-- Bot API sendMessage, `parse_mode=HTML` ile kullanılır. Yalnızca `<`, `>` ve `&` kaçışlanır; tablolar hizalı görünsün diye `<pre>` içinde gönderilir.
+- Bot API sendMessage, `parse_mode=HTML` ile kullanılır. Yalnızca `<`, `>` ve `&` kaçışlanır. Mesaj düz HTML metindir; ters tırnaklı komutlar `<code>` olur. Rapor hizalı tablo içermediği için `<pre>` kullanılmaz (K-95, K-22'yi günceller).
 - Token, Telegram API'sinin yapısı gereği URL'de taşınır. Bu yüzden httpx ve httpcore logger'ları WARNING seviyesindedir ve log'larda `bot<rakamlar>:<token>` kalıbı maskelenir. Hata metinleri de log'a ya da job_run.detail'e yazılmadan önce aynı şekilde temizlenir.
 - 4096 karakter sınırı için mesaj, bölüm sınırlarından parçalanır.
 - 429 yanıtında retry_after süresine uyulur.
@@ -837,7 +844,7 @@ Bu sistemde en tehlikeli arıza sessiz olanıdır: rapor gelmez ve kimse fark et
 - İş kaydı: job_run tablosu durum, süre ve sayaçları (çekilen kayıt, hata sayısı) tutar.
 - Dead man's switch (K-84): harici bir ping servisinde (healthchecks.io gibi, self-host edilebilir) iki ayrı kontrol. Rapor kontrolü her başarılı rapor gönderiminden sonra (haftalık rapor açıksa haftalık, değilse aylık), yedek kontrolü her başarılı gece yedeğinden sonra ping alır; ikincisi makinenin ayakta olduğunu da günlük gösterir. Başarısız işte `/fail` ping'i gönderilir. Ping URL'leri sırdır (LoadCredential). Beklenen sinyal gelmezse servis ayrı bir kanaldan (e-posta) haber verir.
 - ft doctor komutu: config doğrulama, şema sürümü, sırların varlığı, kaynaklara erişim, son başarılı senkronizasyon zamanları. Kurulumdan sonra ve her sorun anında ilk çalıştırılan komuttur. M3'te takip edilen her varlığın son fiyat tarihini ve TÜFE'nin son dönemini gösterir; bayatlık `ft data check` ile aynı eşiklerle (K-28) uyarı verir, ayrıntı orada.
-- Haftalık rapora tek satırlık sistem sağlığı eklenir: son fiyat ve TÜFE senkron zamanı, son 7 gündeki başarısız iş sayısı.
+- Haftalık rapora tek satırlık sistem sağlığı eklenir: son fiyat ve TÜFE çekim zamanı (veriden, `fetched_at`; elle çalıştırılan senkronizasyonlar da sayılır) ve son 7 gündeki başarısız iş sayısı (job_run) (K-95).
 - Ham yanıtlar 30 gün saklanır; bir hesap yanlış çıkarsa o günün verisi yeniden işlenebilir.
 
 ## Test stratejisi
@@ -1011,6 +1018,7 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-92 | M4 birimlerinde sırlar `LoadCredential=` ile (EVDS, Telegram, ping URL'leri); ProtectSystem ve diğer sertleştirme ile çıkış allowlist'i M5'te | M4 zamanlamayı, M5 sertleştirmeyi kapsar; sırlar baştan ortam değişkenine geçmesin | Güvenlik |
 | K-93 | K-90'a ek: maaş günü mesajının tutar gösterimi ayrı ayarla yönetilir: `FT_TELEGRAM_PAYDAY_SHOW_AMOUNTS` (varsayılan false; false iken paylar katkının yüzdesi). Diğer mesajların gizleme ayarından bağımsız | Maaş günü mesajının asıl içeriği tutarlar; gösterip göstermemek ayrı bir tercih | Raporlama, Dağılım |
 | K-94 | K-88 ve K-74'e ek: haftalık değişim Modified Dietz ile hesaplanır: (V_1 − V_0 − ΣF) / (V_0 + Σ w_i·F_i), w_i = akışın dönemde kaldığı gün / dönem günü; V_0 = 0 ya da payda ≤ 0 ise "—". Dağılım dışı varlığın basit reel getirisinde her lotun maliyeti ayrı ayrı değerleme gününün TL'sine çevrilir | Akışları dönem sonunda sayan formül, katkı portföyden büyükken kazancı yalnızca başlangıç değerine bölüp şişiriyordu (V_0 = 1.000, Pazartesi 10.000 alım, hafta %1 → ~%11); çok lotlu varlıkta reel getiri tek anlamlı olsun | Raporlama, Hesap motoru |
+| K-95 | Rapor kuralları: fiyatı olmayan varlık değerlenmez ve açıkça yazılır; dağılım içinde eksik fiyat varsa dağılım, alarm, katkı planı ve para ağırlıklı getiri atlanır. Sessiz dönem notu kaydedilen bitiş tarihine bakar. Sistem satırı çekim zamanlarını veriden alır. Getiri etiketleri kapsamı yazar; aylık raporda aylık değişim; reel = nominal notu. Telegram mesajı `<pre>` yerine HTML metin, komutlar `<code>` (K-22'yi günceller). Snapshot'lar uçtan uca üretilir | Elle kurulmuş snapshot verisi gerçekte oluşamayacak çelişkiler içeriyordu; eksik fiyat sessizce yanlış dağılım ve alarm üretebilirdi | Raporlama, Test |
 
 ## Planı kodlama ajanıyla uygulama
 
