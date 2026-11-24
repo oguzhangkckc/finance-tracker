@@ -22,13 +22,14 @@ Not: 0001 yalnızca instrument, txn, price, price_revision (K-49). İşlem iptal
 Not: Bekleyen migration varsa önce SQLite backup API'siyle yerel kopya alınır; son 5 kopya tutulur, yedek alınamazsa migration uygulanmaz (K-55).
 
 ## M3 · Veri kaynakları
-EVDS3 adapter'ı, TEFAS fiyat dosyası içe aktarma (`ft price import`) ve TEFAS fonlarına elle fiyat, veri kalitesi kontrolleri; kayıtlı fixture'larla kontrat testleri, EVDS için haftalık canlı smoke testi. TEFAS API adapter'ı yazılmaz (K-60, K-68).
-Geliştirme kapısı: Kontrat testleri yeşil; içe aktarılan fiyat geçmişiyle geçmiş dönem mutabakatı ±0,01 TL/kalem (`ft reconcile`).
+EVDS3 ve TEFAS adapter'ları (TEFAS isteklerini kullanıcı çalıştırır, K-71), TEFAS fonlarına elle fiyat, veri kalitesi kontrolleri; kayıtlı fixture'larla kontrat testleri, haftalık canlı smoke testi.
+Geliştirme kapısı: Kontrat testleri yeşil; TEFAS'tan çekilen fiyat geçmişiyle geçmiş dönem mutabakatı ±0,01 TL/kalem (`ft reconcile`).
 İlk commit (M2 düzeltmeleri): migration atomikliğinin grup bazında olduğu açıkça yazıldı; yedeklemede eski `.partial` artıkları temizlenir (K-57); alış iptali reddedilince önce iptal edilecek satışlar listelenir (K-58).
 Not: JSON her yerde `json.loads(..., parse_float=Decimal)` ile ayrıştırılır; `response.json()` kullanılmaz; çok basamaklı fiyatla kontrat testi yazılır (K-32).
 Not: TÜFE 2025=100 serisi tüm geçmişiyle doğrudan çekilir; EVDS3'te 2005-01'den itibaren bulunduğu ve eski seriyle oranın sabit olduğu canlı doğrulandı (K-43, K-70). `chain_link` yedek olarak kalır.
 Not: Migration 0002: cpi, cpi_revision, raw_payload; price_revision'a kaynak kolonları (K-49, K-65). TEFAS fiyatları gelince her işlemin birim fiyatı o günün TEFAS fiyatıyla karşılaştırılır; uyuşmazlık büyük olasılıkla yanlış tarih (K-53, eşik K-64).
 Not: Canlı deneme (2026-11-24): TEFAS robots.txt `/api/`'yi otomatik erişime kapatıyor; API'ye ve tarayıcı otomasyonuyla erişilmez, API adapter'ı yazılmaz (K-60). Fiyatlar kullanıcının indirdiği dosyadan ve elle gelir (K-63, K-68); Takasbank'tan izin isteniyor. EVDS3 anahtarı başlıkta, varsayılan TLS yeterli (K-61).
+Not: TEFAS JSON API'si kullanılır (K-71): `fonFiyatBilgiGetir` (periyod) ve `fonGnlBlgSiraliGetir` (≤28 gün); BYF birim pay değeri ikincisinden (K-72). Kayıtlar `tests/fixtures/tefas/`.
 Not: HTTP istemci kuralları: dürüst User-Agent, robots.txt kontrolü, `Retry-After` (K-62). Mutabakat için `ft reconcile` (K-67).
 Kabul kapısı: Bir ay canlı veri; elle tutulan tabloyla mutabakat ±0,01 TL/kalem.
 
