@@ -252,6 +252,13 @@ class SqliteTransactionRepo:
             raise LookupError(f"İptal edilebilecek {txn_id} numaralı işlem yok")
 
 
+def _price_point(row: tuple[str, str, str, str] | None) -> PricePoint | None:
+    if row is None:
+        return None
+    code, day, price, source = row
+    return PricePoint(code, decode_date(day), decode_decimal(price), source)
+
+
 class SqlitePriceRepo:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
@@ -330,6 +337,22 @@ class SqlitePriceRepo:
             return None
         code, day, price, source = row
         return PricePoint(code, decode_date(day), decode_decimal(price), source)
+
+    def around(self, instrument: str, day: date) -> tuple[PricePoint | None, PricePoint | None]:
+        """O günün dışındaki en yakın önceki ve sonraki fiyat; tarih metni ISO, sıra güvenli."""
+        before = self._conn.execute(
+            "SELECT i.code, p.price_date, p.price, p.source FROM price p"
+            " JOIN instrument i ON i.id = p.instrument_id"
+            " WHERE i.code = ? AND p.price_date < ? ORDER BY p.price_date DESC LIMIT 1",
+            (instrument, encode_date(day)),
+        ).fetchone()
+        after = self._conn.execute(
+            "SELECT i.code, p.price_date, p.price, p.source FROM price p"
+            " JOIN instrument i ON i.id = p.instrument_id"
+            " WHERE i.code = ? AND p.price_date > ? ORDER BY p.price_date ASC LIMIT 1",
+            (instrument, encode_date(day)),
+        ).fetchone()
+        return _price_point(before), _price_point(after)
 
     def last_fetched_at(self) -> datetime | None:
         # Zaman damgaları aynı ISO UTC biçiminde; metin sırası zaman sırasıdır.

@@ -291,3 +291,17 @@ def test_tefas_price_replaces_a_manual_one_even_when_equal(uow: SqliteUnitOfWork
     assert write == PriceWrite("revised", previous=D("10.5"), previous_source="manual")
     assert uow.prices.on("TTE", day) == PricePoint("TTE", day, D("10.5"), "tefas")
     assert uow.prices.on("TTE", date(2026, 1, 6)) is None
+
+
+def test_around_gives_the_nearest_priced_days_outside_the_day(uow: SqliteUnitOfWork) -> None:
+    for day in (date(2026, 6, 10), date(2026, 6, 12), date(2026, 6, 17), date(2026, 6, 19)):
+        uow.prices.upsert(PricePoint("TTE", day, D("10.5"), "tefas"), fetched_at=NOW)
+
+    before, after = uow.prices.around("TTE", date(2026, 6, 15))
+    assert (before, after) == (
+        PricePoint("TTE", date(2026, 6, 12), D("10.5"), "tefas"),
+        PricePoint("TTE", date(2026, 6, 17), D("10.5"), "tefas"),
+    )
+    assert uow.prices.around("TTE", date(2026, 6, 10))[0] is None
+    assert uow.prices.around("TTE", date(2026, 6, 19))[1] is None
+    assert uow.prices.around("ALTIN_GR", date(2026, 6, 15)) == (None, None)

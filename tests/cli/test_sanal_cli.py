@@ -122,7 +122,7 @@ def test_real_profile_refuses_a_sanal_database_in_every_command(
     "command",
     [
         ["tx", "list"],
-        ["tx", "add", "buy", "XHT", "1", "10", "--date", "2026-06-15"],
+        ["sanal", "al", "XHT", "--tutar", "100", "--tarih", "2026-06-15"],
         ["db", "migrate"],
     ],
 )
@@ -207,3 +207,80 @@ def test_same_path_is_a_settings_error_with_a_clear_message(
 
     assert result.exit_code == 2
     assert "Ayar hatası: Sanal veritabanı gerçek veritabanıyla aynı dosya olamaz" in result.output
+
+
+def _ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    _sanal(monkeypatch)
+    assert runner.invoke(app, ["sanal", "init"]).exit_code == 0
+    for day, price in (("2026-06-12", "1.23"), ("2026-06-15", "1.234567")):
+        priced = runner.invoke(app, ["price", "set", "XHT", day, price])
+        assert priced.exit_code == 0, priced.output
+
+
+@pytest.mark.usefixtures("real_db")
+def test_buy_by_amount_and_sell_by_units_at_the_stored_price(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ready(monkeypatch)
+
+    bought = runner.invoke(app, ["sanal", "al", "XHT", "--tutar", "5000", "--tarih", "2026-06-15"])
+    sold = runner.invoke(app, ["sanal", "sat", "XHT", "50", "--tarih", "2026-06-15"])
+
+    assert bought.exit_code == 0, bought.output
+    assert (
+        "Sanal alım #1: XHT 4050 pay × 1.234567 (2026-06-15) = 4999.99635 TL; artan 0.00365 TL"
+        in bought.output
+    )
+    assert sold.exit_code == 0, sold.output
+    assert "Sanal satış #2: XHT 50 pay × 1.234567 (2026-06-15) = 61.72835 TL" in sold.output
+    listed = runner.invoke(app, ["tx", "list"]).output
+    assert "#1  2026-06-15  XHT  BUY  4050 × 1.234567" in listed
+    assert "#2  2026-06-15  XHT  SELL  50 × 1.234567" in listed
+
+
+@pytest.mark.usefixtures("real_db")
+def test_buy_on_a_day_without_a_price_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    _ready(monkeypatch)
+
+    result = runner.invoke(app, ["sanal", "al", "XHT", "--tutar", "5000", "--tarih", "2026-06-13"])
+
+    assert result.exit_code == 1
+    assert "XHT için 2026-06-13 tarihli fiyat yok" in result.output
+    assert "önce 2026-06-12, sonra 2026-06-15" in result.output
+    assert "Kayıtlı işlem yok." in runner.invoke(app, ["tx", "list"]).output
+
+
+@pytest.mark.usefixtures("real_db")
+@pytest.mark.parametrize(
+    ("command", "message"),
+    [
+        (["tx", "add", "buy", "XHT", "1", "10", "--date", "2026-06-15"], "ft sanal al"),
+        (["tx", "import", "islemler.csv"], "CSV içe aktarma kapalı"),
+    ],
+)
+def test_typed_prices_are_not_accepted_in_the_sanal_profile(
+    monkeypatch: pytest.MonkeyPatch, command: list[str], message: str
+) -> None:
+    _ready(monkeypatch)
+
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 1
+    assert message in result.output
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["sanal", "al", "XHT", "--tutar", "5000", "--tarih", "2026-06-15"],
+        ["sanal", "sat", "XHT", "5", "--tarih", "2026-06-15"],
+    ],
+)
+def test_paper_trading_needs_the_sanal_profile(real_db: Path, command: list[str]) -> None:
+    before = _digest(real_db)
+
+    result = runner.invoke(app, command)
+
+    assert result.exit_code == 1
+    assert "yalnızca sanal profilde" in result.output
+    assert _digest(real_db) == before

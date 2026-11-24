@@ -76,6 +76,7 @@ __all__ = [
     "SourceError",
     "configure_logging",
     "cpi_source",
+    "is_sanal_profile",
     "migrate_database",
     "notifier",
     "open_unit_of_work",

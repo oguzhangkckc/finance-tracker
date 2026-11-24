@@ -14,6 +14,7 @@ from finans.application.backup import verify_backups
 from finans.application.cpi import CPI_HISTORY_START, CpiSyncReport, sync_cpi
 from finans.application.data_check import DEFAULT_WINDOW, check_data, trade_price_issues
 from finans.application.inputs import InputError, parse_amount, parse_day, parse_period
+from finans.application.paper import paper_buy, paper_sell
 from finans.application.portfolio_config import ApplyReport, apply_portfolio
 from finans.application.portfolio_view import portfolio_as_of
 from finans.application.price_sync import PriceSyncReport, sync_prices
@@ -141,6 +142,9 @@ def tx_add(
 ) -> None:
     """İşlem ekler."""
     settings = _load_settings_or_exit()
+    _refuse_in_sanal(
+        settings, "sanal profilde işlem `ft sanal al` ve `ft sanal sat` ile girilir (K-116)."
+    )
     parsed_date = _parse_date(trade_date)
     amounts = _parse_decimal("units", units), _parse_decimal("price", price)
     parsed_fee = _parse_decimal("fee", fee)
@@ -196,6 +200,10 @@ def tx_import(
 ) -> None:
     """CSV'den işlem içe aktarır; ya bütün satırlar yazılır ya hiçbiri."""
     settings = _load_settings_or_exit()
+    _refuse_in_sanal(
+        settings,
+        "sanal profilde CSV içe aktarma kapalı; CSV'deki fiyatlar elle yazılmıştır (K-116).",
+    )
     parsed = bootstrap.transaction_file().read(path)
     clock = bootstrap.system_clock()
     with _user_errors(), bootstrap.open_unit_of_work(settings) as uow:
@@ -729,6 +737,58 @@ def sanal_init_command() -> None:
     _print_apply(report)
 
 
+@sanal_app.command("al")
+def sanal_buy_command(
+    code: Annotated[str, typer.Argument(help="Fon kodu")],
+    amount: Annotated[str, typer.Option("--tutar", help="Yatırılacak tutar (TL)")],
+    day: Annotated[str, typer.Option("--tarih", help="Fiyat günü (YYYY-AA-GG)")],
+    fee: Annotated[str, typer.Option("--komisyon", help="Komisyon (TL)")] = "0",
+) -> None:
+    """Tutarla sanal alım; adet o günün kayıtlı fiyatından, artan tutar fona girmez (K-116)."""
+    settings = _load_settings_or_exit()
+    with _user_errors():
+        bootstrap.require_sanal(settings)
+    parsed_day = _parse_date(day)
+    parsed_amount, parsed_fee = _parse_decimal("--tutar", amount), _parse_decimal("--komisyon", fee)
+    with _user_errors(), bootstrap.open_unit_of_work(settings) as uow:
+        trade = paper_buy(
+            uow,
+            code=code,
+            amount=parsed_amount,
+            day=parsed_day,
+            fee=parsed_fee,
+            now=bootstrap.system_clock().now(),
+        )
+    leftover = trade.leftover if trade.leftover is not None else Decimal(0)
+    typer.echo(
+        f"Sanal alım #{trade.txn_id}: {code} {canonical_text(trade.units)} pay × "
+        f"{canonical_text(trade.price)} ({trade.day.isoformat()}) = "
+        f"{canonical_text(trade.spent)} TL; artan {canonical_text(leftover)} TL"
+    )
+
+
+@sanal_app.command("sat")
+def sanal_sell_command(
+    code: Annotated[str, typer.Argument(help="Fon kodu")],
+    units: Annotated[str, typer.Argument(help="Adet")],
+    day: Annotated[str, typer.Option("--tarih", help="Fiyat günü (YYYY-AA-GG)")],
+) -> None:
+    """Adetle sanal satış; fiyat o günün kayıtlı fiyatıdır (K-116)."""
+    settings = _load_settings_or_exit()
+    with _user_errors():
+        bootstrap.require_sanal(settings)
+    parsed_day, parsed_units = _parse_date(day), _parse_decimal("units", units)
+    with _user_errors(), bootstrap.open_unit_of_work(settings) as uow:
+        trade = paper_sell(
+            uow, code=code, units=parsed_units, day=parsed_day, now=bootstrap.system_clock().now()
+        )
+    typer.echo(
+        f"Sanal satış #{trade.txn_id}: {code} {canonical_text(trade.units)} pay × "
+        f"{canonical_text(trade.price)} ({trade.day.isoformat()}) = "
+        f"{canonical_text(trade.spent)} TL"
+    )
+
+
 @sanal_app.command("reset")
 def sanal_reset_command(
     confirmed: Annotated[bool, typer.Option("--evet", help="Silmeyi onaylar.")] = False,
@@ -776,6 +836,12 @@ def _format_transaction(stored: StoredTransaction) -> str:
     if stored.is_voided:
         parts.append(f"[İPTAL: {stored.void_reason}]")
     return "  ".join(parts)
+
+
+def _refuse_in_sanal(settings: Settings, reason: str) -> None:
+    if bootstrap.is_sanal_profile(settings):
+        typer.echo(f"Hata: {reason}", err=True)
+        raise typer.Exit(code=1)
 
 
 def _usage_error(error: InputError) -> NoReturn:
