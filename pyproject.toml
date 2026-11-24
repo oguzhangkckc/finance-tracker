@@ -5,6 +5,7 @@ description = "Kişisel portföy takip servisi"
 readme = "docs/DESIGN.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+    "httpx>=0.28.1",
     "pydantic>=2.14.4",
     "pydantic-settings>=2.16.3",
     "typer>=0.29.2",
@@ -128,5 +129,6 @@ dev = [
     "pre-commit>=4.7.0",
     "pytest>=9.2.0",
     "pytest-cov>=7.1.0",
+    "respx>=0.23.1",
     "ruff>=0.17.6",
 ]

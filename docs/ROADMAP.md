@@ -22,12 +22,14 @@ Not: 0001 yalnızca instrument, txn, price, price_revision (K-49). İşlem iptal
 Not: Bekleyen migration varsa önce SQLite backup API'siyle yerel kopya alınır; son 5 kopya tutulur, yedek alınamazsa migration uygulanmaz (K-55).
 
 ## M3 · Veri kaynakları
-TEFAS ve EVDS3 adapter'ları (ilk iş: EVDS3 anahtar iletimi), backfill, veri kalitesi kontrolleri; kayıtlı fixture'larla kontrat testleri, haftalık canlı smoke testi.
-Geliştirme kapısı: Kontrat testleri yeşil; backfill ile geçmiş dönem mutabakatı ±0,01 TL/kalem.
+EVDS3 adapter'ı, TEFAS fiyat dosyası içe aktarma (`ft price import`) ve TEFAS fonlarına elle fiyat, veri kalitesi kontrolleri; kayıtlı fixture'larla kontrat testleri, EVDS için haftalık canlı smoke testi. TEFAS API adapter'ı yazılmaz (K-60, K-68).
+Geliştirme kapısı: Kontrat testleri yeşil; içe aktarılan fiyat geçmişiyle geçmiş dönem mutabakatı ±0,01 TL/kalem (`ft reconcile`).
 İlk commit (M2 düzeltmeleri): migration atomikliğinin grup bazında olduğu açıkça yazıldı; yedeklemede eski `.partial` artıkları temizlenir (K-57); alış iptali reddedilince önce iptal edilecek satışlar listelenir (K-58).
 Not: JSON her yerde `json.loads(..., parse_float=Decimal)` ile ayrıştırılır; `response.json()` kullanılmaz; çok basamaklı fiyatla kontrat testi yazılır (K-32).
 Not: TÜFE 2025=100 serisi tüm geçmişiyle doğrudan çekilir; ilk işlerden biri EVDS3'te bu geçmişin bulunduğunu doğrulamak. `chain_link` yedek olarak kalır (K-43).
-Not: Migration 0002: cpi, raw_payload (K-49). TEFAS fiyatları gelince her işlemin birim fiyatı o günün TEFAS fiyatıyla karşılaştırılır; uyuşmazlık büyük olasılıkla yanlış tarih (K-53).
+Not: Migration 0002: cpi, cpi_revision, raw_payload; price_revision'a kaynak kolonları (K-49, K-65). TEFAS fiyatları gelince her işlemin birim fiyatı o günün TEFAS fiyatıyla karşılaştırılır; uyuşmazlık büyük olasılıkla yanlış tarih (K-53, eşik K-64).
+Not: Canlı deneme (2026-11-24): TEFAS robots.txt `/api/`'yi otomatik erişime kapatıyor; API'ye ve tarayıcı otomasyonuyla erişilmez, API adapter'ı yazılmaz (K-60). Fiyatlar kullanıcının indirdiği dosyadan ve elle gelir (K-63, K-68); Takasbank'tan izin isteniyor. EVDS3 anahtarı başlıkta, varsayılan TLS yeterli (K-61).
+Not: HTTP istemci kuralları: dürüst User-Agent, robots.txt kontrolü, `Retry-After` (K-62). Mutabakat için `ft reconcile` (K-67).
 Kabul kapısı: Bir ay canlı veri; elle tutulan tabloyla mutabakat ±0,01 TL/kalem.
 
 ## M4 · Rapor ve bildirim (ilk kullanılabilir sürüm)
@@ -37,6 +39,7 @@ Kabul kapısı: İki hafta kesintisiz ve doğru rapor.
 Not: Para ağırlıklı getirinin kökü [−0,99; 10] dışındaysa (alt ya da üst) rapor basit getiriyi ve "Zamanlama nedeniyle para ağırlıklı getiri anlamlı değil." notunu gösterir; domain sonuç türü bu durumu "hesaplanamadı"dan ayırır (K-44).
 Not: Katkı tanımlı değilse aylık raporun dengeleme bölümü "Katkı tanımlı değil." yazar, sıfırlarla dolu öneri göstermez; eksik `[contribution]` 0 yerine "tanımlı değil" okunur (K-56).
 Not: Katkı açıkça 0 ise dengeleme bölümü "Bu ay katkı 0." yazar; sıfırlarla dolu öneri gösterilmez (K-59).
+Not: Kadans (K-69): TEFAS için senkronizasyon timer'ı yok. Maaş günü hatırlatması aylık ritüeli başlatır ("fiyat dosyasını indir, `ft price import` çalıştır"); dağılım sapması değerlendirmesi içe aktarmanın ardından çalışır. Haftalık rapor isteğe bağlı; EVDS otomatik. Kabul kapısı buna göre yeniden tanımlanacak.
 
 ## M5 · OpenClaw ve güvenlik sertleştirmesi
 JSON anlık görüntüleri ve rrsync ile aktarımı (yalnızca çekirdekten dışarı), ft-agent (boru hattı ve veri tazeliği için iki ayrı bayatlık sinyali), JSON Schema kontratı, SKILL.md, PPK özeti akışı (oranlar kodla çıkarılır), asistan botu; iki makine, ayrı OS kullanıcıları, systemd sertleştirme, LoadCredential, makine bazında egress allowlist.

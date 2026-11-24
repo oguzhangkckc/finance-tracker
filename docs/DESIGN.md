@@ -107,7 +107,7 @@ Python 3.13 ve SQLite üzerine, az bağımlılıklı ve ORM'siz bir yığın se�
 | Veritabanı | SQLite, WAL, STRICT tablolar | Sıfır operasyon; yedek bir dosya kopyası | PostgreSQL: tek kullanıcı için gereksiz yük |
 | Veri erişimi | Ham SQL ve repository sınıfları | Şeffaf, küçük, test edilebilir | SQLAlchemy ORM: bu ölçekte soyutlama maliyeti |
 | Migration | Paket içindeki numaralı SQL dosyaları, PRAGMA user_version ve sha256 özet tablosu | Bağımlılıksız, okunabilir şema evrimi; uygulanmış dosyanın değişmesi yakalanır | Alembic: ORM'siz kullanımda ağır |
-| HTTP | httpx ve tenacity | Zaman aşımı, retry, üstel geri çekilme | requests: async ve test desteği zayıf |
+| HTTP | httpx; retry ve geri çekilme `_http.py`'de elle (K-62) | Zaman aşımı, retry, üstel geri çekilme, `Retry-After`; birkaç satırlık mantık için ek bağımlılık gerekmiyor | requests: async ve test desteği zayıf; tenacity: gereksiz bağımlılık |
 | Kontratlar | pydantic v2 | Dış yanıt doğrulama, JSON Schema üretimi | Elle doğrulama |
 | CLI | Typer | Tip ipuçlarından alt komut ve yardım metni | argparse: daha çok kalıp kod |
 | Ayar ve sır | TOML (portföy) ve pydantic-settings (ortam); üretimde sırlar systemd LoadCredential ile | Ayar ile sır ayrımı, SecretStr ile log'a sızmama; sırlar ortam değişkenlerine ve alt süreçlere geçmez | Tek dosyada her şey |
@@ -285,6 +285,16 @@ CREATE TABLE cpi (
   PRIMARY KEY (series_code, period)
 ) STRICT, WITHOUT ROWID;
 
+CREATE TABLE cpi_revision (              -- aynı dönem için TÜFE değeri değişirse iz kalır (K-65)
+  series_code TEXT NOT NULL,
+  period      TEXT NOT NULL,
+  old_value   TEXT NOT NULL,
+  new_value   TEXT NOT NULL,
+  revised_at  TEXT NOT NULL
+) STRICT;
+
+-- price_revision'a eklenir (0002, K-63): old_source TEXT, new_source TEXT
+
 CREATE TABLE raw_payload (               -- hata ayıklama için ham yanıt; 30 günden eskisi yedek işinde silinir
   id          INTEGER PRIMARY KEY,
   source      TEXT NOT NULL,
@@ -365,7 +375,14 @@ Yedekleme her gece sqlite3 .backup ile alınır, şifrelenip makine dışına ko
 
 Her kaynak tek bir port arkasında izole edilir; kırılgan olan TEFAS uç noktası değiştiğinde yalnızca bir dosya değişir. Tüm yanıtlar pydantic ile doğrulanır ve fiyatlar idempotent upsert ile kaydedilir. Kaynaklar ayrıştırılmış veriyle birlikte ham yanıtı da döndürür. Ham yanıtı RawPayloadRepo aracılığıyla application yazar; böylece kaynak adapter'ı sqlite adapter'ına bağımlı olmaz. Zaman aşımı, retry ve kibarlık kuralları gibi ortak HTTP davranışları `adapters/_http.py`'dedir.
 
-JSON her yerde `json.loads(body, parse_float=Decimal)` ile ayrıştırılır. httpx'in `response.json()` metodu kullanılmaz, çünkü sayıları float'a çevirir ve hassasiyet daha ayrıştırma anında kaybolur. Tek ayrıştırma yolu bu olsun diye pydantic'in `model_validate_json` metodu da kullanılmaz; ayrıştırılan sözlük `model_validate` ile doğrulanır. Kural, çok basamaklı bir fiyatla (ör. `1.123456789012345678`) kontrat testinde doğrulanır (M3).
+JSON her yerde `json.loads(body, parse_float=Decimal)` ile ayrıştırılır. httpx'in `response.json()` metodu kullanılmaz, çünkü sayıları float'a çevirir ve hassasiyet daha ayrıştırma anında kaybolur. Tek ayrıştırma yolu bu olsun diye pydantic'in `model_validate_json` metodu da kullanılmaz; ayrıştırılan sözlük `model_validate` ile doğrulanır. Kural, çok basamaklı bir fiyatla (ör. `1.123456789012345678`) kontrat testinde doğrulanır (M3). Fiyat ve endeks alanları float tipini açıkça reddeder; böylece başka bir yoldan float gelirse doğrulama hatası olur (K-62).
+
+**HTTP istemci kuralları (M3, K-62).**
+- User-Agent dürüsttür: `finans-takip/<sürüm> (kisisel kullanim)`. HTTP başlıkları ASCII olmak zorunda olduğu için Türkçe karakter kullanılmaz. Tarayıcı taklidi yapan başlık (tarayıcı User-Agent'ı, Origin, Referer) gönderilmez.
+- Bir kaynak eklenmeden önce robots.txt ve kullanım koşulları okunur. Otomatik erişim açıkça kapalıysa kaynak kullanılmaz ve engel aşılmaya çalışılmaz.
+- 429, 5xx, zaman aşımı ve 200 ile dönen HTML ya da boş gövde için en çok 3 deneme yapılır, üstel geri çekilmeyle. Diğer 4xx'te retry yoktur.
+- 429'da `Retry-After` başlığı varsa ona uyulur (saniye ya da HTTP tarihi). Başlık yoksa 60 sn beklenir. İstenen bekleme 5 dakikayı aşıyorsa beklenmez, iş "partial" biter.
+- Bir kaynağa istekler sıralı gider; istekler arası aralık kaynağın ayarındadır.
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -383,21 +400,40 @@ class CpiSource(Protocol):
 
 ### TEFAS adapter
 
-- Belgelenmemiş, form-encoded bir POST uç noktası kullanılır. Kontrat kırılgandır; şema doğrulaması başarısız olursa iş "partial" biter ve raporda görünür.
-- Uzun aralıklar yaklaşık 60 günlük pencerelere bölünür. TEFAS'ın kabul ettiği azami aralık deneysel olarak doğrulanıp config'e yazılır.
-- İstemci kibar davranır: eşzamanlılık 1, istekler arası 1–2 sn ve jitter. 429, 5xx ve zaman aşımında üç deneme ile üstel geri çekilme; diğer 4xx'te retry yok.
-- Tarih alanı milisaniye epoch gelir ve Europe/Istanbul (UTC+3) ile tarihe çevrilir. UTC'ye çevirmek her fiyatı bir gün geriye kaydırır.
-- İş günü takvimi tutulmaz. TEFAS'ın döndürdüğü tarihler gerçek takvimdir; bayramlar kendiliğinden doğru işlenir. İşlem günü, takip edilen fonlardan en az birinin fiyatı olan gün olarak veriden çıkarılır.
+**Durum (2026-11-24, K-60, K-68): TEFAS'ın API'sine otomatik erişim yapılmaz. Fiyatlar kullanıcının tarayıcıyla indirdiği dosyadan içe aktarılır ve gerekirse elle girilir.**
+- `https://www.tefas.gov.tr/robots.txt` bütün User-Agent'lar için `Disallow: /api/` içeriyor; `anthropic-ai`, `GPTBot`, `CCBot` ve `Google-Extended` için ayrıca yazılmış. Fiyat verisi veren bütün uç noktalar `/api/` altında (ikincil kaynaklara göre). Sitenin ayrı bir kullanım koşulları metni yok; sayfalardaki Takasbank "Çekince Bildirimi" doğruluk ve sorumluluk reddi içeriyor, otomatik erişimden söz etmiyor.
+- K-62'deki kural gereği canlı deneme robots.txt adımında durdu; API'ye hiç istek atılmadı.
+- TEFAS verisi hiçbir tarayıcı otomasyonuyla (Playwright, Selenium ve benzerleri) indirilmez. Bu da robots.txt'nin kapattığı otomatik erişimdir.
+- API adapter'ı yazılmaz. Takasbank'tan yazılı izin istendi; izin gelirse aşağıdaki askıdaki tasarım uygulanır.
+- SPK web servisi (ws.spk.gov.tr) yalnızca yatırım ortaklıklarının (MKYO, GYO, GSYO) portföy değerlerini veriyor; fon birim fiyatı yok.
+
+Önceki tasarımın durumu (ikincil kaynaklar, canlı doğrulanmadı):
+- Form-encoded `/api/DB/BindHistoryInfo` uç noktası Nisan 2026'daki site geçişiyle kapandı, 404 dönüyor. Epoch tarih ve 60 günlük pencere kuralları bu yüzden geçersiz.
+- Yerine `/api/funds/*` altında bir JSON API var: `fonFiyatBilgiGetir` (fon başına, `periyod` en çok 60 ay) ve `fonGnlBlgSiraliGetir` (tarih aralığı, en çok 28 gün). `tarih` "YYYY-MM-DD", fiyat 6 basamak; yayımlanmayan günlerde fiyat 0; yaklaşık 4 istekten sonra 429.
+- Yazılı izin alınırsa uygulanacak kararlar (askıda): günlük senkronizasyon ve 5 yıla kadar backfill `fonFiyatBilgiGetir` ile, daha eski geçmiş ≤28 günlük pencerelerle `fonGnlBlgSiraliGetir` ile; istekler arası ≥10 sn ve 0–2 sn jitter; 0 fiyat "veri yok" sayılır.
+
+Kaynaktan bağımsız veri kuralları:
+- İş günü takvimi tutulmaz. İşlem günü, takip edilen fonlardan en az birinin fiyatı olan gün olarak veriden çıkarılır; bayramlar kendiliğinden doğru işlenir.
 - BYF'ler TEFAS'taki birim pay değeriyle değerlenir. Bu değer borsadaki işlem fiyatından biraz farklı olabilir.
-- Erişim riski: veri merkezi ve yurt dışı IP'leri engellenebilir. Barındırma kararından önce Türkiye IP'li bir makineden canlı deneme yapılır.
+- TEFAS'ta D tarihli fiyatın hangi emirlere uygulandığı açık sorudur (aşağıda). K-11 ve K-64 buna dayanır.
+
+### TEFAS fiyat dosyası içe aktarma (M3, K-68)
+
+- Kullanıcı fiyat geçmişini TEFAS sitesinden tarayıcıyla kendisi indirir; `ft price import DOSYA` dosyayı okur ve fiyatları `source=tefas` olarak yazar. Veri TEFAS'tan geldiği için K-63'teki öncelik geçerlidir: içe aktarılan fiyat aynı günün elle girilmiş fiyatının yerini alır.
+- Dosya biçimi kullanıcının vereceği örnek dosyayla belirlenir. Excel ise okuma kütüphanesi (ör. openpyxl) eklenmeden önce sorulur.
+- Kontrat testinin fixture'ı rastgele seçilmiş, herkese açık bir fonun dosyasıdır; kullanıcının fonları repoya girmez.
+- İçe aktarma idempotenttir: aynı dosya ikinci kez yüklendiğinde değişen bir şey olmaz. Değişen günler revizyon olarak yazılır (K-52).
+- Ham dosya, hata ayıklama için raw_payload'a yazılır (30 gün).
 
 ### EVDS adapter
 
-- Resmi API kullanılır. TCMB, Ocak 2026'da EVDS3'e (evds3.tcmb.gov.tr) geçti; evds2 bir süre daha açık kalacak. Anahtarın EVDS3'te HTTP başlığında mı, parametrede mi gönderileceği M3'ün ilk işinde doğrulanır. Başlıkta gönderilebiliyorsa başlık kullanılır. Parametrede gönderilmesi gerekiyorsa URL log'lanmaz ve hata metinlerinde maskelenir.
+- Resmi API kullanılır (K-61). TCMB, Ocak 2026'da EVDS3'e (evds3.tcmb.gov.tr) geçti; evds2 adresi artık evds3'e yönleniyor. İstek biçimi `https://evds3.tcmb.gov.tr/igmevdsms-dis/series=<kod>&startDate=gg-aa-yyyy&endDate=gg-aa-yyyy&type=json`; parametreler path'te. İstek başına en çok 1000 gözlem döner, aylık TÜFE tek istekte gelir. Kaynak: EVDS "Web Servis ve API Kullanımı" kılavuzu (evds3, docId=8).
+- Anahtar `key` HTTP başlığında gönderilir; parametre seçeneği yoktur. Başlık yoksa ya da yanlışsa 403 döner. Canlı doğrulama (2026-11-24): anahtarsız istek `{"status":"403","message":"Required request header 'key' is not present"}` döndü. URL'de sır bulunmaz; başlık log'a ve hata metnine yazılmaz.
+- Varsayılan TLS ayarlarıyla bağlanılıyor; eski TLS yeniden anlaşması gerekmiyor (canlı, 2026-11-24).
 - Seri kodları, bağlantı ayı ve taban URL config'tedir. EVDS sürüm değişikliği ya da TÜİK baz yılı güncellemesi koda dokunmadan karşılanır.
 - Yüzde değişim değil endeks seviyesi saklanır. Her dönem hesabı endeks oranından türetilir.
 - TÜİK, Ocak 2026 verisinden itibaren TÜFE'yi 2025=100 bazında yayımlıyor. TÜİK, 2005–2025 geçmişini de 2025=100 bazında yeniden yayımladı. Bunu zincir endeks yapısını ve manşet oranları değiştirmeden yaptı: 2025 aylarının yeni baz değerleri, eski serinin sabit bir katsayıyla çarpılmış halidir.
-- **M3'te 2025=100 serisi tüm geçmişiyle doğrudan çekilir; çalışma anında zincirleme yapılmaz (K-43).** EVDS3'te yeni bazdaki geçmişin bulunduğu, M3'ün ilk işlerinden biri olarak doğrulanır.
+- **M3'te 2025=100 serisi tüm geçmişiyle doğrudan çekilir; çalışma anında zincirleme yapılmaz (K-43).** Seri kodu `TP.TUKFIY2025.GENEL`, 2005-01'den başlıyor (ikincil). Anahtarla doğrulanacaklar: seri metaverisindeki başlangıç tarihi ve Ocak 2025 değerinin TÜİK'teki 88,578291 ile eşleşmesi. Eski `TP.FG.J0` (2003=100) arşive alınmış ve 2026-01'de durmuş (ikincil).
 - Aralık 2025 zincirlemesi (chain-linking) test edilmiş bir yedek olarak kalır; yeni bazda geçmiş bulunamazsa kullanılır. Zincirleme tek bir çakışma ayında yapılır: **Aralık 2025**. Bu ayda iki serinin de değeri vardır.
   - Eski seri, k = E_yeni(Aralık 2025) / E_eski(Aralık 2025) katsayısıyla yeni baza (2025=100) taşınır.
   - Aralık 2025 ve öncesi eski seriden (× k), sonrası yeni seriden alınır. Oranlar baz seçiminden bağımsızdır.
@@ -410,12 +446,18 @@ class CpiSource(Protocol):
 ### Elle değerlenen varlıklar
 
 - Birim fiyat olarak girilir: `ft price set ALTIN_GR 2026-11-23 --price 3150.25` (altın için TL/gram, kripto için TL/birim). İşlemler adet üzerinden tutulur. Fiyatlar source=manual olarak saklanır.
+- **TEFAS fonlarına elle fiyat (M3, K-63).** `ft price set` TEFAS fonları için de çalışır; TEFAS fiyatı gelmediğinde yedektir. Aynı günde öncelik TEFAS fiyatındadır:
+  - TEFAS fiyatı gelince elle girilmiş fiyatın yerini alır ve price_revision'a satır yazılır. İki fiyat uyuşmuyorsa uyarı verilir. Uyuşma K-64'teki kuraldır: girilen fiyatın son basamağında en çok 1 birim fark.
+  - O gün için TEFAS fiyatı zaten varsa `ft price set` reddeder.
+  - price_revision'a `old_source` ve `new_source` kolonları eklenir (0002); böylece elle fiyattan TEFAS fiyatına geçiş ayırt edilir. 0002'den önceki satırlarda bu kolonlar boştur.
 - Son elle giriş 14 günden eskiyse raporda bayatlık uyarısı çıkar.
 - v2'de anahtarsız, salt okunur halka açık fiyat API'leri eklenebilir.
 
 ### Veri kalitesi kontrolleri
 
-Her senkronizasyondan sonra çalışır; sonuçlar uyarıya ve raporun "Veri sorunları" bölümüne yansır. Eşikler varlık sınıfı ya da kategori bazında config'te tutulur.
+Her senkronizasyondan sonra çalışır; sonuçlar uyarıya ve raporun "Veri sorunları" bölümüne yansır. M3'te sonuçlar `ft sync` çıktısında ve `ft data check` ile gösterilir; kalıcı uyarıya ve bildirime dönüşmesi M4'tedir (K-66).
+
+Sıçrama eşikleri `portfolio.toml`'da `[quality.jump]` altında kategori ya da sınıf adıyla, bir de `default` ile tanımlanır (ör. `para_piyasasi = 0.01`, `hisse = 0.15`, `default = 0.10`). Önce kategori, sonra sınıf, sonra `default` aranır. Bayatlık eşikleri (5 işlem günü, 4 takvim günü) kodda sabittir (K-66).
 
 | Kontrol | Kural | Eylem |
 | --- | --- | --- |
@@ -425,7 +467,8 @@ Her senkronizasyondan sonra çalışır; sonuçlar uyarıya ve raporun "Veri sor
 | Monotonluk | category = para_piyasasi olan fonun fiyatı düştü | Uyarı (ya veri hatası ya olağandışı olay) |
 | Boşluk | Komşu fonlarda olan bir tarih bu fonda yok | Backfill tetikle |
 | Revizyon | Kayıtlı bir günün fiyatı değişti. Eski ve yeni değer Decimal olarak karşılaştırılır; `10` ile `10.0` aynı fiyattır (K-52) | price_revision'a yaz, uyarı |
-| İşlem fiyatı (M3) | Girilen bir işlemin birim fiyatı, o günün TEFAS fiyatından eşikten fazla farklı. Eşik M3'te belirlenir | Uyarı: büyük olasılıkla işlem yanlış tarihle girildi (K-53) |
+| İşlem fiyatı (M3) | YAT ve EMK: girilen fiyat ile o günün TEFAS fiyatı arasındaki fark, girilen fiyatın son basamağında 1 birimden büyük (ör. TEFAS 0.142216 iken 0.1422 eşleşir). 4'ten az basamakla girilen fiyatta kontrol yapılmaz, bilgi notu çıkar. BYF: fark %2'yi aşıyor. İşlem gününde TEFAS fiyatı yok | Uyarı. YAT ve EMK'de ±5 işlem günü içinde fiyatı tutan gün varsa "tarih büyük olasılıkla <gün>" önerisi (K-53, K-64) |
+| Elle ve TEFAS fiyatı | Elle girilmiş fiyatın yerini alan TEFAS fiyatı onunla uyuşmuyor (K-64'teki kural) | price_revision'a yaz, uyarı (K-63) |
 
 ## Hesap motoru
 
@@ -584,21 +627,23 @@ Deterministik işler systemd timer ile, LLM gerektiren işler OpenClaw'ın zaman
 
 | İş | Zaman (Europe/Istanbul) | Çalıştıran | LLM | Not |
 | --- | --- | --- | --- | --- |
-| sync-prices | Hafta içi 10:30 ve 21:30 | systemd | Hayır | Fiyat yayın saati ilk hafta log'lardan doğrulanır; iki deneme güvenlik payıdır |
-| evaluate-alerts | Her başarılı sync-prices sonrası | sync zinciri | Hayır | Histerezis ve tekilleştirme burada |
+| sync-prices | Yok (K-69) | — | — | TEFAS fiyatları kullanıcının indirdiği dosyadan `ft price import` ile gelir |
+| evaluate-alerts | Her başarılı `ft price import` sonrası | içe aktarma zinciri | Hayır | Histerezis ve tekilleştirme burada (K-69) |
 | sync-cpi | Ayın 3'ü 10:30; 4'ü ve 5'i yedek | systemd | Hayır | TÜİK 10:00'da açıklar, EVDS'ye düşmesi gecikebilir |
-| weekly-report | Pazar 20:00 | systemd | Hayır |  |
+| weekly-report | Pazar 20:00, isteğe bağlı (config ile açılır) | systemd | Hayır | Fiyatlar aylık güncellendiği için varsayılan kapalı (K-69) |
 | monthly-report | Ayın 5'i ile 10'u arası her gün 11:00 | systemd | Hayır | Önceki ayın TÜFE'si gelince bir kez gönderilir; 10'unda hâlâ yoksa bayat-TÜFE uyarısıyla gönderilir |
 | export-snapshot | Her işin sonunda ve her gün 22:00 | iş zinciri ve systemd | Hayır | Ajan JSON'larını yazar ve OpenClaw makinesine iter. Günlük çalışma, 26 saatlik tazelik eşiğinin hafta sonu aşılmamasını sağlar |
 | ppk-summary | PPK günleri 14:30 | OpenClaw | Evet | Kararlar 14:00'te açıklanır; yıllık takvim config'e girilir |
-| payday-reminder | Maaş günü 09:00 | systemd | Hayır | Sabit metin; maaş günü config'te |
+| payday-reminder | Maaş günü 09:00 | systemd | Hayır | Aylık ritüel: "Fiyat dosyasını TEFAS'tan indir, `ft price import` çalıştır." adımını içerir; maaş günü config'te (K-69) |
 | backup | Her gece 03:00 | systemd | Hayır | Şifreli, makine dışı kopya; 30 günden eski raw_payload kayıtlarını siler |
+
+**Kadans (K-69).** TEFAS için zamanlanmış senkronizasyon yoktur. Fon fiyatları ayda bir, maaş günü ritüelinde güncellenir: hatırlatma gelir, kullanıcı dosyayı indirip `ft price import` çalıştırır, dağılım sapması değerlendirmesi içe aktarmanın hemen ardından çalışır. Haftalık rapor isteğe bağlıdır. EVDS (sync-cpi) otomatik kalır.
 
 İş yürütme kuralları:
 
 - Her çalıştırmanın idempotency anahtarı (iş, mantıksal tarih) çiftidir. Aynı anahtarla "ok" bitmiş bir deneme varsa iş hiçbir şey yapmadan çıkar. Her deneme job_run'da ayrı bir satırdır; "ok" tekilliğini kısmi indeks sağlar.
 - "ok"un anlamı işe göre tanımlanır:
-  - sync-prices: hedef tarihte tüm aktif fonların fiyatı var. Değilse sonuç "partial" olur ve sonraki deneme (ör. 21:30) yeniden dener.
+  - sync-cpi: hedef dönemin TÜFE'si kaydedildi. Değilse sonuç "partial" olur ve yedek gün yeniden dener.
   - Rapor işleri: rapor gönderildi demektir. Kısmi veriyle gönderilmiş rapor da "ok"tur ve tekrar gönderilmez.
 - Mantıksal tarih saatten değil, zamanlamadan türetilir. Örneğin pazartesi açılışta telafi olarak çalışan haftalık rapor, pazar gününü raporlar. CLI bunu `--logical-date` ile alır.
 - systemd aynı servisi zaten iki kez çalıştırmaz. Elle çalıştırılan ft ile çakışmayı önlemek için Python'da `fcntl.flock` kullanılır; ikinci örnek beklemeden çıkar. Kilit alınabildiği halde bulunan "running" satırı, ölmüş bir sürecin bayat kaydıdır ve devralınır.
@@ -717,7 +762,7 @@ Hesap doğruluğu bu projenin tek vazgeçilmez kalitesidir; test ağırlığı d
 | Domain özellik | hypothesis | Dağılım toplamı 1; dengeleme dağıtımı katkıyı aşmaz; XIRR çözümünde NPV ≈ 0; histerezis titreşmez |
 | Takvim ve zaman | pytest ve FixedClock | Hafta sonu ve bayram as-of'u, ay sonu, artık yıl, TÜFE yayın gecikmesi ve referans ay kuralı, 2003=100'den 2025=100'e zincirleme |
 | Mimari | import-linter ve AST testleri | Katman kuralları; domain'in yalnızca standart kütüphaneyi kullanması; float yasağı; duvar saati yasağı (`time.localtime`, `time.gmtime`, `time.ctime` ve zaman argümansız `time.strftime` dahil); her adapter'ın bağımsızlık kuralında listelenmesi |
-| Adapter kontratı | respx ve kayıtlı fixture'lar | TEFAS ve EVDS ayrıştırma, epoch'tan TR tarihine çeviri, retry ve hata kodları, bozuk yanıt |
+| Adapter kontratı | respx ve kayıtlı fixture'lar | EVDS ayrıştırma (TEFAS kaynağı kararı bekliyor, K-60), retry, `Retry-After`, hata kodları, 200 ile dönen HTML ve bozuk yanıt |
 | Repository | Geçici SQLite | Migration'lar ve öncesindeki yedek, upsert idempotency, Decimal gidiş-dönüş, revizyon kaydı |
 | Rapor | syrupy snapshot | Metin ve JSON çıktının bilinçsiz değişmemesi |
 | Ajan kontratı | jsonschema | ft-agent çıktısının yayımlanan şemaya uyması; iki bayatlık sinyalinin birbirinden bağımsız çalışması (taze snapshot ve eski fiyat; eski snapshot ve taze fiyat) |
@@ -746,7 +791,7 @@ En büyük teknik risk TEFAS uç noktasının resmi olmaması, en büyük proje 
 
 | Risk | Olasılık | Etki | Azaltma |
 | --- | --- | --- | --- |
-| TEFAS uç noktası değişir ya da engellenir | Orta | Yüksek | Adapter izolasyonu, haftalık canlı smoke testi, bayatlık uyarısı, elle fiyat girişi yedeği; barındırma kararından önce Türkiye IP'li bir makineden canlı deneme |
+| TEFAS uç noktası değişir ya da engellenir | Gerçekleşti: eski uç nokta kapandı; robots.txt `/api/`'yi otomatik erişime kapatıyor (K-60) | Yüksek | Kullanıcının indirdiği dosyanın içe aktarılması ve elle fiyat (K-63, K-68); Takasbank'tan izin istendi; fiyatlar aylık güncellenir (K-69) |
 | EVDS adresi veya seri kodu değişir | Gerçekleşti (EVDS3, TÜFE 2025=100) | Orta | Adres ve seri kodları config'te; zincirleme fonksiyonu M1'de; elle TÜFE girişi yedeği |
 | OpenClaw arayüzü değişir | Yüksek | Düşük | Ajan katmanı ince; çekirdek ondan bağımsız çalışır |
 | Hesap hatası | Düşük | Yüksek | Referans testler, provenance, bir aylık elle mutabakat |
@@ -755,12 +800,16 @@ En büyük teknik risk TEFAS uç noktasının resmi olmaması, en büyük proje 
 Açık sorular:
 
 - [x] Satışlarda FIFO mu, ortalama maliyet mi? FIFO (K-18).
-- [ ] Barındırma: ev sunucusu mu, VPS mi? Karardan önce Türkiye IP'li bir makineden canlı TEFAS denemesi yapılacak.
+- [ ] Barındırma: ev sunucusu mu, VPS mi? TEFAS API'si kullanılmayacağı için (K-60) TEFAS denemesi kararı artık belirlemiyor; adayda yalnızca EVDS erişimi denenir.
 - [ ] Hangi LLM sağlayıcısı ve aylık bütçe ne olacak?
-- [ ] TEFAS'ın kabul ettiği azami tarih aralığı ve fiyat yayın saati (ilk hafta deneysel olarak ölçülecek)
+- [x] TEFAS fiyat kaynağı: kullanıcının indirdiği dosyanın içe aktarılması ve elle giriş; ücretli sağlayıcı yok (K-68).
+- [ ] Takasbank'tan TEFAS API'si için yazılı izin (kullanıcı gönderecek). İzin gelirse askıdaki TEFAS adapter tasarımı uygulanır.
+- [ ] Aylık içe aktarma kadansında bayatlık eşikleri (fon için 5 işlem günü, genel 4 takvim günü; K-28) sürekli uyarı üretir. Yeni eşikler belirlenecek.
+- [ ] M4 kabul kapısı ("iki hafta kesintisiz ve doğru rapor") haftalık rapor isteğe bağlı olunca yeniden tanımlanacak.
+- [ ] TEFAS'taki D tarihli fiyat D günü verilen emirlere mi uygulanıyor, yoksa D−1 kapanışından hesaplanıp D günü mü yayımlanıyor? K-11 (`trade_date` fiyatın uygulandığı gün) ve K-64 buna dayanır. İlk gerçek alımın işlem fiyatı ve tarihiyle doğrulanacak.
 - [ ] Elle değerlenen varlıklar için v2'de otomatik fiyat kaynağı istenecek mi?
 - [x] GVK geçici 67 stopajında maliyetin FIFO ile bulunduğunun birincil kaynakla doğrulanması: doğrulandı (K-54).
-- [ ] EVDS3'te API anahtarı başlıkta mı, parametrede mi? (M3'ün ilk işi)
+- [x] EVDS3'te API anahtarı başlıkta mı, parametrede mi? Başlıkta (`key`); kılavuz ve canlı 403 ile doğrulandı (K-61).
 - [x] Anlık görüntülerin OpenClaw makinesine aktarım yöntemi: ayrı anahtar ve rrsync ile, yalnızca çekirdekten dışarı (K-27).
 
 ## Karar kaydı
@@ -828,6 +877,16 @@ Mimari gözden geçirmede (2026-11-23) alınan kararlar. Bir karar değişirse s
 | K-57 | K-55'e ek: yedek alınırken aynı dizindeki, bu veritabanına ait ve 1 saatten eski `.partial` ve `.partial-journal` artıkları silinir; `.gitignore`'da `*.partial` ve `*.partial-journal` | Yarıda kesilen yedeklemeden kalan dosyalar birikmesin. 1 saat eşiği, aynı anda yedek alan başka bir sürecin dosyasını silmemek için | Veri modeli |
 | K-58 | K-48'e ek: alış iptali reddedilirse mesaj önce iptal edilmesi gereken satışları numara, tarih, kod ve adetle listeler; liste tarih sırasıyla, eldeki payın yetmediği günün satışları yok sayılarak bulunur. `OversellError` enstrümanı ve günü taşır | Kullanıcı hangi satışları iptal edeceğini tahmin etmek zorunda kalmasın; listelenenler iptal edilince alış iptali kabul edilir | Veri modeli |
 | K-59 | K-56'ya ek: katkı açıkça 0 ise aylık raporun dengeleme bölümü "Bu ay katkı 0." yazar; sıfırlarla dolu öneri gösterilmez (M4) | Açıkça yazılmış 0 da sıfırlardan oluşan bir tablo üretir; tanımsız katkıdan ayrı bir mesajla gösterilir | Raporlama, Dağılım |
+| K-60 | TEFAS'ın `/api/` yoluna otomatik istek atılmaz: robots.txt bütün User-Agent'lar için `Disallow: /api/` içeriyor (2026-11-24). Canlı deneme bu adımda durdu. Tarayıcı otomasyonuyla (Playwright, Selenium vb.) indirme de yapılmaz; bu da robots.txt'nin kapattığı otomatik erişimdir. Önceki uç nokta tasarımı ve T1–T3 askıda; API adapter'ı yazılmaz | Otomatik erişimi açıkça kapatan bir kaynak kullanılmaz ve engel aşılmaya çalışılmaz | Veri toplama, Riskler |
+| K-61 | EVDS3: `https://evds3.tcmb.gov.tr/igmevdsms-dis/series=…&startDate=gg-aa-yyyy&type=json`; anahtar `key` başlığında (kılavuz ve canlı 403); varsayılan TLS yeterli; seri `TP.TUKFIY2025.GENEL` tek istekte (≤1000 gözlem). Seri başlangıcı ve Ocak 2025 değeri anahtarla doğrulanacak | M3'ün ilk işi olan anahtar iletimi sorusu kapandı; URL'de sır yok | Veri toplama |
+| K-62 | HTTP istemci kuralları: dürüst ASCII User-Agent `finans-takip/<sürüm> (kisisel kullanim)`, tarayıcı taklidi yok; kaynak eklenmeden önce robots.txt ve koşullar; 3 deneme ve üstel geri çekilme; 429'da `Retry-After`'a uyulur, yoksa 60 sn, 5 dakikadan uzun beklemede iş "partial" biter; fiyat ve endeks alanları float'ı reddeder. Retry elle yazılır, tenacity yok | Kaynağın kurallarına saygı; kişisel kullanımın açıkça görünmesi; float'ın hiçbir yoldan girmemesi | Veri toplama, Teknoloji seçimleri |
+| K-63 | M2'deki "elle fiyat yalnızca MANUAL" kuralını genişletir: `ft price set` TEFAS fonları için de çalışır. Aynı günde TEFAS fiyatı önceliklidir; gelince elle fiyatın yerini alır, price_revision'a yazılır, uyuşmazsa uyarı. TEFAS fiyatı varken elle giriş reddedilir. price_revision'a `old_source`, `new_source` (0002) | TEFAS fiyatı gelmediğinde yedek; elle fiyatın TEFAS fiyatını sessizce gölgelememesi | Veri toplama, Veri modeli |
+| K-64 | K-53'ün eşiği: YAT ve EMK'de fark girilen fiyatın son basamağında en çok 1 birimse eşleşir; 4'ten az basamakta kontrol yerine bilgi notu; eşleşmezse ±5 işlem günü içinde tutan gün önerilir. BYF'de %2. İşlem gününde TEFAS fiyatı yoksa uyarı. `ft data check`'te ve fiyat varsa `ft tx add`/içe aktarmada engellemeyen uyarı | Yuvarlama ve kesme farkı eşleşmeli, bir günlük kayma (para piyasasında ~%0,1) yakalanmalı; BYF borsa fiyatıyla alınır | Veri kalitesi |
+| K-65 | K-49'u günceller: 0002 cpi, cpi_revision ve raw_payload içerir; price_revision'a kaynak kolonları eklenir (K-63). TÜFE değeri değişirse eski değer cpi_revision'da kalır ve uyarı verilir | TÜİK revizyonu meşru ama sessizce üzerine yazılmamalı | Veri modeli |
+| K-66 | Sıçrama eşikleri `portfolio.toml` `[quality.jump]` altında (kategori, sonra sınıf, sonra `default`); bayatlık eşikleri kodda. M3'te veri sorunları `ft sync` ve `ft data check` çıktısında; kalıcı uyarı ve bildirim M4'te | Eşikler kullanıcının portföyüne göre değişir; uyarı tablosu M4'te geliyor | Veri kalitesi |
+| K-67 | Geliştirme kapısındaki mutabakat için `ft reconcile FILE.csv` (tarih, kod, değer): kalem başına fark ve ±0,01 TL'ye göre geçti/kaldı. Değerler aracı kurum ekstrelerinden kullanıcıdan gelir | "±0,01 TL/kalem" elle karşılaştırmayla tekrarlanabilir değildi | Test, Yol haritası |
+| K-68 | TEFAS fiyat kaynağı: kullanıcının TEFAS sitesinden tarayıcıyla indirdiği dosya `ft price import` ile `source=tefas` olarak içe aktarılır; tek tük günler `ft price set` ile. Paralel olarak Takasbank'tan yazılı izin istenir; ücretli sağlayıcı yok. Biçim örnek dosyayla belirlenir; Excel kütüphanesi gerekirse sorulur. Fixture rastgele public bir fondan | robots.txt API'yi kapatıyor (K-60); insanın tarayıcıyla indirmesi otomatik erişim değildir | Veri toplama |
+| K-69 | Kadans: TEFAS için senkronizasyon timer'ı yok. Aylık ritüel maaş günü hatırlatmasıyla başlar ("fiyat dosyasını indir, `ft price import` çalıştır"); dağılım sapması değerlendirmesi içe aktarmanın ardından çalışır. Haftalık rapor isteğe bağlı, varsayılan kapalı. EVDS otomatik kalır | Fiyatlar elle indirildiği için günlük senkronizasyon ve haftalık rapor anlamını yitirdi | Zamanlama, Raporlama |
 
 ## Planı kodlama ajanıyla uygulama
 
