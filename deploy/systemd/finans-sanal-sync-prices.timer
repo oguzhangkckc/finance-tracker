@@ -1,0 +1,10 @@
+[Unit]
+Description=finans-takip: sanal portföy TEFAS fiyat senkronu (gerçeğinden sonra)
+
+[Timer]
+OnCalendar=Mon..Fri 21:45 Europe/Istanbul
+Persistent=true
+Unit=finans-sanal-job@sync-prices.service
+
+[Install]
+WantedBy=timers.target
