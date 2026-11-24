@@ -461,6 +461,8 @@ Kullanıcı fon seçimi için TEFAS sitesinden kategori bazında getiri, ücret 
 - **TEFAS fonlarına elle fiyat (M3, K-63).** `ft price set` TEFAS fonları için de çalışır; TEFAS fiyatı gelmediğinde yedektir. Aynı günde öncelik TEFAS fiyatındadır:
   - TEFAS fiyatı gelince elle girilmiş fiyatın yerini alır ve price_revision'a satır yazılır. İki fiyat uyuşmuyorsa uyarı verilir. Uyuşma K-64'teki kuraldır: girilen fiyatın son basamağında en çok 1 birim fark.
   - O gün için TEFAS fiyatı zaten varsa `ft price set` reddeder.
+  - Kaynak değişimi değerden bağımsız bir revizyondur: TEFAS fiyatı elle girilenle aynı olsa bile satır `tefas` olur ve revizyon yazılır. `ft sync prices` bunları "elle fiyat yerine TEFAS" satırıyla ayrı gösterir, uyuşmayanlara uyarı ekler.
+  - Elle girilen fiyat `price` tablosunda kanonik metinle saklanır (sondaki sıfırlar atılır); uyuşma kontrolü kayıtlı basamak sayısıyla yapılır. İşlem fiyatındaki gibi ayrı bir basamak sütunu yoktur (K-76 yalnızca `txn`).
   - price_revision'a `old_source` ve `new_source` kolonları eklenir (0002); böylece elle fiyattan TEFAS fiyatına geçiş ayırt edilir. 0002'den önceki satırlarda bu kolonlar boştur.
 - Son elle giriş 14 günden eskiyse raporda bayatlık uyarısı çıkar.
 - v2'de anahtarsız, salt okunur halka açık fiyat API'leri eklenebilir.

@@ -9,7 +9,14 @@ from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.application.portfolio_view import portfolio_as_of
 from finans.application.prices import set_manual_price
 from finans.application.transactions import add_transaction, void_transaction
-from finans.domain.models import DomainError, Instrument, InstrumentKind, Side, Transaction
+from finans.domain.models import (
+    DomainError,
+    Instrument,
+    InstrumentKind,
+    PricePoint,
+    Side,
+    Transaction,
+)
 from finans.ports.repositories import PriceWrite
 
 D = Decimal
@@ -37,12 +44,23 @@ def _trade(uow: SqliteUnitOfWork, day: str, side: Side, units: str, price: str) 
 def test_manual_price_insert_unchanged_and_revision(uow: SqliteUnitOfWork) -> None:
     assert _price(uow, "2026-03-01", "3300") == PriceWrite("inserted")
     assert _price(uow, "2026-03-01", "3300.00") == PriceWrite("unchanged")
-    assert _price(uow, "2026-03-01", "3310") == PriceWrite("revised", previous=D(3300))
+    assert _price(uow, "2026-03-01", "3310") == PriceWrite(
+        "revised", previous=D(3300), previous_source="manual"
+    )
 
 
-def test_manual_price_is_only_for_manual_instruments(uow: SqliteUnitOfWork) -> None:
-    with pytest.raises(DomainError, match=r"TTE.*elle girilemez"):
-        set_manual_price(uow, "TTE", date(2026, 3, 1), D(10), now=NOW)
+def test_tefas_funds_take_manual_prices_until_tefas_has_one(uow: SqliteUnitOfWork) -> None:
+    day = date(2026, 3, 2)
+    assert set_manual_price(uow, "TTE", day, D("10.5"), now=NOW) == PriceWrite("inserted")
+    assert set_manual_price(uow, "TTE", day, D("10.6"), now=NOW).status == "revised"
+
+    uow.prices.upsert(PricePoint("TTE", day, D("10.61"), "tefas"), fetched_at=NOW)
+
+    with pytest.raises(DomainError, match=r"TTE için 2026-03-02 günü TEFAS fiyatı var \(10.61\)"):
+        set_manual_price(uow, "TTE", day, D("10.6"), now=NOW)
+
+
+def test_unknown_instrument_and_bad_price_are_rejected(uow: SqliteUnitOfWork) -> None:
     with pytest.raises(DomainError, match="YOK tanımlı değil"):
         set_manual_price(uow, "YOK", date(2026, 3, 1), D(10), now=NOW)
     with pytest.raises(DomainError, match="fiyat"):

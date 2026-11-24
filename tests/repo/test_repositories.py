@@ -161,7 +161,7 @@ class TestPrices:
         ) == PriceWrite("unchanged")
         assert uow.prices.upsert(
             PricePoint("TTE", day, D("10.5"), "tefas"), fetched_at=NOW
-        ) == PriceWrite("revised", previous=D(10))
+        ) == PriceWrite("revised", previous=D(10), previous_source="tefas")
         assert uow.prices.latest("TTE") == PricePoint("TTE", day, D("10.5"), "tefas")
 
     def test_history_until_date(self, uow: SqliteUnitOfWork) -> None:
@@ -280,3 +280,14 @@ def test_rows_without_a_scale_keep_the_stored_digits(db: Path) -> None:
     with SqliteUnitOfWork(db, readonly=True) as work:
         [stored] = work.transactions.list()
     assert stored.transaction.unit_price.as_tuple().exponent == -2
+
+
+def test_tefas_price_replaces_a_manual_one_even_when_equal(uow: SqliteUnitOfWork) -> None:
+    day = date(2026, 1, 5)
+    uow.prices.upsert(PricePoint("TTE", day, D("10.5"), "manual"), fetched_at=NOW)
+
+    write = uow.prices.upsert(PricePoint("TTE", day, D("10.50"), "tefas"), fetched_at=NOW)
+
+    assert write == PriceWrite("revised", previous=D("10.5"), previous_source="manual")
+    assert uow.prices.on("TTE", day) == PricePoint("TTE", day, D("10.5"), "tefas")
+    assert uow.prices.on("TTE", date(2026, 1, 6)) is None

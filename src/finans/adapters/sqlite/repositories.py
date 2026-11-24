@@ -264,7 +264,8 @@ class SqlitePriceRepo:
             )
             return PriceWrite("inserted")
         previous = decode_decimal(row[0])
-        if previous == point.price:
+        # Kaynak değişimi (elle → TEFAS) değer aynı olsa da revizyondur (K-63).
+        if previous == point.price and row[1] == point.source:
             return PriceWrite("unchanged")
         self._conn.execute(
             "UPDATE price SET price = ?, source = ?, fetched_at = ?"
@@ -284,7 +285,7 @@ class SqlitePriceRepo:
                 point.source,
             ),
         )
-        return PriceWrite("revised", previous=previous)
+        return PriceWrite("revised", previous=previous, previous_source=row[1])
 
     def history(self, *, until: date) -> list[PricePoint]:
         rows = self._conn.execute(
@@ -297,6 +298,18 @@ class SqlitePriceRepo:
             PricePoint(code, decode_date(day), decode_decimal(price), source)
             for code, day, price, source in rows
         ]
+
+    def on(self, instrument: str, day: date) -> PricePoint | None:
+        row = self._conn.execute(
+            "SELECT i.code, p.price_date, p.price, p.source FROM price p"
+            " JOIN instrument i ON i.id = p.instrument_id"
+            " WHERE i.code = ? AND p.price_date = ?",
+            (instrument, encode_date(day)),
+        ).fetchone()
+        if row is None:
+            return None
+        code, price_day, price, source = row
+        return PricePoint(code, decode_date(price_day), decode_decimal(price), source)
 
     def latest(self, instrument: str) -> PricePoint | None:
         row = self._conn.execute(

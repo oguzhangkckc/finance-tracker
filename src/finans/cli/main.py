@@ -22,7 +22,7 @@ from finans.application.transactions import (
     void_transaction,
 )
 from finans.cli._common import VersionOption
-from finans.domain.models import DomainError, Side, Transaction, YearMonth
+from finans.domain.models import DomainError, InstrumentKind, Side, Transaction, YearMonth
 from finans.domain.numeric import canonical_text
 from finans.domain.portfolio import ConfigError, QualityThresholds
 from finans.domain.quality import DataIssue
@@ -36,7 +36,8 @@ db_app = typer.Typer(no_args_is_help=True, help="Veritabanı işlemleri.")
 config_app = typer.Typer(no_args_is_help=True, help="Portföy tanımı (portfolio.toml).")
 tx_app = typer.Typer(no_args_is_help=True, help="İşlemler.")
 price_app = typer.Typer(
-    no_args_is_help=True, help="Elle girilen fiyatlar (yalnızca MANUAL varlıklar)."
+    no_args_is_help=True,
+    help="Elle girilen fiyatlar; TEFAS fonlarında TEFAS fiyatı gelince yerini alır (K-63).",
 )
 app.add_typer(db_app, name="db")
 app.add_typer(config_app, name="config")
@@ -196,11 +197,13 @@ def price_set(
     on: Annotated[str, typer.Argument(help="Fiyat günü (YYYY-AA-GG)")],
     price: Annotated[str, typer.Argument(help="Birim fiyat (TL)")],
 ) -> None:
-    """MANUAL bir varlığın o günkü birim fiyatını kaydeder."""
+    """Bir varlığın o günkü birim fiyatını elle kaydeder; TEFAS fiyatı varsa reddeder."""
     settings = _load_settings_or_exit()
     day, amount = _parse_date(on), _parse_decimal("price", price)
     with _user_errors(), bootstrap.open_unit_of_work(settings) as uow:
         write = set_manual_price(uow, code, day, amount, now=bootstrap.system_clock().now())
+        stored = uow.instruments.get(code)
+    is_fund = stored is not None and stored.instrument.kind is not InstrumentKind.MANUAL
     if write.status == "inserted":
         typer.echo("Fiyat kaydedildi.")
     elif write.status == "unchanged":
@@ -208,6 +211,8 @@ def price_set(
     else:
         previous = "?" if write.previous is None else canonical_text(write.previous)
         typer.echo(f"Fiyat güncellendi; önceki değer {previous}.")
+    if is_fund:
+        typer.echo("Not: TEFAS fonu; o günün TEFAS fiyatı gelince yerini alır (K-63).")
 
 
 @app.command("value")
@@ -336,6 +341,17 @@ def _print_price_sync(report: PriceSyncReport) -> None:
                 f"  revize {revision.day}: {canonical_text(revision.old)} → "
                 f"{canonical_text(revision.new)}"
             )
+        for item in fund.replaced:
+            typer.echo(
+                f"  elle fiyat yerine TEFAS {item.day}: {canonical_text(item.manual)} → "
+                f"{canonical_text(item.tefas)}"
+            )
+            if not item.matches:
+                typer.echo(
+                    f"Uyarı: [elle ve TEFAS fiyatı] {fund.code} {item.day}: elle girilen "
+                    f"{canonical_text(item.manual)} TEFAS fiyatıyla ({canonical_text(item.tefas)}) "
+                    "uyuşmuyor"
+                )
     if report.stopped is not None:
         typer.echo("Durduruldu: TEFAS isteği reddetti ya da sınırladı; engel aşılmaya çalışılmadı.")
         if report.skipped:

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
-from finans.application.price_sync import PriceRevision, sync_prices
+from finans.application.price_sync import ManualReplacement, PriceRevision, sync_prices
 from finans.domain.models import (
     DomainError,
     Instrument,
@@ -149,3 +149,25 @@ def test_a_block_stops_every_remaining_request(db: Path) -> None:
     assert report.stopped == "HTTP 403: Access denied"
     assert report.skipped == ("EOZ", "OLD")
     assert not report.ok
+
+
+def test_tefas_prices_replace_manual_ones_and_mismatches_are_flagged(db: Path) -> None:
+    with SqliteUnitOfWork(db) as uow:
+        uow.prices.upsert(
+            PricePoint("BCO", date(2026, 11, 20), D("1.7443"), "manual"), fetched_at=NOW
+        )
+        uow.prices.upsert(
+            PricePoint("BCO", date(2026, 11, 23), D("1.75"), "manual"), fetched_at=NOW
+        )
+    source = FakePriceSource(
+        {"BCO": _result("BCO", (date(2026, 11, 20), "1.744322"), (date(2026, 11, 23), "1.73"))}
+    )
+
+    report = sync_prices(source, _opener(db, source.events), codes=["BCO"], end=END, now=NOW)
+
+    fund = report.funds[0]
+    assert fund.revised == ()
+    assert fund.replaced == (
+        ManualReplacement(date(2026, 11, 20), D("1.7443"), D("1.744322"), matches=True),
+        ManualReplacement(date(2026, 11, 23), D("1.75"), D("1.73"), matches=False),
+    )

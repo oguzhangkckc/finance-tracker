@@ -185,3 +185,21 @@ def test_unknown_code_and_bad_dates_are_rejected(monkeypatch: pytest.MonkeyPatch
     assert unknown.exit_code == 1
     assert "YOK tanımlı değil" in unknown.output
     assert runner.invoke(app, ["sync", "prices", "--from", "2026-13-01"]).exit_code == 2
+
+
+@pytest.mark.usefixtures("portfolio")
+def test_sync_prices_shows_manual_prices_replaced_by_tefas(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert runner.invoke(app, ["price", "set", "BCO", "2026-11-19", "1.7443"]).exit_code == 0
+    assert runner.invoke(app, ["price", "set", "BCO", "2026-11-20", "1.75"]).exit_code == 0
+    prices = _prices((date(2026, 11, 19), "1.744322"), (date(2026, 11, 20), "1.73"))
+    _use_prices(monkeypatch, FakePriceSource({"BCO": prices}))
+
+    result = runner.invoke(app, ["sync", "prices", *RANGE])
+
+    assert "  elle fiyat yerine TEFAS 2026-11-19: 1.7443 → 1.744322" in result.output
+    assert (
+        "Uyarı: [elle ve TEFAS fiyatı] BCO 2026-11-20: elle girilen 1.75 TEFAS fiyatıyla (1.73) "
+        "uyuşmuyor" in result.output
+    )

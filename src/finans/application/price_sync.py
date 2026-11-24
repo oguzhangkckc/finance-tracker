@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from finans.domain.models import DomainError, Instrument, InstrumentKind, PricePoint
 from finans.domain.positions import build_positions
+from finans.domain.quality import price_matches
 from finans.ports.repositories import StoredInstrument, StoredTransaction
 from finans.ports.sources import FetchResult, PriceSource, SourceBlocked, SourceError
 from finans.ports.unit_of_work import UnitOfWork
@@ -27,6 +28,16 @@ class PriceRevision:
 
 
 @dataclass(frozen=True, slots=True)
+class ManualReplacement:
+    """Elle girilmiş fiyatın yerini alan TEFAS fiyatı; uyuşma K-64 kuralıyla (K-63)."""
+
+    day: date
+    manual: Decimal
+    tefas: Decimal
+    matches: bool
+
+
+@dataclass(frozen=True, slots=True)
 class FundSync:
     code: str
     start: date
@@ -35,6 +46,7 @@ class FundSync:
     inserted: int = 0
     unchanged: int = 0
     revised: tuple[PriceRevision, ...] = ()
+    replaced: tuple[ManualReplacement, ...] = ()
     error: str | None = None
 
 
@@ -146,12 +158,18 @@ def _store(
         uow.raw_payloads.add(payload)
     inserted = unchanged = 0
     revised: list[PriceRevision] = []
+    replaced: list[ManualReplacement] = []
     for point in result.points:
         write = uow.prices.upsert(point, fetched_at=now)
         if write.status == "inserted":
             inserted += 1
         elif write.status == "unchanged":
             unchanged += 1
+        elif write.previous is not None and write.previous_source == "manual":
+            matches = price_matches(write.previous, point.price)
+            replaced.append(
+                ManualReplacement(point.price_date, write.previous, point.price, matches)
+            )
         elif write.previous is not None:
             revised.append(PriceRevision(point.price_date, write.previous, point.price))
     return FundSync(
@@ -162,4 +180,5 @@ def _store(
         inserted=inserted,
         unchanged=unchanged,
         revised=tuple(revised),
+        replaced=tuple(replaced),
     )
