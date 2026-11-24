@@ -21,6 +21,7 @@ from finans.domain.returns import (
     LOWER_BOUND,
     UPPER_BOUND,
     PeriodReturn,
+    Unavailable,
     fund_twr,
     lot_real_return,
     money_weighted_return,
@@ -74,7 +75,7 @@ V8_ROOTS = (D("0.1"), D("0.2"))
 )
 def test_annual_money_weighted_return_matches_excel(flows: list[CashFlow], expected: str) -> None:
     result = money_weighted_return(flows)
-    assert result is not None
+    assert isinstance(result, PeriodReturn)
     assert result.annualized
     assert is_close(result.rate, D(expected)), result.rate
 
@@ -87,7 +88,7 @@ def test_v7_annual_xirr_matches_excel() -> None:
 
 def test_v7_period_return_is_the_same_both_ways() -> None:
     period = money_weighted_return(V7)
-    assert period is not None
+    assert isinstance(period, PeriodReturn)
     assert (period.annualized, period.days) == (False, 182)
 
     annual = solve_irr(V7, day_count=365, guess=D("0.1"))
@@ -100,7 +101,7 @@ def test_v7_period_return_is_the_same_both_ways() -> None:
 
 def test_v8_root_choice_is_deterministic_and_a_real_root() -> None:
     first = money_weighted_return(V8)
-    assert first is not None
+    assert isinstance(first, PeriodReturn)
     assert any(is_close(first.rate, root) for root in V8_ROOTS), first.rate
     assert money_weighted_return(V8) == first
     assert money_weighted_return(list(reversed(V8))) == first
@@ -108,13 +109,13 @@ def test_v8_root_choice_is_deterministic_and_a_real_root() -> None:
 
 def test_exactly_one_year_is_annualized() -> None:
     result = money_weighted_return(V1)
-    assert result is not None
+    assert isinstance(result, PeriodReturn)
     assert result == PeriodReturn(rate=result.rate, annualized=True, days=365)
 
 
 def test_shorter_than_a_year_is_a_period_return() -> None:
     result = money_weighted_return(_flows(("2025-01-02", "-100"), ("2026-01-01", "110")))
-    assert result is not None
+    assert isinstance(result, PeriodReturn)
     assert (result.annualized, result.days) == (False, 364)
     assert is_close(result.rate, D("0.1"))
 
@@ -130,7 +131,7 @@ def test_shorter_than_a_year_is_a_period_return() -> None:
     ids=["bos", "sifir-gun", "hep-negatif", "hep-pozitif"],
 )
 def test_not_computable(flows: list[CashFlow]) -> None:
-    assert money_weighted_return(flows) is None
+    assert money_weighted_return(flows) == Unavailable("undefined")
 
 
 def test_portfolio_cash_flows_follow_the_sign_rule() -> None:
@@ -155,8 +156,8 @@ def test_real_xirr_equals_fisher_and_lot_real_return_for_two_flows_over_one_year
     nominal = money_weighted_return(V1)
     real_flows = real_cash_flows(V1, CPI_100_TO_120, on=on)
     real = money_weighted_return(real_flows)
-    assert nominal is not None
-    assert real is not None
+    assert isinstance(nominal, PeriodReturn)
+    assert isinstance(real, PeriodReturn)
 
     assert real_flows[-1] == V1[-1]
     assert is_close(real.rate, D("1.30") / D("1.20") - 1)
@@ -219,9 +220,9 @@ def test_rate_is_within_a_billionth_of_a_root_and_none_only_outside_the_range(
     root_in_range = (npv(LOWER_BOUND) > 0) != (npv(UPPER_BOUND) > 0)
     result = money_weighted_return(flows)
     if not root_in_range:
-        assert result is None
+        assert result == Unavailable("out_of_range")
         return
-    assert result is not None
+    assert isinstance(result, PeriodReturn)
     step = D("1e-9")
     assert npv(result.rate) == 0 or (npv(result.rate - step) > 0) != (npv(result.rate + step) > 0)
 
@@ -269,7 +270,7 @@ def test_root_outside_the_search_range_is_not_computable(flows: list[CashFlow]) 
     days = (flows[-1].on - flows[0].on).days
     ends = [net_present_value(flows, bound, day_count=days) for bound in (LOWER_BOUND, UPPER_BOUND)]
     assert (ends[0] > 0) == (ends[1] > 0)
-    assert money_weighted_return(flows) is None
+    assert money_weighted_return(flows) == Unavailable("out_of_range")
 
 
 def test_fund_twr_requires_the_same_fund() -> None:

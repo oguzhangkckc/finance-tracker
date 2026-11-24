@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
@@ -6,6 +6,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from finans.domain.allocation import (
+    ContributionLine,
     Direction,
     DriftDecision,
     DriftEvent,
@@ -13,11 +14,17 @@ from finans.domain.allocation import (
     deviations,
     drift_fingerprint,
     evaluate_drift,
+    evaluate_portfolio_drift,
+    plan_contribution,
+    quiet_period_over,
+    quiet_threshold,
+    round_to_cents,
     should_notify,
     validate_targets,
     weights,
 )
 from finans.domain.models import DomainError
+from finans.domain.portfolio import AlertThresholds
 from tests.support.decimals import is_close
 
 D = Decimal
@@ -271,3 +278,122 @@ def test_allocation_properties(
             assert reached <= target or is_close(reached, target, rel_tol=EXACT, abs_tol=EXACT)
         else:
             assert amount == 0
+
+
+class TestQuietPeriod:
+    def test_threshold_is_three_monthly_contributions_or_zero_without_one(self) -> None:
+        assert quiet_threshold(D(5000)) == D(15000)
+        assert quiet_threshold(None) == D(0)
+
+    @pytest.mark.parametrize(
+        ("value", "contribution", "ended_on", "over"),
+        [
+            (D("14999.99"), D(5000), None, False),
+            (D(15000), D(5000), None, True),
+            (D(100), D(5000), date(2026, 5, 1), True),
+            (D(0), None, None, True),
+        ],
+        ids=["esigin-alti", "esikte", "bitmis-donem-geri-donmez", "katki-tanimsiz"],
+    )
+    def test_quiet_period_is_over(
+        self, value: Decimal, contribution: Decimal | None, ended_on: date | None, over: bool
+    ) -> None:
+        assert quiet_period_over(value, contribution, ended_on=ended_on) is over
+
+
+@given(st.lists(st.decimals(min_value=D(0), max_value=D(30000), places=2), min_size=1, max_size=40))
+def test_quiet_period_ends_once_and_never_returns(values: list[Decimal]) -> None:
+    ended_on: date | None = None
+    states = []
+    for day, value in enumerate(values):
+        over = quiet_period_over(value, D(5000), ended_on=ended_on)
+        if over and ended_on is None:
+            ended_on = date(2026, 1, 1) + timedelta(days=day)
+        states.append(over)
+    first = states.index(True) if True in states else len(states)
+    assert all(states[first:])
+
+
+def test_each_class_is_evaluated_against_its_open_alert() -> None:
+    values = {"hisse": D(700), "dusuk_risk": D(250), "altin": D(50)}
+
+    decisions = evaluate_portfolio_drift(values, TARGETS, {"altin": "below"}, AlertThresholds())
+
+    assert decisions == [
+        DriftDecision("drift:altin", "below", ()),
+        DriftDecision("drift:dusuk_risk", None, ()),
+        DriftDecision("drift:hisse", "above", (DriftEvent("opened", "above"),)),
+    ]
+
+
+class TestRoundToCents:
+    def test_missing_cents_go_to_the_largest_remainders(self) -> None:
+        assert round_to_cents({"x": D("10.004"), "y": D("9.996")}, D(20)) == {
+            "x": D("10.00"),
+            "y": D("10.00"),
+        }
+
+    def test_equal_remainders_are_broken_by_name(self) -> None:
+        third = D(100) / D(3)
+        assert round_to_cents({"b": third, "a": third, "c": third}, D(100)) == {
+            "a": D("33.34"),
+            "b": D("33.33"),
+            "c": D("33.33"),
+        }
+
+    @pytest.mark.parametrize(
+        ("amounts", "total"),
+        [({"a": D(10)}, D("10.02")), ({"a": D(-1), "b": D(2)}, D(1)), ({"a": D(1)}, D("1.005"))],
+        ids=["toplam-tutmuyor", "negatif", "kurus-alti-toplam"],
+    )
+    def test_invalid_input_is_rejected(self, amounts: dict[str, Decimal], total: Decimal) -> None:
+        with pytest.raises(DomainError):
+            round_to_cents(amounts, total)
+
+
+@given(portfolios())
+def test_rounded_contribution_keeps_the_total_to_the_cent(
+    portfolio: tuple[dict[str, Decimal], dict[str, Decimal], Decimal],
+) -> None:
+    values, targets, contribution = portfolio
+    exact = allocate_contribution(values, targets, contribution)
+    rounded = round_to_cents(exact, contribution)
+    assert sum(rounded.values(), D(0)) == contribution
+    for name, amount in rounded.items():
+        assert amount >= 0
+        assert amount == amount.quantize(D("0.01"))
+        assert abs(amount - exact[name]) < D("0.01")
+
+
+class TestContributionPlan:
+    def test_class_share_is_split_by_fund_value_and_rounded(self) -> None:
+        funds = {
+            "hisse": {"AAA": D(300), "BBB": D(100)},
+            "dusuk_risk": {"CCC": D(400)},
+            "altin": {"DDD": D(200)},
+        }
+        assert plan_contribution(funds, TARGETS, D(1000)) == [
+            ContributionLine("altin", "DDD", D("0.00")),
+            ContributionLine("dusuk_risk", "CCC", D("200.00")),
+            ContributionLine("hisse", "AAA", D("600.00")),
+            ContributionLine("hisse", "BBB", D("200.00")),
+        ]
+
+    def test_class_without_value_is_split_equally(self) -> None:
+        funds = {
+            "hisse": {"AAA": D(0), "BBB": D(0)},
+            "dusuk_risk": {"CCC": D(0)},
+            "altin": {"DDD": D(0)},
+        }
+        plan = plan_contribution(funds, TARGETS, D("100.01"))
+        assert [(line.instrument, line.amount) for line in plan] == [
+            ("DDD", D("10.00")),
+            ("CCC", D("30.00")),
+            ("AAA", D("30.01")),
+            ("BBB", D("30.00")),
+        ]
+
+    def test_class_without_a_fund_is_rejected(self) -> None:
+        funds = {"hisse": {}, "dusuk_risk": {"CCC": D(1)}, "altin": {"DDD": D(1)}}
+        with pytest.raises(DomainError, match="hisse"):
+            plan_contribution(funds, TARGETS, D(100))

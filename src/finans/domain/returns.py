@@ -2,7 +2,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Final
+from typing import Final, Literal
 
 from finans.domain.inflation import CpiSeries, deflator
 from finans.domain.models import ZERO, CashFlow, DomainError, PricePoint, Transaction
@@ -21,6 +21,13 @@ class PeriodReturn:
     rate: Decimal
     annualized: bool
     days: int
+
+
+@dataclass(frozen=True, slots=True)
+class Unavailable:
+    """K-44: "undefined" akış yok, işaret değişmiyor ya da D = 0; "out_of_range" kök yok."""
+
+    reason: Literal["out_of_range", "undefined"]
 
 
 @in_domain_context
@@ -74,16 +81,16 @@ def net_present_value(flows: Sequence[CashFlow], rate: Decimal, *, day_count: in
 
 
 @in_domain_context
-def money_weighted_return(flows: Sequence[CashFlow]) -> PeriodReturn | None:
+def money_weighted_return(flows: Sequence[CashFlow]) -> PeriodReturn | Unavailable:
     if not flows or not _has_sign_change(flows):
-        return None
+        return Unavailable("undefined")
     days = (max(f.on for f in flows) - min(f.on for f in flows)).days
     if days == 0:
-        return None
+        return Unavailable("undefined")
     day_count = YEAR_DAYS if days >= YEAR_DAYS else days
     rate = solve_irr(flows, day_count=day_count, guess=_initial_guess(flows, day_count, days))
     if rate is None:
-        return None
+        return Unavailable("out_of_range")
     return PeriodReturn(rate=rate, annualized=days >= YEAR_DAYS, days=days)
 
 
