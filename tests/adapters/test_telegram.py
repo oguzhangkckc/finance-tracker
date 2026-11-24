@@ -71,3 +71,15 @@ def test_http_failure_is_an_error_without_the_token(notifier: TelegramNotifier) 
 
     assert TOKEN not in str(failure.value)
     assert "chat not found" in str(failure.value)
+
+
+@respx.mock
+def test_prefix_opens_every_message(clock: FixedClock) -> None:
+    route = respx.post(URL).mock(return_value=SENT)
+    with HttpClient(clock, secrets=[TOKEN]) as http:
+        prefixed = TelegramNotifier(
+            http, token=TOKEN, chat_id="42", base_url="https://api.telegram.org", prefix="ÖNEK"
+        )
+        prefixed.send("Rapor", silent=True)
+
+    assert json.loads(route.calls.last.request.content)["text"] == "ÖNEK\n\nRapor"

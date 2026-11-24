@@ -68,7 +68,8 @@ Geliştirme kapısı: `make check` yeşil; CLI çıktıları ve snapshot'lar de�
 
 ## S · Sanal portföy
 `FT_PROFILE=sanal`: ayrı ve işaretli veritabanı; gerçek fonlar, fiyatlar ve TÜFE; tutarla işlem girişi (fiyat yalnızca o günün kaydından, tam sayı pay); raporlar, maaş günü mesajı, alarmlar ve dengeleme gerçek kodla; `ft sanal maas-gunu-uygula` (önizleme ve onay); SANAL işaretleri; ping yok; sanal yedek ayrı ve şifreli dosya; ayrı timer şablonu (K-107…K-113).
-Ön koşul: fiyat verisinin kaynağı kullanıcı tarafından belirlenmiş ve sanal işlemlerin tarihleri için fiyatlar sanal veritabanında var.
+Ön koşul: fiyat verisinin kaynağı kullanıcı tarafından belirlenmiş ve sanal işlemlerin tarihleri için fiyatlar sanal veritabanında var; bu ön koşul yalnızca sanal `sync-prices` timer'ını ve geçmiş tarihli işlemleri bekletir.
+Komutlar (K-116): `ft sanal init|reset|al|sat|maas-gunu-uygula`; sunucuda `deploy/ft-sanal`; kurulum DESIGN Kurulum adım 10. Elle fiyat raporda "elle" etiketiyle (K-117); JSON'da her raporda `profile` (K-118).
 Geliştirme kapısı: profil ayrımı testleri yeşil (sanal işlem gerçek veritabanına giremez, gerçek profil sanal veritabanını açmaz); tutarla işlem testleri (fiyat günü, yuvarlama, fiyat yoksa red); maaş günü uygulaması testleri (önizleme yazmaz, fiyatsız fon atlanır, ikinci uygulama reddedilir); sanal profilde ping çağrılmıyor; sanal yedek ayrı dosyada ve gerçek yedeğin budamasından etkilenmiyor.
 
 ## W1 · Web arayüzü, salt okuma

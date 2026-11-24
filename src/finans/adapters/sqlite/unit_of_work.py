@@ -38,14 +38,17 @@ class SqliteUnitOfWork:
     alerts: AlertRepo
     allocation_state: AllocationStateRepo
 
-    def __init__(self, path: Path, *, readonly: bool = False) -> None:
+    def __init__(self, path: Path, *, readonly: bool = False, sanal: bool = False) -> None:
         self._path = path
         self._readonly = readonly
+        self._sanal = sanal
         self._stack = ExitStack()
 
     def __enter__(self) -> Self:
         with ExitStack() as stack:
-            conn = stack.enter_context(closing(connect(self._path, readonly=self._readonly)))
+            conn = stack.enter_context(
+                closing(connect(self._path, readonly=self._readonly, sanal=self._sanal))
+            )
             stack.enter_context(transaction(conn, immediate=not self._readonly))
             self.instruments = SqliteInstrumentRepo(conn)
             self.transactions = SqliteTransactionRepo(conn)

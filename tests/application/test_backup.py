@@ -9,6 +9,8 @@ import pytest
 
 from finans.adapters.sqlite.snapshot import SqliteCopier
 from finans.application.backup import (
+    REAL_PREFIX,
+    SANAL_PREFIX,
     BackupOutcome,
     create_backup,
     files_with_secret_keys,
@@ -50,6 +52,7 @@ def _backup(
     now: datetime = NOW,
     copier: DatabaseCopier | None = None,
     recipients: Sequence[str] = KEYS,
+    prefix: str = REAL_PREFIX,
 ) -> BackupOutcome:
     return create_backup(
         copier=copier or SqliteCopier(db),
@@ -58,6 +61,7 @@ def _backup(
         directory=tmp / "yedek",
         scratch_parent=tmp / "gecici",
         now=now,
+        prefix=prefix,
     )
 
 
@@ -148,3 +152,27 @@ def test_secret_keys_are_found_in_files_and_directories(tmp_path: Path) -> None:
     (credentials / "age").write_text("AGE-SECRET-KEY-1ABC\n", encoding="utf-8")
 
     assert files_with_secret_keys([env, credentials]) == [credentials / "age"]
+
+
+def test_sanal_backups_are_separate_files_pruned_and_verified_on_their_own(
+    migrated_db: Path, tmp_path: Path
+) -> None:
+    for hour in range(15):
+        _backup(migrated_db, tmp_path, FakeEncryptor(), now=NOW + timedelta(hours=hour))
+    for hour in range(2):
+        _backup(
+            migrated_db,
+            tmp_path,
+            FakeEncryptor(),
+            now=NOW + timedelta(hours=hour),
+            prefix=SANAL_PREFIX,
+        )
+
+    directory = tmp_path / "yedek"
+    sanal = sorted(path.name for path in directory.glob("sanal-*.db.age"))
+    real = sorted(path.name for path in directory.glob("finans-*.db.age"))
+    assert sanal == ["sanal-20261130T000000Z.db.age", "sanal-20261130T010000Z.db.age"]
+    assert len(real) == 14
+    checked = [c.name for c in verify_backups(directory) if c.ok]
+    assert set(sanal) <= set(checked)
+    assert set(real) <= set(checked)

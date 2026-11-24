@@ -73,7 +73,9 @@ def _one(entries: list[tuple[str, str]], key: str) -> str:
 
 
 def test_every_job_has_a_persistent_timer_in_istanbul_time() -> None:
-    timers = sorted(path.name for path in UNITS.glob("*.timer"))
+    timers = sorted(
+        path.name for path in UNITS.glob("*.timer") if not path.name.startswith("finans-sanal-")
+    )
     assert timers == sorted(f"finans-{job}.timer" for job in JOBS)
     for job in JOBS:
         unit = _unit(UNITS / f"finans-{job}.timer")
@@ -171,3 +173,44 @@ def test_environment_example_holds_no_secrets() -> None:
     }
     assert not keys & {name.upper() for name in SECRETS}
     assert "AGE-SECRET-KEY" not in example
+    # K-107: profil ortak ayar dosyasında seçilmez; sanal işler kendi birimlerinde seçer.
+    assert "FT_PROFILE" not in keys
+
+
+SANAL_JOBS = ("sync-cpi", "weekly-report", "monthly-report", "payday", "backup")
+SANAL_SECRETS = ["ft_evds_api_key", "ft_telegram_bot_token"]
+
+
+def test_sanal_timers_follow_the_real_calendar_without_price_sync_until_decided() -> None:
+    timers = sorted(path.name for path in UNITS.glob("finans-sanal-*.timer"))
+    assert timers == sorted(f"finans-sanal-{job}.timer" for job in SANAL_JOBS)
+    calendars = {**CALENDARS, "backup": "*-*-* 03:15 Europe/Istanbul"}
+    for job in SANAL_JOBS:
+        unit = _unit(UNITS / f"finans-sanal-{job}.timer")
+        assert _one(unit["Timer"], "OnCalendar") == calendars[job]
+        assert _one(unit["Timer"], "Persistent") == "true"
+        assert _one(unit["Timer"], "Unit") == f"finans-sanal-job@{job}.service"
+        assert _one(unit["Install"], "WantedBy") == "timers.target"
+
+
+def test_sanal_service_is_the_real_one_in_the_sanal_profile_without_ping_secrets() -> None:
+    sanal = _unit(UNITS / "finans-sanal-job@.service")["Service"]
+    real = _unit(UNITS / "finans-job@.service")["Service"]
+
+    assert _one(sanal, "Environment") == "FT_PROFILE=sanal"
+    for key in ("Type", "User", "Group", "WorkingDirectory", "EnvironmentFile", "ExecStart"):
+        assert _one(sanal, key) == _one(real, key)
+    assert {name: _one(sanal, name) for name in HARDENING} == HARDENING
+    loaded = [value for name, value in sanal if name == "LoadCredential"]
+    assert loaded == [f"{name}:/etc/finans/credstore/{name}" for name in SANAL_SECRETS]
+
+
+def test_sanal_wrapper_runs_like_the_sanal_service() -> None:
+    wrapper = (DEPLOY / "ft-sanal").read_text(encoding="utf-8")
+    properties = dict(re.findall(r"-p (\w+)=(\S+)", wrapper))
+    loop = re.search(r"for name in (.+); do", wrapper)
+
+    assert properties["Environment"] == "FT_PROFILE=sanal"
+    assert {name: properties.get(name) for name in HARDENING} == HARDENING
+    assert loop is not None
+    assert loop[1].split() == SANAL_SECRETS

@@ -14,6 +14,14 @@ from finans.application.backup import verify_backups
 from finans.application.cpi import CPI_HISTORY_START, CpiSyncReport, sync_cpi
 from finans.application.data_check import DEFAULT_WINDOW, check_data, trade_price_issues
 from finans.application.inputs import InputError, parse_amount, parse_day, parse_period
+from finans.application.paper import (
+    PaydayPurchase,
+    PaydayPurchasePlan,
+    paper_buy,
+    paper_sell,
+    plan_payday_purchases,
+    record_payday_purchases,
+)
 from finans.application.portfolio_config import ApplyReport, apply_portfolio
 from finans.application.portfolio_view import portfolio_as_of
 from finans.application.price_sync import PriceSyncReport, sync_prices
@@ -26,6 +34,7 @@ from finans.application.transactions import (
     void_transaction,
 )
 from finans.cli._common import VersionOption
+from finans.contracts.report import SANAL_NOTICE
 from finans.domain.models import DomainError, InstrumentKind, Side, Transaction, YearMonth
 from finans.domain.numeric import canonical_text
 from finans.domain.portfolio import ConfigError, QualityThresholds
@@ -63,6 +72,10 @@ job_app = typer.Typer(
 )
 app.add_typer(job_app, name="job")
 backup_app = typer.Typer(no_args_is_help=True, help="Gece yedeği (K-82).")
+sanal_app = typer.Typer(
+    no_args_is_help=True, help="Sanal portföy (K-107); yalnızca FT_PROFILE=sanal ile."
+)
+app.add_typer(sanal_app, name="sanal")
 app.add_typer(backup_app, name="backup")
 
 
@@ -90,6 +103,9 @@ def migrate() -> None:
         run = bootstrap.migrate_database(settings)
     except bootstrap.MigrationError as exc:
         typer.echo(f"Migration hatası: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    except bootstrap.ProfileError as exc:
+        typer.echo(f"Hata: {exc}", err=True)
         raise typer.Exit(code=1) from exc
     if run.applied:
         typer.echo(f"Uygulanan migration'lar: {', '.join(map(str, run.applied))}")
@@ -134,6 +150,9 @@ def tx_add(
 ) -> None:
     """İşlem ekler."""
     settings = _load_settings_or_exit()
+    _refuse_in_sanal(
+        settings, "sanal profilde işlem `ft sanal al` ve `ft sanal sat` ile girilir (K-116)."
+    )
     parsed_date = _parse_date(trade_date)
     amounts = _parse_decimal("units", units), _parse_decimal("price", price)
     parsed_fee = _parse_decimal("fee", fee)
@@ -189,6 +208,10 @@ def tx_import(
 ) -> None:
     """CSV'den işlem içe aktarır; ya bütün satırlar yazılır ya hiçbiri."""
     settings = _load_settings_or_exit()
+    _refuse_in_sanal(
+        settings,
+        "sanal profilde CSV içe aktarma kapalı; CSV'deki fiyatlar elle yazılmıştır (K-116).",
+    )
     parsed = bootstrap.transaction_file().read(path)
     clock = bootstrap.system_clock()
     with _user_errors(), bootstrap.open_unit_of_work(settings) as uow:
@@ -673,7 +696,7 @@ def report_payday(
             else _parse_decimal("--contribution", contribution)
         )
         with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
-            plan = payday_plan(uow, config, on=day, contribution=amount)
+            plan = payday_plan(uow, config, on=day, contribution=amount, profile=settings.profile)
     renderer = bootstrap.report_renderer(fmt.value, payday_amounts=not hide_amounts)
     typer.echo(renderer.payday(plan))
 
@@ -704,8 +727,165 @@ def _show_report(
                 contribution=amount,
                 now=clock.now(),
                 cpi_series=settings.cpi_series,
+                profile=settings.profile,
             )
     typer.echo(bootstrap.report_renderer(fmt.value, hide_amounts=hide).report(report))
+
+
+@sanal_app.command("init")
+def sanal_init_command() -> None:
+    """Sanal portföy veritabanını kurar ve portföy tanımını uygular (K-107)."""
+    settings = _load_settings_or_exit()
+    with _user_errors():
+        bootstrap.require_sanal(settings)
+        config = bootstrap.portfolio_source().load(_portfolio_path(settings, None))
+        bootstrap.sanal_init(settings)
+        with bootstrap.open_unit_of_work(settings) as uow:
+            report = apply_portfolio(uow, config)
+    typer.echo(f"Sanal veritabanı kuruldu: {settings.db_path}")
+    _print_apply(report)
+
+
+@sanal_app.command("al")
+def sanal_buy_command(
+    code: Annotated[str, typer.Argument(help="Fon kodu")],
+    amount: Annotated[str, typer.Option("--tutar", help="Yatırılacak tutar (TL)")],
+    day: Annotated[str, typer.Option("--tarih", help="Fiyat günü (YYYY-AA-GG)")],
+    fee: Annotated[str, typer.Option("--komisyon", help="Komisyon (TL)")] = "0",
+) -> None:
+    """Tutarla sanal alım; adet o günün kayıtlı fiyatından, artan tutar fona girmez (K-116)."""
+    settings = _load_settings_or_exit()
+    with _user_errors():
+        bootstrap.require_sanal(settings)
+    parsed_day = _parse_date(day)
+    parsed_amount, parsed_fee = _parse_decimal("--tutar", amount), _parse_decimal("--komisyon", fee)
+    with _user_errors(), bootstrap.open_unit_of_work(settings) as uow:
+        trade = paper_buy(
+            uow,
+            code=code,
+            amount=parsed_amount,
+            day=parsed_day,
+            fee=parsed_fee,
+            now=bootstrap.system_clock().now(),
+        )
+    leftover = trade.leftover if trade.leftover is not None else Decimal(0)
+    typer.echo(
+        f"Sanal alım #{trade.txn_id}: {code} {canonical_text(trade.units)} pay × "
+        f"{canonical_text(trade.price)} ({trade.day.isoformat()}) = "
+        f"{canonical_text(trade.spent)} TL; artan {canonical_text(leftover)} TL"
+    )
+
+
+@sanal_app.command("sat")
+def sanal_sell_command(
+    code: Annotated[str, typer.Argument(help="Fon kodu")],
+    units: Annotated[str, typer.Argument(help="Adet")],
+    day: Annotated[str, typer.Option("--tarih", help="Fiyat günü (YYYY-AA-GG)")],
+) -> None:
+    """Adetle sanal satış; fiyat o günün kayıtlı fiyatıdır (K-116)."""
+    settings = _load_settings_or_exit()
+    with _user_errors():
+        bootstrap.require_sanal(settings)
+    parsed_day, parsed_units = _parse_date(day), _parse_decimal("units", units)
+    with _user_errors(), bootstrap.open_unit_of_work(settings) as uow:
+        trade = paper_sell(
+            uow, code=code, units=parsed_units, day=parsed_day, now=bootstrap.system_clock().now()
+        )
+    typer.echo(
+        f"Sanal satış #{trade.txn_id}: {code} {canonical_text(trade.units)} pay × "
+        f"{canonical_text(trade.price)} ({trade.day.isoformat()}) = "
+        f"{canonical_text(trade.spent)} TL"
+    )
+
+
+@sanal_app.command("maas-gunu-uygula")
+def sanal_payday_command(
+    payday: Annotated[
+        str | None,
+        typer.Option("--maas-gunu", help="YYYY-AA-GG; verilmezse son maaş günü."),
+    ] = None,
+) -> None:
+    """Maaş günü planını sanal alımlara çevirir; önce önizleme, onaylanınca kayıt (K-113)."""
+    settings = _load_settings_or_exit()
+    with _user_errors():
+        bootstrap.require_sanal(settings)
+    clock = bootstrap.system_clock()
+    with _user_errors():
+        config = bootstrap.portfolio_source().load(_portfolio_path(settings, None))
+        if config.payday is None:
+            raise DomainError("portfolio.toml'da [contribution] payday tanımlı değil.")
+        day = (
+            _parse_date(payday)
+            if payday is not None
+            else logical_date("payday", clock.now().astimezone(BUSINESS_TZ), payday=config.payday)
+        )
+        with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+            plan = plan_payday_purchases(uow, config, payday=day, today=clock.today())
+    _print_payday_purchases(plan)
+    if not any(line.status == "ready" for line in plan.lines):
+        return
+    answer = typer.prompt("Kaydedilsin mi? (e/H)", default="H", show_default=False)
+    if answer.strip().casefold() not in {"e", "evet"}:
+        typer.echo("Kaydedilmedi.")
+        return
+    with _user_errors(), bootstrap.open_unit_of_work(settings) as uow:
+        trades = record_payday_purchases(uow, plan, now=clock.now())
+    typer.echo(f"Kaydedildi: {len(trades)} sanal alım.")
+
+
+def _print_payday_purchases(plan: PaydayPurchasePlan) -> None:
+    typer.echo(
+        f"Maaş günü {plan.payday.isoformat()}, sanal alım önizlemesi; fiyat günü maaş gününden "
+        f"sonraki ilk fiyatlı gün, pencere {plan.window_end.isoformat()} tarihinde biter."
+    )
+    if plan.missing_prices:
+        typer.echo(
+            f"Maaş günü planı hesaplanmadı: {', '.join(plan.missing_prices)} için fiyat yok "
+            "(K-95); hiçbir işlem yapılmadı."
+        )
+        return
+    for line in plan.lines:
+        typer.echo(_payday_line(line, plan))
+
+
+def _payday_line(line: PaydayPurchase, plan: PaydayPurchasePlan) -> str:
+    head = f"{line.asset_class} {line.instrument}: {canonical_text(line.amount)} TL"
+    if line.status == "ready" and line.units is not None and line.price is not None:
+        leftover = canonical_text(line.leftover or Decimal(0))
+        return (
+            f"{head} → fiyat günü {line.price_day}, {canonical_text(line.units)} pay × "
+            f"{canonical_text(line.price)} = {canonical_text(line.spent or Decimal(0))} TL; "
+            f"artan {leftover} TL"
+        )
+    if line.status == "pending":
+        return (
+            f"{head} → fiyat henüz açıklanmadı; {plan.retry_after.isoformat()} tarihinden "
+            "sonra tekrar çalıştır."
+        )
+    if line.status == "expired":
+        return f"{head} → pencerede fiyat yok; işlem yapılmadı, tutar başka fona aktarılmaz."
+    if line.status == "applied":
+        return f"{head} → zaten uygulandı."
+    return f"{head} → işlem yapılmadı: {line.reason}"
+
+
+@sanal_app.command("reset")
+def sanal_reset_command(
+    confirmed: Annotated[bool, typer.Option("--evet", help="Silmeyi onaylar.")] = False,
+) -> None:
+    """Sanal veritabanını siler; yalnızca sanal olarak işaretli dosya silinir."""
+    settings = _load_settings_or_exit()
+    with _user_errors():
+        bootstrap.require_sanal(settings)
+    if not confirmed:
+        typer.echo(
+            "Sanal veritabanı ve bütün sanal işlemler silinir; onay için --evet ver.", err=True
+        )
+        raise typer.Exit(code=2)
+    with _user_errors():
+        removed = bootstrap.sanal_reset(settings)
+    for path in removed:
+        typer.echo(f"Silindi: {path}")
 
 
 @app.command("doctor")
@@ -736,6 +916,12 @@ def _format_transaction(stored: StoredTransaction) -> str:
     if stored.is_voided:
         parts.append(f"[İPTAL: {stored.void_reason}]")
     return "  ".join(parts)
+
+
+def _refuse_in_sanal(settings: Settings, reason: str) -> None:
+    if bootstrap.is_sanal_profile(settings):
+        typer.echo(f"Hata: {reason}", err=True)
+        raise typer.Exit(code=1)
 
 
 def _usage_error(error: InputError) -> NoReturn:
@@ -796,6 +982,7 @@ def _user_errors() -> Iterator[None]:
     except (
         DomainError,
         bootstrap.MigrationError,
+        bootstrap.ProfileError,
         bootstrap.SetupError,
         bootstrap.SourceError,
         bootstrap.NotifyError,
@@ -816,13 +1003,22 @@ def _portfolio_path(settings: Settings, file: Path | None) -> Path:
 
 def _load_settings_or_exit() -> Settings:
     try:
-        return load_settings()
+        settings = load_settings()
     except ValidationError as exc:
-        # Yalnızca alan adları yazdırılır; değerler sır içerebilir.
-        fields = ", ".join(".".join(map(str, error["loc"])) for error in exc.errors())
-        typer.echo(
-            f"Ayarlar eksik ya da geçersiz: {fields}. "
-            "FT_ önekli ortam değişkenlerini ya da .env dosyasını kontrol et.",
-            err=True,
-        )
+        # Alan hatalarında yalnızca alan adı yazdırılır; değerler sır içerebilir. Alansız
+        # hatalar kendi doğrulayıcılarımızdandır ve değer içermez.
+        errors = exc.errors()
+        fields = ", ".join(".".join(map(str, e["loc"])) for e in errors if e["loc"])
+        rules = [str(e["msg"]).removeprefix("Value error, ") for e in errors if not e["loc"]]
+        for rule in rules:
+            typer.echo(f"Ayar hatası: {rule}", err=True)
+        if fields:
+            typer.echo(
+                f"Ayarlar eksik ya da geçersiz: {fields}. "
+                "FT_ önekli ortam değişkenlerini ya da .env dosyasını kontrol et.",
+                err=True,
+            )
         raise typer.Exit(code=2) from exc
+    if bootstrap.is_sanal_profile(settings):
+        typer.echo(SANAL_NOTICE, err=True)
+    return settings

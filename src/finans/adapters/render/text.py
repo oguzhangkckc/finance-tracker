@@ -10,11 +10,13 @@ from datetime import datetime
 
 from finans.contracts.display import money, percent, points
 from finans.contracts.report import (
+    SANAL_NOTICE,
     AlertLine,
     AlertNotice,
     DataIssueLine,
     HoldingLine,
     PaydayPlan,
+    Profile,
     Report,
     ReturnFigure,
 )
@@ -34,6 +36,8 @@ _SAME_PERIOD_NOTE = (
     "Alımlar ve değerleme aynı TÜFE dönemine düştüğü için reel getiri henüz nominalle aynı."
 )
 _CODE = re.compile(r"`([^`]+)`")
+# K-117: elle girilen fiyat gözden kaçmasın; TEFAS kaynağının yazımı değişmez.
+_SOURCE_LABELS = {"manual": "elle"}
 
 
 def _local(moment: datetime | None) -> str:
@@ -54,12 +58,16 @@ class TextRenderer:
         self._payday_amounts = payday_amounts
         self._html = html
 
+    def _profile(self, profile: Profile) -> list[str]:
+        """Telegram'da (html) işaret satırını bildirici ekler; iki kez yazılmasın (K-110)."""
+        return [SANAL_NOTICE] if profile == "sanal" and not self._html else []
+
     def report(self, report: Report) -> str:
         sections = [self._summary(report), self._holdings(report), self._allocation(report)]
         if report.kind == "monthly":
             sections += [self._returns(report), self._lots(report), self._rebalance(report)]
         sections += [_alerts(report.alerts), _issues(report.data_issues), _health(report)]
-        return self._markup("\n\n".join(sections))
+        return self._markup("\n\n".join(self._profile(report.profile) + sections))
 
     def payday(self, plan: PaydayPlan) -> str:
         lines = [f"Maaş günü ({plan.logical_date})"]
@@ -80,8 +88,12 @@ class TextRenderer:
                 share = percent(line.share, places=1)
                 amount = f"{money(line.amount)} ({share})" if show else f"katkının {share}"
                 lines.append(f"{line.asset_class} {line.instrument}: {amount}")
-            lines.append("Alımları `ft tx add` ile gir.")
-        return self._markup("\n".join(lines))
+            lines.append(
+                "Sanal alımları `ft sanal maas-gunu-uygula` ile uygula."
+                if plan.profile == "sanal"
+                else "Alımları `ft tx add` ile gir."
+            )
+        return self._markup("\n\n".join([*self._profile(plan.profile), "\n".join(lines)]))
 
     def alerts(self, notices: list[AlertNotice]) -> str:
         lines = ["Sapma uyarıları"]
@@ -166,7 +178,8 @@ class TextRenderer:
         else:
             worth = money(holding.value)
         parts = [] if worth is None else [worth]
-        parts.append(f"fiyat {holding.price_date} ({holding.source})")
+        source = _SOURCE_LABELS.get(holding.source or "", holding.source)
+        parts.append(f"fiyat {holding.price_date} ({source})")
         if holding.simple_return is not None:
             parts.append(f"basit getiri {percent(holding.simple_return)}")
         if holding.real_return is not None:

@@ -10,7 +10,7 @@ for timer in "$units"/*.timer; do
   systemd-analyze calendar "$expression" > /dev/null
 done
 
-# Şablon doğrudan doğrulanamaz; her iş için bir örnek kopyası kurulur. ExecStart ve
+# Şablon doğrudan doğrulanamaz; her iş için kendi şablonundan (gerçek ya da sanal) bir örnek kurulur. ExecStart ve
 # EnvironmentFile sunucudaki yollara işaret ettiği için CI'da zararsız değerlerle değişir.
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -18,7 +18,7 @@ cp "$units"/*.timer "$work"/
 for timer in "$units"/*.timer; do
   instance="$(sed -n 's/^Unit=//p' "$timer")"
   sed -e 's#^ExecStart=.*#ExecStart=/bin/true#' -e '/^EnvironmentFile=/d' \
-    "$units/finans-job@.service" > "$work/$instance"
+    "$units/${instance%%@*}@.service" > "$work/$instance"
 done
-systemd-analyze verify --man=no "$work"/*.timer "$work"/finans-job@?*.service
+systemd-analyze verify --man=no "$work"/*.timer "$work"/finans-*job@?*.service
 echo "systemd birimleri geçerli."

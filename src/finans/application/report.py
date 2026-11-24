@@ -19,6 +19,7 @@ from finans.contracts.report import (
     LotLine,
     PaydayLine,
     PaydayPlan,
+    Profile,
     Provenance,
     RebalanceLine,
     RebalancePlan,
@@ -61,6 +62,7 @@ def build_report(
     contribution: Decimal | None,
     now: datetime,
     cpi_series: str,
+    profile: Profile = "real",
 ) -> Report:
     """`contribution` bu ayki katkıdır: config ya da --contribution; None ise tanımlı değil.
 
@@ -102,6 +104,7 @@ def build_report(
             summary, transactions, instruments, split, series, logical_date, skipped
         )
     return Report(
+        profile=profile,
         kind=kind,
         logical_date=logical_date,
         summary=summary,
@@ -145,7 +148,12 @@ def build_report(
 
 
 def payday_plan(
-    uow: UnitOfWork, config: PortfolioConfig, *, on: date, contribution: Decimal | None
+    uow: UnitOfWork,
+    config: PortfolioConfig,
+    *,
+    on: date,
+    contribution: Decimal | None,
+    profile: Profile = "real",
 ) -> PaydayPlan:
     """Maaş günü mesajı: katkının sınıf ve fon bazında dağılımı (K-83)."""
     if contribution is None:
@@ -160,10 +168,15 @@ def payday_plan(
     ]
     if skipped:
         return PaydayPlan(
-            logical_date=on, contribution=contribution, lines=[], missing_prices=skipped
+            profile=profile,
+            logical_date=on,
+            contribution=contribution,
+            lines=[],
+            missing_prices=skipped,
         )
     funds = _funds(valuation, instruments, config.targets)
     return PaydayPlan(
+        profile=profile,
         logical_date=on,
         contribution=contribution,
         lines=[

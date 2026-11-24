@@ -14,6 +14,7 @@ from finans.application.backup import BackupOutcome
 from finans.application.cpi import sync_cpi
 from finans.application.price_sync import TEFAS_KINDS, sync_prices
 from finans.application.report import ReportKind, build_report, payday_plan
+from finans.contracts.report import Profile
 from finans.domain.models import YearMonth
 from finans.domain.portfolio import PortfolioConfig
 from finans.ports.clock import Clock
@@ -63,6 +64,7 @@ class JobContext:
     renderer: ReportRenderer
     weekly_enabled: bool
     backup: Callable[[datetime], BackupOutcome] | None = None
+    profile: Profile = "real"
 
 
 def run_job(
@@ -230,6 +232,7 @@ def _send_report(ctx: JobContext, kind: ReportKind, day: date, *, note: str | No
             contribution=ctx.config.monthly_contribution,
             now=ctx.clock.now(),
             cpi_series=ctx.cpi_series,
+            profile=ctx.profile,
         )
     text = ctx.renderer.report(report)
     _send(ctx, text if note is None else f"{note}\n\n{text}")
@@ -242,7 +245,13 @@ def _payday(day: date, ctx: JobContext) -> JobResult:
     if ctx.clock.today() - day > PAYDAY_WINDOW:
         return JobResult("ok", {"gönderim": "atlandı: pencere geçti", "maaş_günü": str(day)})
     with ctx.open_uow() as uow:
-        plan = payday_plan(uow, ctx.config, on=day, contribution=ctx.config.monthly_contribution)
+        plan = payday_plan(
+            uow,
+            ctx.config,
+            on=day,
+            contribution=ctx.config.monthly_contribution,
+            profile=ctx.profile,
+        )
     _send(ctx, ctx.renderer.payday(plan))
     return JobResult("ok", {"gönderim": "gönderildi", "eksik_fiyat": plan.missing_prices})
 

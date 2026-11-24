@@ -85,3 +85,57 @@ def test_tefas_settings_default_to_a_polite_interval(
     monkeypatch.setenv("FT_TEFAS_MIN_INTERVAL_S", "3")
     with pytest.raises(ValidationError, match="tefas_min_interval_s"):
         load_settings()
+
+
+def test_real_profile_is_the_default_and_keeps_its_paths(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("FT_DB_PATH", str(tmp_path / "finans.db"))
+    monkeypatch.setenv("FT_PORTFOLIO_PATH", str(tmp_path / "portfolio.toml"))
+    settings = load_settings()
+
+    assert settings.profile == "real"
+    assert settings.db_path == tmp_path / "finans.db"
+    assert settings.lock_dir is None
+
+
+def test_sanal_profile_uses_its_own_database_and_locks_but_the_same_portfolio(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("FT_DB_PATH", str(tmp_path / "finans.db"))
+    monkeypatch.setenv("FT_PORTFOLIO_PATH", str(tmp_path / "portfolio.toml"))
+    monkeypatch.setenv("FT_PROFILE", "sanal")
+    settings = load_settings()
+
+    assert settings.db_path == tmp_path / "sanal.db"
+    assert settings.portfolio_path == tmp_path / "portfolio.toml"
+    assert settings.lock_dir == tmp_path / "locks" / "sanal"
+
+
+def test_sanal_paths_can_be_set_explicitly(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("FT_DB_PATH", str(tmp_path / "finans.db"))
+    monkeypatch.setenv("FT_PROFILE", "sanal")
+    monkeypatch.setenv("FT_SANAL_DB_PATH", str(tmp_path / "deneme" / "s.db"))
+    monkeypatch.setenv("FT_SANAL_PORTFOLIO_PATH", str(tmp_path / "s.toml"))
+    monkeypatch.setenv("FT_LOCK_DIR", str(tmp_path / "kilitler"))
+    settings = load_settings()
+
+    assert settings.db_path == tmp_path / "deneme" / "s.db"
+    assert settings.portfolio_path == tmp_path / "s.toml"
+    assert settings.lock_dir == tmp_path / "kilitler" / "sanal"
+
+
+def test_sanal_database_cannot_be_the_real_one(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("FT_DB_PATH", str(tmp_path / "finans.db"))
+    monkeypatch.setenv("FT_SANAL_DB_PATH", str(tmp_path / "finans.db"))
+    with pytest.raises(ValidationError, match="aynı dosya olamaz"):
+        load_settings()
+
+
+def test_unknown_profile_is_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("FT_DB_PATH", str(tmp_path / "finans.db"))
+    monkeypatch.setenv("FT_PROFILE", "demo")
+    with pytest.raises(ValidationError, match="profile"):
+        load_settings()

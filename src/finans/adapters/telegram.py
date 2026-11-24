@@ -41,12 +41,23 @@ def _pack(pieces: list[str], separator: str, limit: int) -> list[str]:
 class TelegramNotifier:
     """Rapor botu yalnızca gönderir (getUpdates yok) ve yalnızca kendi sohbetine yazar (K-22)."""
 
-    def __init__(self, http: HttpClient, *, token: str, chat_id: str, base_url: str) -> None:
+    def __init__(
+        self,
+        http: HttpClient,
+        *,
+        token: str,
+        chat_id: str,
+        base_url: str,
+        prefix: str | None = None,
+    ) -> None:
         self._http = http
+        self._prefix = prefix
         self._url = f"{base_url.rstrip('/')}/bot{token}/sendMessage"
         self._chat_id = chat_id
 
     def send(self, text: str, *, silent: bool) -> None:
+        if self._prefix is not None:
+            text = f"{self._prefix}\n\n{text}"
         for part in split_message(text):
             payload = {
                 "chat_id": self._chat_id,

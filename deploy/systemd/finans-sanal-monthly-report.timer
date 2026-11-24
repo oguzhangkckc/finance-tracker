@@ -1,0 +1,10 @@
+[Unit]
+Description=finans-takip: sanal portföy aylık rapor
+
+[Timer]
+OnCalendar=*-*-05..10 11:00 Europe/Istanbul
+Persistent=true
+Unit=finans-sanal-job@monthly-report.service
+
+[Install]
+WantedBy=timers.target

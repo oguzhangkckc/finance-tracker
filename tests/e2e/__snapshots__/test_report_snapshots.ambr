@@ -3,6 +3,7 @@
   '''
   {
     "schema_version": "1.0",
+    "profile": "real",
     "kind": "monthly",
     "logical_date": "2026-11-30",
     "summary": {

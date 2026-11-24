@@ -6,6 +6,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# K-118: her çıktıda vardır; sanal portföy (K-107) gerçek çıktıyla karışmasın.
+Profile = Literal["real", "sanal"]
+SANAL_NOTICE = "SANAL \u2014 gerçek alım değil"
+
 
 class _Model(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -121,6 +125,7 @@ class SystemHealth(_Model):
 
 class Report(_Model):
     schema_version: Literal["1.0"] = "1.0"
+    profile: Profile = "real"
     kind: Literal["weekly", "monthly"]
     logical_date: date
     summary: Summary
@@ -158,6 +163,7 @@ class PaydayLine(_Model):
 class PaydayPlan(_Model):
     """Dağılım içi bir fonun fiyatı yoksa öneri yapılmaz; `missing_prices` doludur (K-95)."""
 
+    profile: Profile = "real"
     logical_date: date
     contribution: Decimal
     lines: list[PaydayLine]
