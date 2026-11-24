@@ -54,10 +54,12 @@ Not: Rapor kuralları: eksik fiyat açıkça yazılır ve dağılım, alarm, pla
 Not: Fiyatlar eksikken alarm değerlendirilmez (K-85); mantıksal tarihler K-86; sessiz dönem `allocation_state`'te (K-87); haftalık değişim önceki Pazar'a göre, Modified Dietz ile (K-88, K-94).
 Not: İş sonuçları: eksik fiyat ya da gönderilemeyen bildirim "partial"; aylık rapor TÜFE'yi ayın 10'una kadar bekler; ping yalnız "ok" ve "failed"da (K-96).
 Not: Evdeki Debian tabanlı cihazda systemd; tek şablon servis ve iş başına timer, `deploy/ft-finans`, maaş günü 3 günlük pencere, Mac yedekleri rrsync ile çeker (K-97).
-Not: Kurulumda ilk iş `ft doctor` ve `ft sync cpi` (K-91); Telegram kurulumu ve `ft notify test` kullanıcıda (K-89); M4 birimlerinde LoadCredential, sertleştirme M5'te (K-92).
+Not: Kurulumda ilk iş `ft doctor` ve `ft sync cpi` (K-91); Telegram kurulumu ve `ft notify test` kullanıcıda (K-89); M4 birimlerinde LoadCredential (K-92).
+Not: Cihaz başka projelerle paylaşıldığı için M4 birimlerinde ve `deploy/ft-finans`'ta NoNewPrivileges, PrivateTmp, ProtectSystem=strict, ReadWritePaths=/var/lib/finans ve ProtectHome var; kalan risk: birim sertleştirmesi root seviyesindeki bir saldırıya karşı korumaz (K-98). Sistem saat dilimi değiştirilmez, kurulumda yalnızca NTP açılır (K-99).
+Açık soru: Paylaşılan cihazın sertleştirmesi (SSH parola girişi, container portlarının bağlanması, IPv6 erişimi): gerçek işlemler girilmeden önce değerlendirilecek.
 
 ## M5 · OpenClaw ve güvenlik sertleştirmesi
-JSON anlık görüntüleri ve rrsync ile aktarımı (yalnızca çekirdekten dışarı), ft-agent (boru hattı ve veri tazeliği için iki ayrı bayatlık sinyali), JSON Schema kontratı, SKILL.md, PPK özeti akışı (oranlar kodla çıkarılır), asistan botu; iki makine, ayrı OS kullanıcıları, systemd sertleştirme (LoadCredential M4'te geldi, K-92), makine bazında egress allowlist.
+JSON anlık görüntüleri ve rrsync ile aktarımı (yalnızca çekirdekten dışarı), ft-agent (boru hattı ve veri tazeliği için iki ayrı bayatlık sinyali), JSON Schema kontratı, SKILL.md, PPK özeti akışı (oranlar kodla çıkarılır), asistan botu; iki makine, ayrı OS kullanıcıları, systemd sertleştirmesinin geri kalanı (LoadCredential K-92 ve beş ayar K-98 ile M4'te geldi), makine bazında egress allowlist.
 Geliştirme kapısı: Güvenlik kontrol listesi tamam; OpenClaw makinesinde veritabanı ve çekirdek sırrı yok; ajanın yazma denemesi reddediliyor.
 
 ## M6 · İleri (ihtiyaç doğarsa)
