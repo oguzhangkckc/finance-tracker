@@ -4,9 +4,11 @@ from pathlib import Path
 
 import pytest
 
+from finans import bootstrap
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
+from finans.application.transactions import add_transaction, void_transaction
 from finans.contracts.display import exact, money, percent, points
-from finans.domain.models import PricePoint
+from finans.domain.models import PricePoint, Side, Transaction
 from finans.settings import Settings
 from finans.web.app import create_app
 from tests.fakes.clock import FixedClock
@@ -16,7 +18,19 @@ from tests.support.web_client import WebClient
 ME = {"Tailscale-User-Login": "kisi@example.com"}
 SUNDAY = date(2026, 11, 29)
 SUNDAY_EVENING = FixedClock(datetime(2026, 11, 29, 17, 30, tzinfo=UTC))
-PAGES = ("/", "/varliklar", "/dagilim")
+PAGES = (
+    "/",
+    "/varliklar",
+    "/dagilim",
+    "/getiri",
+    "/raporlar",
+    "/raporlar/haftalik",
+    "/raporlar/aylik",
+    "/raporlar/maas-gunu",
+    "/alarmlar",
+    "/islemler",
+    "/sistem",
+)
 PORTFOLIO = """
 [targets]
 hisse = 0.6
@@ -45,7 +59,9 @@ allocation = false
 """
 
 
-def _client(db: Path, tmp_path: Path, clock: FixedClock = SUNDAY_EVENING) -> WebClient:
+def _client(
+    db: Path, tmp_path: Path, clock: FixedClock = SUNDAY_EVENING, **extra: object
+) -> WebClient:
     portfolio = tmp_path / "portfolio.toml"
     portfolio.write_text(PORTFOLIO, encoding="utf-8")
     settings = Settings(
@@ -53,6 +69,7 @@ def _client(db: Path, tmp_path: Path, clock: FixedClock = SUNDAY_EVENING) -> Web
         portfolio_path=portfolio,
         web_allowed_login="kisi@example.com",
         web_origin="https://cihaz.ornek.ts.net",
+        **extra,  # type: ignore[arg-type]
     )
     return WebClient(create_app(settings, clock=clock))
 
@@ -164,7 +181,7 @@ def test_visiting_every_page_changes_nothing_in_the_database(
 
     statuses = [client.get(path, headers=ME).status_code for path in PAGES]
 
-    assert statuses == [200, 200, 200]
+    assert statuses == [200] * len(PAGES)
     assert hashlib.sha256(migrated_db.read_bytes()).hexdigest() == before
 
 
@@ -191,3 +208,86 @@ def test_stylesheet_is_mobile_first() -> None:
     assert "@media (prefers-color-scheme: dark)" in css
     assert "content: attr(data-label)" in css
     assert css.index("table.cards thead { display: none; }") < css.index("@media (min-width")
+
+
+def test_returns_page_shows_the_monthly_figures(migrated_db: Path, tmp_path: Path) -> None:
+    scenario.seed(migrated_db)
+    expected = scenario.report(migrated_db, "monthly", SUNDAY)
+    figure = expected.summary.money_weighted
+
+    page = _client(migrated_db, tmp_path).get("/getiri", headers=ME).text
+
+    assert figure is not None
+    assert figure.status == "ok"
+    assert figure.rate is not None
+    assert percent(figure.rate) in page
+
+
+@pytest.mark.parametrize(
+    ("path", "kind"), [("/raporlar/haftalik", "weekly"), ("/raporlar/aylik", "monthly")]
+)
+def test_report_pages_show_the_text_sent_to_telegram(
+    migrated_db: Path, tmp_path: Path, path: str, kind: str
+) -> None:
+    scenario.seed(migrated_db)
+    text = bootstrap.report_renderer("text").report(
+        scenario.report(migrated_db, kind, SUNDAY)  # type: ignore[arg-type]
+    )
+
+    page = _client(migrated_db, tmp_path).get(path, headers=ME).text
+
+    for line in text.splitlines()[:4]:
+        assert line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;") in page
+
+
+def test_payday_page_shows_the_last_payday_plan(migrated_db: Path, tmp_path: Path) -> None:
+    scenario.seed(migrated_db)
+
+    page = _client(migrated_db, tmp_path).get("/raporlar/maas-gunu", headers=ME).text
+
+    assert "Maaş günü (2026-11-15)" in page
+
+
+def test_alerts_page_shows_open_alerts_and_the_quiet_period_end(
+    migrated_db: Path, tmp_path: Path
+) -> None:
+    scenario.seed(migrated_db, alarm=True)
+
+    page = _client(migrated_db, tmp_path).get("/alarmlar", headers=ME).text
+
+    assert "Sessiz dönem" in page
+    assert "tarihinde bitti" in page
+    assert "Açık alarm yok." not in page
+
+
+def test_transactions_are_listed_with_voids_and_notes_are_escaped(
+    migrated_db: Path, tmp_path: Path
+) -> None:
+    scenario.seed(migrated_db)
+    with SqliteUnitOfWork(migrated_db) as uow:
+        tx = Transaction("XHT", date(2026, 11, 26), Side.BUY, scenario.D(1), scenario.D(11))
+        txn_id = add_transaction(uow, tx, ref=None, note="<script>x</script>", now=scenario.NOW)
+        void_transaction(uow, txn_id, reason="yanlış <b>gün</b>", now=scenario.NOW)
+
+    page = _client(migrated_db, tmp_path).get("/islemler", headers=ME).text
+
+    assert "<script>" not in page
+    assert "&lt;script&gt;x&lt;/script&gt;" in page
+    assert "İptal: yanlış &lt;b&gt;gün&lt;/b&gt;" in page
+    assert 'class="voided"' in page
+
+
+def test_system_page_shows_checks_and_runs_but_no_secret(migrated_db: Path, tmp_path: Path) -> None:
+    scenario.seed(migrated_db)
+    secret = "123456:gizli-bot-anahtari"  # noqa: S105 - sahte test değeri
+
+    page = (
+        _client(migrated_db, tmp_path, telegram_bot_token=secret, telegram_chat_id="42")
+        .get("/sistem", headers=ME)
+        .text
+    )
+
+    assert "Telegram" in page
+    assert "Veritabanı şeması" in page
+    assert "gizli-bot-anahtari" not in page
+    assert "Son 7 günün işleri" in page

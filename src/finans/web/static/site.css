@@ -140,6 +140,18 @@ table.cards td::before {
   text-align: left;
 }
 
+pre.report {
+  margin: 1rem 0;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  font: 0.9rem/1.45 ui-monospace, "SF Mono", Menlo, monospace;
+  white-space: pre-wrap;
+}
+
+tr.voided { opacity: 0.6; }
+
 @media (min-width: 48rem) {
   .stats { grid-template-columns: repeat(3, 1fr); }
 

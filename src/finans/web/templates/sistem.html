@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Sistem · finans-takip{% endblock %}
+{% block content %}
+  <h1>Sistem</h1>
+  <h2>Doctor</h2>
+  <ul class="cards">
+    {% for check in system.checks %}
+    <li><div class="row"><strong>{{ check.name }}</strong><span class="{% if check.status != 'ok' %}warn{% endif %}">{% if check.status == "ok" %}✓{% elif check.status == "warn" %}!{% else %}✗{% endif %}</span></div><div class="small muted">{{ check.detail }}</div></li>
+    {% endfor %}
+  </ul>
+
+  <h2>Son 7 günün işleri</h2>
+  <table class="cards">
+    <thead><tr><th>#</th><th>İş</th><th>Gün</th><th>Sonuç</th><th>Başladı</th></tr></thead>
+    <tbody>
+      {% for run in system.runs %}
+      <tr>
+        <td data-label="#">{{ run.id }}</td>
+        <td data-label="İş">{{ run.job }}</td>
+        <td data-label="Gün">{{ run.logical_date }}</td>
+        <td data-label="Sonuç">{{ run.status }}</td>
+        <td data-label="Başladı">{{ run.started_at | local }}</td>
+      </tr>
+      {% else %}
+      <tr><td>Son 7 günde iş kaydı yok.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Yedek özetleri</h2>
+  <ul class="cards">
+    {% for backup in system.backups %}
+    <li><div class="row"><span class="small">{{ backup.name }}</span><span class="{% if not backup.ok %}warn{% endif %}">{{ backup.message }}</span></div></li>
+    {% else %}
+    <li>Yedek bulunamadı ya da yedek dizini tanımlı değil.</li>
+    {% endfor %}
+  </ul>
+{% endblock %}
