@@ -84,7 +84,7 @@ Not: kabul süresi başlamadan cihaza alınması önerilir; kabul süresince `/o
 
 ## W2 · Panelden yönetim (W2a–W2d)
 İşlemler, ayarlar ve tablolar panelden; tasarım sistemi (K-105, K-125…K-130). Sıra W2a → W2b → W2c → W2d; yazma, 15 Aralık maaş günü hedefi yüzünden tablolardan önce gelir.
-Ön koşul (W2b Pi'ye kurulmadan önce): paylaşılan cihazın sertleştirmesinin kolay maddeleri tamam (K-130).
+Paylaşılan cihaz (K-130, 2026-11-25 kararı): SSH parola girişi kullanıcının kararıyla açık kalır ve web'de yazma etkinleşir; kalan risk açık soruda izlenir. Container portları ve tinyproxy `Allow` takip maddesidir, toplu kurulumu bekletmez.
 Toplu kurulum (2026-11-25 kararı): kurulumlar kabul sürelerine göre bölünmez; proje yeni canlıya çıktı ve henüz gerçek para yok. W2a, W2b, alarm teslimi düzeltmesi (K-131), W2c ve W2d bitince Pi'ye tek oturumda elle kurulur. Kurulum rehberi:
 - En başta iki profilin veritabanının yedeği ve sha256 özeti alınır.
 - Her aşamadan sonra iki profilde `doctor` ve `job list`, arayüzde sayfalar kontrol edilir.
