@@ -33,6 +33,9 @@ jobs:
       - run: make typecheck
       - run: make imports
       - run: make test
+      # K-133: deploy betikleri Pi'de sistem Python'uyla (3.12) çalışır; 3.13'e özgü bir kullanım
+      # py_compile'dan geçse de bu testlerde yakalanır. Testler finans paketini import etmez.
+      - run: make deploy-py312
 
   units:
     if: github.event_name != 'schedule'

@@ -1,0 +1,10 @@
+[Unit]
+Description=finans-takip otomatik deploy isteği (K-133)
+Documentation=file:/opt/finans/current/docs/DESIGN.md
+
+[Path]
+PathExists=/var/lib/finans-deploy/istek/deploy.request
+Unit=finans-deploy.service
+
+[Install]
+WantedBy=paths.target
