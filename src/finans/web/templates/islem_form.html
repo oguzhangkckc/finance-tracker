@@ -5,7 +5,24 @@
 <h1>{{ heading }}</h1>
 <p class="muted">{{ lead }}</p>
 {{ steps(1) }}
-{% if problem %}
+{% if no_price %}
+{# K-109: gün hiçbir zaman kendiliğinden kaydırılmaz; en yakın fiyatlı günler yalnız seçenek. #}
+<div class="notice error" role="alert">{{ icon("hata") }}<div>
+  <p><strong>{{ no_price.code }} için {{ no_price.day | gun(case="de") }} kayıtlı fiyat yok.</strong> Fiyat uydurulmaz, gün kendiliğinden kaydırılmaz.</p>
+  {% for label, nearby in (("Önceki fiyatlı gün", no_price.before), ("Sonraki fiyatlı gün", no_price.after)) if nearby %}
+  <form class="actions choose-day" method="post" action="{{ prefix }}/islemler/yeni/{{ kind }}">
+    <input type="hidden" name="belirtec" value="{{ csrf }}">
+    {% for name, value in retry.items() %}
+    <input type="hidden" name="{{ name }}" value="{{ nearby.isoformat() if name == 'gun' else value }}">
+    {% endfor %}
+    <p>{{ label }}: {{ nearby | gun }}</p>
+    <button class="btn btn-secondary" type="submit">Bu günü kullan<span class="sr"> ({{ nearby | gun }})</span></button>
+  </form>
+  {% else %}
+  <p>Bu fon için hiç fiyat yok.</p>
+  {% endfor %}
+</div></div>
+{% elif problem %}
 <div class="notice error" role="alert">{{ icon("hata") }}<p>{{ problem }}</p></div>
 {% elif errors %}
 <div class="notice error" role="alert">{{ icon("hata") }}<p><strong>Bir alan düzeltilmeli.</strong> Aşağıda işaretli.</p></div>

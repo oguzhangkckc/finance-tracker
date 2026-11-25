@@ -17,7 +17,7 @@ from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.domain.models import Side, Transaction
 from finans.settings import Profile
 from tests.support import report_scenario as scenario
-from tests.support.web_browser import hidden_fields
+from tests.support.web_browser import HIDDEN, hidden_fields
 from tests.support.web_writes import (
     GERCEK,
     NOW,
@@ -186,7 +186,7 @@ def test_form_errors_keep_the_values_and_say_what_to_fix(
             "sanal",
             "alis",
             {"fon": "XHT", "gun": "2026-11-24", "tutar": "1000"},
-            "tarihli fiyat yok",
+            "kayıtlı fiyat yok",
         ),
         ("sanal", "satis", {"fon": "XHT", "gun": "2026-11-25", "tumu": "1"}, "elde pay yok"),
     ],
@@ -446,3 +446,29 @@ def test_a_price_from_another_day_is_shown_with_commas_and_one_tap_moves_the_day
     assert moved.status_code == 200
     assert "<dt>İşlem günü</dt><dd>20 Kasım</dd>" in moved.text
     assert 'class="notice warn"' not in moved.text
+
+
+def test_a_day_without_a_price_offers_the_nearest_days_and_never_moves_by_itself(
+    site: Site,
+) -> None:
+    """K-109: gün kaydırılmaz; önceki ve sonraki fiyatlı gün yalnız seçenek olarak sunulur."""
+    me = site.browser()
+    data = {"fon": "XHT", "gun": "2026-11-24", "tutar": "1000"}
+
+    page = post_preview(me, "sanal", "alis", data)
+
+    assert page.status_code == 400
+    assert "XHT için 24 Kasım&#39;da kayıtlı fiyat yok." in page.text
+    assert "2026-11-24 tarihli" not in page.text
+    assert "Önceki fiyatlı gün: 20 Kasım" in page.text
+    assert "Sonraki fiyatlı gün: 25 Kasım" in page.text
+    assert site.rows("sanal") == []
+    forms = re.findall(r'<form class="actions choose-day"[^>]*>(.*?)</form>', page.text, re.S)
+    assert len(forms) == 2
+    choices = [dict(HIDDEN.findall(form)) for form in forms]
+    assert [c["gun"] for c in choices] == ["2026-11-20", "2026-11-25"]
+    assert all(c["tutar"] == "1000" and c["fon"] == "XHT" for c in choices)
+    chosen = {k: v for k, v in choices[1].items() if k != "belirtec"}
+    moved = me.post("/sanal/islemler/yeni/alis", chosen)
+    assert moved.status_code == 200
+    assert "<dt>Fiyat günü</dt><dd>25 Kasım</dd>" in moved.text

@@ -10,6 +10,7 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse, RedirectResponse, Response
 from starlette.routing import BaseRoute, Route
 
+from finans.application.paper import NoPriceError
 from finans.application.transactions import VoidBlockedError
 from finans.contracts.display import class_label
 from finans.domain.models import DomainError
@@ -133,17 +134,21 @@ def write_routes(w: WriteContext) -> list[BaseRoute]:
         values: dict[str, str],
         *,
         errors: dict[str, str] | None = None,
-        problem: str | None = None,
+        problem: DomainError | None = None,
         status: int = 200,
     ) -> Response:
+        """Fiyatı olmayan gün (K-109) yapısal gösterilir: en yakın günler yalnız seçenektir."""
         heading, lead = HEADINGS[(w.profile, kind)]
+        no_price = problem if isinstance(problem, NoPriceError) else None
         context: dict[str, object] = {
             "kind": kind,
             "heading": heading,
             "lead": lead,
             "values": values,
             "errors": errors or {},
-            "problem": problem,
+            "problem": None if problem is None or no_price else str(problem),
+            "no_price": no_price,
+            "retry": trade_fields(kind, values, sanal=sanal),
             "choices": choices(w.conf, kind),
         }
         return w.page(request, "islem_form.html", context, status=status)
@@ -157,7 +162,7 @@ def write_routes(w: WriteContext) -> list[BaseRoute]:
             planned = preview_trade(w.conf, trade, today=w.time.today())
         except DomainError as exc:
             status = 409 if changed else 400
-            return form_page(request, kind, form, problem=str(exc), status=status)
+            return form_page(request, kind, form, problem=exc, status=status)
         entered = trade_fields(kind, form, sanal=sanal)
         fields = {"profil": w.profile, "islem": kind, **entered, "sonuc": planned.result}
         context: dict[str, object] = {
@@ -221,7 +226,7 @@ def write_routes(w: WriteContext) -> list[BaseRoute]:
         except ResultChanged:
             return preview_page(request, kind, fields, changed=True)
         except DomainError as exc:
-            return form_page(request, kind, fields, problem=str(exc), status=409)
+            return form_page(request, kind, fields, problem=exc, status=409)
         if recorded.duplicate:
             return duplicate(request, kind, recorded)
         target = f"{prefix}/islemler?islem={kind}&no={recorded.number}"
