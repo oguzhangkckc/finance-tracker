@@ -103,7 +103,7 @@ def test_a_commit_off_main_is_refused(pi: Pi) -> None:
     side = pi.commit({"docs/DESIGN.md": "yan dal\n"}, branch="deneme")
 
     assert _refused(pi, side) == guncelle.Sonuc(
-        guncelle.Kod.RET, f"⛔ Reddedildi: {side[:7]} `main`'de yok."
+        guncelle.Kod.RET, f"⛔ Reddedildi: {side[:7]} main'de yok."
     )
 
 
