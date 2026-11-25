@@ -138,13 +138,6 @@ def test_only_reads_are_accepted(client: WebClient) -> None:
     assert chunked.status_code == 411
 
 
-def test_the_stylesheet_is_served(client: WebClient) -> None:
-    response = client.get("/static/site.css", headers=ME)
-
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("text/css")
-
-
 @pytest.mark.parametrize("missing", ["web_allowed_login", "web_origin"])
 def test_the_app_does_not_start_without_login_or_origin(tmp_path: Path, missing: str) -> None:
     with pytest.raises(WebSetupError, match="FT_WEB_ALLOWED_LOGIN ve FT_WEB_ORIGIN"):

@@ -3,6 +3,7 @@
 
 from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
 from typing import Final
 from urllib.parse import parse_qs
 
@@ -12,8 +13,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.middleware import Middleware
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse, RedirectResponse, Response
-from starlette.routing import BaseRoute, Mount, Route
-from starlette.staticfiles import StaticFiles
+from starlette.routing import BaseRoute, Route
 from starlette.templating import Jinja2Templates
 
 from finans import bootstrap
@@ -22,6 +22,7 @@ from finans.contracts.display import exact, money, percent, points
 from finans.contracts.report import SANAL_NOTICE
 from finans.ports.clock import BUSINESS_TZ, Clock
 from finans.settings import PROFILES, Profile, Settings, profile_settings
+from finans.web.assets import Assets
 from finans.web.security import (
     BodyLimitMiddleware,
     IdentityMiddleware,
@@ -54,6 +55,7 @@ NAV = (
     ("/islemler", "İşlemler"),
     ("/sistem", "Sistem"),
 )
+STATIC: Final = Path(__file__).parent / "static"
 SLUGS: Final[dict[Profile, str]] = {"real": "gercek", "sanal": "sanal"}
 PROFILE_LABELS: Final[dict[Profile, str]] = {"real": "Gerçek", "sanal": "Sanal"}
 MIN_SESSION_KEY: Final = 32
@@ -102,7 +104,9 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
     origin = settings.web_origin.rstrip("/")
     viewer_login = settings.web_allowed_login
     time = clock or bootstrap.system_clock()
+    assets = Assets(STATIC)
     templates = Jinja2Templates(env=_environment())
+    templates.env.globals["asset"] = assets.url
 
     def profile_routes(profile: Profile, conf: Settings) -> list[BaseRoute]:
         prefix = f"/{SLUGS[profile]}"
@@ -230,7 +234,7 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
                 for profile, conf in profiles.items()
                 for route in profile_routes(profile, conf)
             ),
-            Mount("/static", StaticFiles(packages=[("finans.web", "static")]), name="static"),
+            Route("/static/{served:path}", assets.serve, methods=["GET"]),
         ],
         middleware=[
             Middleware(SecurityHeadersMiddleware),
