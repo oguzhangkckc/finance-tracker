@@ -229,7 +229,6 @@ def _send_report(ctx: JobContext, kind: ReportKind, day: date, *, note: str | No
             ctx.config,
             kind=kind,
             logical_date=day,
-            contribution=ctx.config.monthly_contribution,
             now=ctx.clock.now(),
             cpi_series=ctx.cpi_series,
             profile=ctx.profile,
@@ -245,13 +244,7 @@ def _payday(day: date, ctx: JobContext) -> JobResult:
     if ctx.clock.today() - day > PAYDAY_WINDOW:
         return JobResult("ok", {"gönderim": "atlandı: pencere geçti", "maaş_günü": str(day)})
     with ctx.open_uow() as uow:
-        plan = payday_plan(
-            uow,
-            ctx.config,
-            on=day,
-            contribution=ctx.config.monthly_contribution,
-            profile=ctx.profile,
-        )
+        plan = payday_plan(uow, ctx.config, on=day, profile=ctx.profile)
     _send(ctx, ctx.renderer.payday(plan))
     return JobResult("ok", {"gönderim": "gönderildi", "eksik_fiyat": plan.missing_prices})
 

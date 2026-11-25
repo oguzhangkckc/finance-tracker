@@ -16,6 +16,7 @@ from finans.application.history import (
 )
 from finans.application.price_refresh import RefreshStatus, refresh_status, request_refresh
 from finans.application.report import ReportKind, build_report, payday_plan
+from finans.application.settings import payday_for
 from finans.contracts.display import class_label
 from finans.contracts.report import HoldingLine, LotLine, Report
 from finans.domain.models import DomainError, YearMonth
@@ -58,7 +59,6 @@ def load_report(
             config,
             kind=kind,
             logical_date=on or clock.today(),
-            contribution=config.monthly_contribution,
             now=clock.now(),
             cpi_series=settings.cpi_series,
             profile=settings.profile,
@@ -86,13 +86,10 @@ def report_text(settings: Settings, clock: Clock, kind: ReportKind) -> str:
 
 def payday_text(settings: Settings, clock: Clock) -> str:
     config = load_config(settings)
-    if config.payday is None:
-        raise PageError("portfolio.toml'da [contribution] payday tanımlı değil.")
-    day = logical_date("payday", clock.now().astimezone(BUSINESS_TZ), payday=config.payday)
     with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
-        plan = payday_plan(
-            uow, config, on=day, contribution=config.monthly_contribution, profile=settings.profile
-        )
+        local = clock.now().astimezone(BUSINESS_TZ)
+        day = logical_date("payday", local, payday=payday_for(uow, config))
+        plan = payday_plan(uow, config, on=day, profile=settings.profile)
     return bootstrap.report_renderer("text").payday(plan)
 
 

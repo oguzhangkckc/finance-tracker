@@ -10,6 +10,7 @@ from finans.application.portfolio_view import (
     instruments_by_code,
     missing_in_allocation,
 )
+from finans.application.settings import FROM_SETTINGS, FromSettings, effective_config
 from finans.contracts.report import (
     AlertLine,
     AllocationLine,
@@ -59,16 +60,20 @@ def build_report(
     *,
     kind: ReportKind,
     logical_date: date,
-    contribution: Decimal | None,
+    contribution: Decimal | FromSettings | None = FROM_SETTINGS,
     now: datetime,
     cpi_series: str,
     profile: Profile = "real",
 ) -> Report:
-    """`contribution` bu ayki katkıdır: config ya da --contribution; None ise tanımlı değil.
+    """`contribution` bu ayki katkıdır: varsayılan mantıksal günün ayarı (K-127), ya da
+    --contribution; None ise tanımlı değil. Hedefler de mantıksal günün ayarından.
 
     Fiyatı olmayan varlık değerlenmez; dağılım içinde böyle bir varlık varsa dağılım, katkı
     planı ve para ağırlıklı getiri hesaplanmaz (K-85, K-95).
     """
+    config = effective_config(uow, config, on=logical_date)
+    if contribution is FROM_SETTINGS:
+        contribution = config.monthly_contribution
     instruments = instruments_by_code(uow)
     transactions = [s.transaction for s in uow.transactions.list(until=logical_date)]
     history = PriceHistory(uow.prices.history(until=logical_date))
@@ -152,10 +157,14 @@ def payday_plan(
     config: PortfolioConfig,
     *,
     on: date,
-    contribution: Decimal | None,
+    contribution: Decimal | FromSettings | None = FROM_SETTINGS,
     profile: Profile = "real",
 ) -> PaydayPlan:
-    """Maaş günü mesajı: katkının sınıf ve fon bazında dağılımı (K-83)."""
+    """Maaş günü mesajı: katkının sınıf ve fon bazında dağılımı (K-83); katkı ve hedefler maaş
+    gününün ayarından (K-127)."""
+    config = effective_config(uow, config, on=on)
+    if contribution is FROM_SETTINGS:
+        contribution = config.monthly_contribution
     if contribution is None:
         raise DomainError("Katkı tanımlı değil; [contribution] altında monthly gerekli.")
     instruments = instruments_by_code(uow)

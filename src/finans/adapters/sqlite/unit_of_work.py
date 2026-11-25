@@ -8,6 +8,7 @@ from finans.adapters.sqlite.operations import (
     SqliteAlertRepo,
     SqliteAllocationStateRepo,
     SqliteRunRepo,
+    SqliteSettingRepo,
     SqliteSubmissionRepo,
 )
 from finans.adapters.sqlite.repositories import (
@@ -25,6 +26,7 @@ from finans.ports.repositories import (
     PriceRepo,
     RawPayloadRepo,
     RunRepo,
+    SettingRepo,
     SubmissionRepo,
     TransactionRepo,
 )
@@ -40,6 +42,7 @@ class SqliteUnitOfWork:
     alerts: AlertRepo
     allocation_state: AllocationStateRepo
     submissions: SubmissionRepo
+    settings: SettingRepo
 
     def __init__(self, path: Path, *, readonly: bool = False, sanal: bool = False) -> None:
         self._path = path
@@ -62,6 +65,7 @@ class SqliteUnitOfWork:
             self.alerts = SqliteAlertRepo(conn)
             self.allocation_state = SqliteAllocationStateRepo(conn)
             self.submissions = SqliteSubmissionRepo(conn)
+            self.settings = SqliteSettingRepo(conn)
             self._stack = stack.pop_all()
         return self
 

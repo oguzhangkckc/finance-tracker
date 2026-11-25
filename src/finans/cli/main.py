@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import date, timedelta
 from decimal import Decimal
@@ -29,6 +29,7 @@ from finans.application.price_sync import PriceSyncReport, sync_prices
 from finans.application.prices import set_manual_price
 from finans.application.reconcile import reconcile_statement
 from finans.application.report import ReportKind, build_report, payday_plan
+from finans.application.settings import FROM_SETTINGS, FromSettings, payday_for
 from finans.application.transactions import (
     add_transaction,
     import_transactions,
@@ -585,14 +586,15 @@ def job_run(
         typer.echo("--bugun yalnız sync-prices ile ve --logical-date olmadan verilir.", err=True)
         raise typer.Exit(code=2)
     with _user_errors():
-        payday = bootstrap.portfolio_source().load(_portfolio_path(settings, None)).payday
         if today:
             # K-123: elle güncelleme bugünü hedefler; bugün "ok" ise iş istek atmadan atlar.
             day = clock.today()
         elif logical is not None:
             day = _parse_date(logical)
         else:
-            day = logical_date(name.value, clock.now().astimezone(BUSINESS_TZ), payday=payday)
+            day = logical_date(
+                name.value, clock.now().astimezone(BUSINESS_TZ), payday=_payday(settings, name)
+            )
         outcome = bootstrap.run_scheduled_job(settings, clock, name.value, day)
     typer.echo(f"{name.value} {day}: {_OUTCOME_LABELS[outcome.status]}")
     for key, value in outcome.detail.items():
@@ -720,8 +722,8 @@ def report_payday(
     day = clock.today() if on is None else _parse_date(on)
     with _user_errors():
         config = bootstrap.portfolio_source().load(_portfolio_path(settings, None))
-        amount = (
-            config.monthly_contribution
+        amount: Decimal | FromSettings = (
+            FROM_SETTINGS
             if contribution is None
             else _parse_decimal("--contribution", contribution)
         )
@@ -729,6 +731,16 @@ def report_payday(
             plan = payday_plan(uow, config, on=day, contribution=amount, profile=settings.profile)
     renderer = bootstrap.report_renderer(fmt.value, payday_amounts=not hide_amounts)
     typer.echo(renderer.payday(plan))
+
+
+def _payday(settings: Settings, name: JobChoice) -> Callable[[YearMonth], int | None] | None:
+    """Maaş günü işinin mantıksal günü her ayın kendi ayarındaki maaş gününe göre (K-127);
+    iş birimi işlerin yaptığı gibi migration'lı açılır."""
+    if name.value != "payday":
+        return None
+    config = bootstrap.portfolio_source().load(_portfolio_path(settings, None))
+    with bootstrap.open_unit_of_work(settings) as uow:
+        return payday_for(uow, config)
 
 
 def _show_report(
@@ -743,8 +755,8 @@ def _show_report(
             if on is None
             else _parse_date(on)
         )
-        amount = (
-            config.monthly_contribution
+        amount: Decimal | FromSettings = (
+            FROM_SETTINGS
             if contribution is None
             else _parse_decimal("--contribution", contribution)
         )
@@ -848,14 +860,16 @@ def sanal_payday_command(
     clock = bootstrap.system_clock()
     with _user_errors():
         config = bootstrap.portfolio_source().load(_portfolio_path(settings, None))
-        if config.payday is None:
-            raise DomainError("portfolio.toml'da [contribution] payday tanımlı değil.")
-        day = (
-            _parse_date(payday)
-            if payday is not None
-            else logical_date("payday", clock.now().astimezone(BUSINESS_TZ), payday=config.payday)
-        )
         with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+            day = (
+                _parse_date(payday)
+                if payday is not None
+                else logical_date(
+                    "payday",
+                    clock.now().astimezone(BUSINESS_TZ),
+                    payday=payday_for(uow, config),
+                )
+            )
             plan = plan_payday_purchases(
                 uow, config, payday=day, today=clock.today(), reapply_voided=reapply_voided
             )

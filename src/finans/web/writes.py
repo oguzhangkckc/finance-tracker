@@ -22,8 +22,9 @@ from finans.application.paper import (
     record_payday_purchases,
 )
 from finans.application.previews import TradePreview, VoidPreview, preview_transaction, preview_void
+from finans.application.settings import payday_for
 from finans.application.transactions import add_transaction, digest, void_transaction
-from finans.domain.models import DomainError, Side, Transaction
+from finans.domain.models import Side, Transaction
 from finans.domain.numeric import canonical_text
 from finans.domain.schedule import logical_date
 from finans.ports.clock import BUSINESS_TZ
@@ -262,10 +263,11 @@ class PaydayRequest:
 
 
 def default_payday(conf: Settings, now: datetime) -> PaydayRequest:
+    """Son maaş günü, her ayın kendi ayarındaki maaş gününe göre (K-127)."""
     config = load_config(conf)
-    if config.payday is None:
-        raise DomainError("portfolio.toml'da [contribution] payday tanımlı değil.")
-    day = logical_date("payday", now.astimezone(BUSINESS_TZ), payday=config.payday)
+    with bootstrap.open_unit_of_work(conf, readonly=True) as uow:
+        schedule = payday_for(uow, config)
+    day = logical_date("payday", now.astimezone(BUSINESS_TZ), payday=schedule)
     return PaydayRequest(day, reapply_voided=False)
 
 
