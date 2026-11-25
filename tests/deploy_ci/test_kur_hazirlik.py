@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import stat
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -305,8 +306,10 @@ def test_last_line_of_an_empty_error_still_says_something() -> None:
     assert kur.last_line("uyarı\nhata: kayıp\n") == "hata: kayıp"
 
 
-def test_a_path_that_is_not_a_release_link_is_not_an_installed_version(tmp_path: Path) -> None:
-    paths = kur.Yollar(*(tmp_path / name for name in "abcdefghij"))
+def test_a_path_that_is_not_a_release_link_is_not_an_installed_version(
+    pi: Pi, tmp_path: Path
+) -> None:
+    paths = replace(pi.paths, current=tmp_path / "baska-current")
     paths.current.symlink_to("baska-bir-yer")
 
     assert kur.installed(paths) is None

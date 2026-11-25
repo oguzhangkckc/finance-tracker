@@ -2,10 +2,16 @@
 finans paketi import edilmez; CI'da Python 3.12 ile de çalışır. Kullanıcının git ayarları (imza,
 kancalar) karışmasın diye HOME ve global ayar yalıtılır."""
 
+import fcntl
+import http.server
 import os
 import shutil
+import socketserver
 import subprocess
-from dataclasses import dataclass
+import tempfile
+import threading
+from collections.abc import Iterator
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
@@ -29,6 +35,17 @@ if [ -n "$FAKE_UV_FAIL" ]; then
 fi
 mkdir -p .venv/bin
 """
+FAKE_SYSTEMCTL = """#!/bin/sh
+case "$*" in
+  *finans-web.service*) cat "$FAKE_SYSTEMD_WEB" ;;
+  *"finans-*.timer"*)
+    if [ -f "$FAKE_SYSTEMD_TIMERS_FAIL" ]; then exit 1; fi
+    cat "$FAKE_SYSTEMD_TIMERS" ;;
+  *) exit 1 ;;
+esac
+"""
+LOGIN = "kisi@example.com"
+NOW = 1_797_000_000.0
 
 
 def git(*args: str, cwd: Path) -> str:
@@ -92,7 +109,17 @@ class Pi:
 
 
 @pytest.fixture
-def pi(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Pi:
+def short_dir() -> Iterator[Path]:
+    """macOS'ta Unix soket yolu en çok 104 bayt; pytest'in geçici dizini daha uzun olabilir."""
+    path = Path(tempfile.mkdtemp(prefix="fs"))
+    try:
+        yield path
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
+
+
+@pytest.fixture
+def pi(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, short_dir: Path) -> Pi:
     home = tmp_path / "home"
     home.mkdir()
     for name, value in {
@@ -120,7 +147,7 @@ def pi(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Pi:
     git("clone", "-q", "--bare", str(origin), str(opt / "repo.git"), cwd=tmp_path)
     (opt / "releases").mkdir()
     var = tmp_path / "var"
-    for name in ("istek", "sonuc", "uv-cache"):
+    for name in ("istek", "sonuc", "uv-cache", "saglik", "locks/sanal"):
         (var / name).mkdir(parents=True)
     paths = kur.Yollar(
         istek=var / "istek" / "deploy.request",
@@ -133,12 +160,17 @@ def pi(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Pi:
         uv_cache=var / "uv-cache",
         systemd=tmp_path / "systemd",
         betikler=tmp_path / "betikler",
+        kilitler=(var / "locks", var / "locks" / "sanal"),
+        web_istek=var / "web-yeniden-baslat",
+        saglik=var / "saglik",
+        soket=short_dir / "web.sock",
     )
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    uv = bin_dir / "uv"
-    uv.write_text(FAKE_UV, encoding="utf-8")
-    uv.chmod(0o755)
+    for name, script in (("uv", FAKE_UV), ("systemctl", FAKE_SYSTEMCTL)):
+        executable = bin_dir / name
+        executable.write_text(script, encoding="utf-8")
+        executable.chmod(0o755)
     uv_log = tmp_path / "uv.log"
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setenv("FAKE_UV_LOG", str(uv_log))
@@ -146,3 +178,105 @@ def pi(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Pi:
     machine = Pi(origin, paths, uv_log)
     machine.install(git("rev-parse", "HEAD", cwd=origin))
     return machine
+
+
+@dataclass
+class Systemd:
+    """Testin uyku fonksiyonu: saati ilerletir ve istek dosyalarına root birimi ve sağlık birimi
+    gibi yanıt verir. Web yeniden başlarken iş kilitlerinin tutulup tutulmadığını kaydeder."""
+
+    paths: kur.Yollar
+    web_state: Path
+    timers: Path
+    clock: float = NOW
+    pid: int = 100
+    web_restarts: bool = True
+    doctor_results: list[str] = field(default_factory=list)
+    doctor_output: str = "✓ Veritabanı şeması: güncel\n"
+    events: list[tuple[str, str | None, bool]] = field(default_factory=list)
+
+    def now(self) -> float:
+        return self.clock
+
+    def sleep(self, seconds: float) -> None:
+        self.clock += seconds
+        if self.paths.web_istek.exists():
+            self.paths.web_istek.unlink()
+            self.events.append(("web", kur.installed(self.paths), self._locked()))
+            if self.web_restarts:
+                self.pid += 1
+                self.write_web()
+        request = self.paths.saglik / "istek"
+        if request.exists():
+            request.unlink()
+            result = self.doctor_results.pop(0) if self.doctor_results else "success"
+            self.events.append(("saglik", kur.installed(self.paths), self._locked()))
+            (self.paths.saglik / "doctor.txt").write_text(self.doctor_output, encoding="utf-8")
+            (self.paths.saglik / "sonuc").write_text(f"{result}\n", encoding="utf-8")
+
+    def write_web(self) -> None:
+        self.web_state.write_text(f"MainPID={self.pid}\nActiveState=active\n", encoding="utf-8")
+
+    def timers_due(self, *entries: tuple[str, float]) -> None:
+        blocks = [f"Id={name}\nNextElapseUSecRealtime=@{int(at)}" for name, at in entries]
+        self.timers.write_text("\n\n".join(blocks) + "\n", encoding="utf-8")
+
+    def _locked(self) -> bool:
+        """Bir işin kilidi şu an başkasında mı (geçiş kilitler tutularak mı yapılıyor)."""
+        path = self.paths.kilitler[0] / "backup.lock"
+        descriptor = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        finally:
+            os.close(descriptor)
+        return False
+
+
+@pytest.fixture
+def systemd(pi: Pi, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Systemd:
+    machine = Systemd(pi.paths, tmp_path / "web.state", tmp_path / "timers.txt")
+    machine.write_web()
+    machine.timers_due(("finans-backup.timer", NOW + 24 * 3600))
+    monkeypatch.setenv("FAKE_SYSTEMD_WEB", str(machine.web_state))
+    monkeypatch.setenv("FAKE_SYSTEMD_TIMERS", str(machine.timers))
+    monkeypatch.setenv("FAKE_SYSTEMD_TIMERS_FAIL", str(tmp_path / "timers.fail"))
+    return machine
+
+
+@dataclass
+class Web:
+    """Unix soketinde web'in yerine geçen küçük sunucu; sayfa başına yanıt kodu değiştirilebilir."""
+
+    statuses: dict[str, int] = field(default_factory=lambda: {"/gercek/": 200, "/sanal/": 200})
+    logins: list[str] = field(default_factory=list)
+
+
+@pytest.fixture
+def web(pi: Pi) -> Iterator[Web]:
+    state = Web()
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            login = self.headers.get("Tailscale-User-Login", "")
+            state.logins.append(login)
+            status = state.statuses.get(self.path, 404) if login == LOGIN else 403
+            self.send_response(status)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, format: str, *args: object) -> None:
+            return
+
+        def address_string(self) -> str:
+            return "unix"
+
+    server = socketserver.UnixStreamServer(str(pi.paths.soket), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield state
+    finally:
+        server.shutdown()
+        server.server_close()

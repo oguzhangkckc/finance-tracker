@@ -378,3 +378,51 @@ def test_web_settings_stay_empty_in_the_example() -> None:
 
     assert (env["FT_WEB_ALLOWED_LOGIN"], env["FT_WEB_ORIGIN"]) == ("", "")
     assert "FT_WEB_SESSION_KEY" not in env
+
+
+def _manual_doctor_credentials(wrapper: str) -> set[str]:
+    """Elle doctor'un yüklediği kimlik bilgileri: döngüdekiler ve yalnız doctor'da web şifresi."""
+    text = (DEPLOY / wrapper).read_text(encoding="utf-8")
+    loop = re.search(r"^for name in ([a-z_ ]+); do$", text, re.MULTILINE)
+    assert loop is not None
+    names = set(loop.group(1).split())
+    if DOCTOR_CREDENTIAL_BLOCK in text:
+        names.add("ft_web_password")
+    return names
+
+
+def test_the_deploy_health_check_runs_doctor_with_every_credential_manual_doctor_loads() -> None:
+    """K-133: eksik bir kimlik bilgisi doctor'a ✗ verdirir ve her deploy geri alınırdı; sahte
+    doctor'lu testlerde bu görünmez. Fazlası da yok: birim yalnız doctor'un gördüklerini görür."""
+    service = _unit(UNITS / "finans-deploy-saglik.service")["Service"]
+    loaded = dict(value.split(":", 1) for key, value in service if key == "LoadCredential")
+    needed = _manual_doctor_credentials("ft-finans") | _manual_doctor_credentials("ft-sanal")
+
+    assert set(loaded) == needed
+    assert {"ft_web_password", *SECRETS} <= needed
+    assert all(path == f"/etc/finans/credstore/{name}" for name, path in loaded.items())
+    assert _one(service, "EnvironmentFile") == "/etc/finans/finans.env"
+    assert (_one(service, "User"), _one(service, "WorkingDirectory")) == (
+        "finans",
+        "/var/lib/finans",
+    )
+    real, sanal = [value for key, value in service if key == "ExecStart"]
+    assert "FT_PROFILE" not in real
+    assert "FT_PROFILE=sanal exec " in sanal
+    assert all("exec /opt/finans/current/.venv/bin/ft doctor >> " in line for line in (real, sanal))
+
+
+def test_the_deploy_health_check_is_networkless_and_hardened_like_the_web() -> None:
+    service = _unit(UNITS / "finans-deploy-saglik.service")["Service"]
+    expected = {
+        name: value
+        for name, value in WEB_HARDENING.items()
+        if not name.startswith("RuntimeDirectory") and name != "ReadWritePaths"
+    }
+
+    assert {name: _one(service, name) for name in expected} == expected
+    assert _one(service, "ReadWritePaths") == "/var/lib/finans /var/lib/finans-deploy/saglik"
+    path = _unit(UNITS / "finans-deploy-saglik.path")["Path"]
+    assert _one(path, "PathExists") == "/var/lib/finans-deploy/saglik/istek"
+    assert _one(service, "ExecStartPre") == "/usr/bin/rm -f /var/lib/finans-deploy/saglik/istek"
+    assert "$$SERVICE_RESULT" in _one(service, "ExecStopPost")

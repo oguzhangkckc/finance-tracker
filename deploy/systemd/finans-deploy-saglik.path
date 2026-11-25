@@ -1,0 +1,10 @@
+[Unit]
+Description=finans-takip deploy sağlık denetimi isteği
+Documentation=file:/opt/finans/current/docs/DESIGN.md
+
+[Path]
+PathExists=/var/lib/finans-deploy/saglik/istek
+Unit=finans-deploy-saglik.service
+
+[Install]
+WantedBy=paths.target
