@@ -1,6 +1,6 @@
 [Unit]
 Description=finans-takip web arayüzü (yalnız tailnet, Unix soketi)
-Documentation=file:/opt/finans/docs/DESIGN.md
+Documentation=file:/opt/finans/current/docs/DESIGN.md
 
 [Service]
 Type=exec
@@ -43,7 +43,7 @@ MemoryDenyWriteExecute=yes
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallErrorNumber=EPERM
-ExecStart=/opt/finans/.venv/bin/finans-web
+ExecStart=/opt/finans/current/.venv/bin/finans-web
 Restart=on-failure
 RestartSec=5
 

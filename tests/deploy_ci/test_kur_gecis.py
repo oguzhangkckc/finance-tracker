@@ -5,6 +5,7 @@ Saat ve systemd sahtedir; git gerçektir."""
 import fcntl
 import json
 import os
+import stat
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import date, datetime
@@ -351,6 +352,8 @@ def test_main_runs_one_request_writes_its_result_and_notifies(pi: Pi, systemd: S
     assert busy_during
     assert all(busy_during)
     assert not istek.busy(request_side)
+    lock = pi.paths.sonuc / "kur.lock"
+    assert stat.S_IMODE(lock.stat().st_mode) == kur.RESULT_MODE
 
 
 def test_main_without_a_request_does_nothing(pi: Pi, systemd: Systemd) -> None:

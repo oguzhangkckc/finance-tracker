@@ -1,6 +1,6 @@
 [Unit]
 Description=finans-takip işi: %i
-Documentation=file:/opt/finans/docs/DESIGN.md
+Documentation=file:/opt/finans/current/docs/DESIGN.md
 After=network-online.target time-sync.target
 Wants=network-online.target
 
@@ -22,4 +22,4 @@ PrivateTmp=yes
 ProtectSystem=strict
 ReadWritePaths=/var/lib/finans
 ProtectHome=yes
-ExecStart=/opt/finans/.venv/bin/ft job run %i
+ExecStart=/opt/finans/current/.venv/bin/ft job run %i

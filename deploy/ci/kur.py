@@ -92,11 +92,11 @@ URETIM: Final = Yollar(
     surumler=Path("/opt/finans/releases"),
     current=Path("/opt/finans/current"),
     python=Path("/opt/finans/.python"),
-    uv_cache=Path("/var/lib/finans-deploy/uv-cache"),
+    uv_cache=Path("/var/lib/finans-deploy/calisma/uv-cache"),
     systemd=Path("/etc/systemd/system"),
     betikler=Path("/usr/local/lib/finans-deploy"),
     kilitler=(Path("/var/lib/finans/locks"), Path("/var/lib/finans/locks/sanal")),
-    web_istek=Path("/var/lib/finans-deploy/web-yeniden-baslat"),
+    web_istek=Path("/var/lib/finans-deploy/calisma/web-yeniden-baslat"),
     saglik=Path("/var/lib/finans-deploy/saglik"),
     soket=Path("/run/finans-web/web.sock"),
 )
@@ -679,9 +679,11 @@ def rollback(paths: Yollar, sha: str, previous: str, problem: str, env: Ortam) -
 
 @contextmanager
 def runner_lock(paths: Yollar) -> Iterator[None]:
-    """`istek` bu kilit tutulurken yeni isteği meşgul diye reddeder."""
-    descriptor = os.open(paths.sonuc / "kur.lock", os.O_RDWR | os.O_CREAT, 0o640)
+    """`istek` bu kilit tutulurken yeni isteği meşgul diye reddeder. Dosya `finans-deploy`
+    grubunca okunabilmeli; çalıştırıcının UMask'ı (0077) onu 0600 bırakırdı."""
+    descriptor = os.open(paths.sonuc / "kur.lock", os.O_RDWR | os.O_CREAT, RESULT_MODE)
     try:
+        os.fchmod(descriptor, RESULT_MODE)
         fcntl.flock(descriptor, fcntl.LOCK_EX)
         yield
     finally:

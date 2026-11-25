@@ -74,6 +74,10 @@ def busy(paths: Yollar) -> bool:
         fd = os.open(paths.kilit, os.O_RDONLY)
     except FileNotFoundError:
         return False
+    except PermissionError:
+        # Kilidin durumu bilinmiyorsa yeni istek bırakılmaz: çalışan bir deploy'la yarışmaktansa
+        # meşgul demek güvenli olandır.
+        return True
     try:
         fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
     except BlockingIOError:

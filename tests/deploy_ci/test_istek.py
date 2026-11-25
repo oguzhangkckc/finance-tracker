@@ -186,3 +186,12 @@ def test_a_request_appearing_at_the_same_moment_makes_this_one_busy(
 
     assert code == istek.Kod.MESGUL
     assert capsys.readouterr().out == istek.BUSY + "\n"
+
+
+def test_an_unreadable_lock_counts_as_busy(paths: istek.Yollar) -> None:
+    paths.kilit.write_bytes(b"")
+    paths.kilit.chmod(0o000)
+    try:
+        assert istek.busy(paths)
+    finally:
+        paths.kilit.chmod(0o640)

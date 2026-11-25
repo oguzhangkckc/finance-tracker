@@ -1,0 +1,47 @@
+[Unit]
+Description=finans-takip otomatik deploy çalıştırıcısı (K-133…K-135)
+Documentation=file:/opt/finans/current/docs/DESIGN.md
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=finans
+Group=finans
+WorkingDirectory=/var/lib/finans-deploy/calisma
+EnvironmentFile=/etc/finans/finans.env
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/var/lib/finans-deploy/calisma
+# K-133: yalnız bildirim için Telegram. doctor'un kimlik bilgileri yalnız ağsız sağlık birimindedir;
+# bu süreç ağa açıktır ve GitHub'dan çekilen kodu hazırlar.
+LoadCredential=ft_telegram_bot_token:/etc/finans/credstore/ft_telegram_bot_token
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/finans /var/lib/finans-deploy /var/lib/finans/locks
+UMask=0077
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectProc=invisible
+ProtectClock=yes
+ProtectHostname=yes
+LockPersonality=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RemoveIPC=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+PrivateMounts=yes
+# kur'un her adımı kendi süre sınırıyla biter; bu yalnız takılmaya karşı. Adımların toplamından uzun,
+# yoksa geçişin ya da geri dönüşün ortasında öldürülebilirdi.
+TimeoutStartSec=1h
+# Sistem Python'u: uygulamanın sanal ortamı bozuk olsa da deploy ve geri dönüş çalışır.
+ExecStart=/usr/bin/python3 -I /usr/local/lib/finans-deploy/kur

@@ -5,6 +5,8 @@ from typing import Literal
 
 import pytest
 
+import istek
+import kur
 from finans import bootstrap
 from finans.adapters.refresh_request import FileRefreshRequests
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
@@ -120,7 +122,7 @@ def test_service_runs_the_single_entry_point_as_its_own_user() -> None:
     service = _unit(UNITS / "finans-job@.service")["Service"]
     assert _one(service, "Type") == "oneshot"
     assert (_one(service, "User"), _one(service, "Group")) == ("finans", "finans")
-    assert _one(service, "ExecStart") == "/opt/finans/.venv/bin/ft job run %i"
+    assert _one(service, "ExecStart") == "/opt/finans/current/.venv/bin/ft job run %i"
     assert _one(service, "EnvironmentFile") == "/etc/finans/finans.env"
 
 
@@ -303,7 +305,7 @@ def test_the_web_service_is_networkless_and_sees_only_its_own_secrets() -> None:
 
     assert {name: _one(service, name) for name in WEB_HARDENING} == WEB_HARDENING
     assert (_one(service, "User"), _one(service, "Group")) == ("finans", "finans")
-    assert _one(service, "ExecStart") == "/opt/finans/.venv/bin/finans-web"
+    assert _one(service, "ExecStart") == "/opt/finans/current/.venv/bin/finans-web"
     assert _one(service, "EnvironmentFile") == "/etc/finans/finans.env"
     loaded = [value for name, value in service if name == "LoadCredential"]
     web_secrets = ["ft_web_session_key", "ft_web_password"]
@@ -366,7 +368,9 @@ def test_a_refresh_request_runs_the_profiles_price_sync_like_its_jobs(
     assert _one(watcher["Path"], "Unit") == f"{name}.service"
     assert _one(watcher["Install"], "WantedBy") == "paths.target"
     assert _one(service, "ExecStartPre") == f"/usr/bin/rm -f {trigger}"
-    assert _one(service, "ExecStart") == "/opt/finans/.venv/bin/ft job run sync-prices --bugun"
+    assert (
+        _one(service, "ExecStart") == "/opt/finans/current/.venv/bin/ft job run sync-prices --bugun"
+    )
     exec_lines = {"ExecStart", "ExecStartPre"}
     assert [entry for entry in service if entry[0] not in exec_lines] == [
         entry for entry in job if entry[0] not in exec_lines
@@ -426,3 +430,118 @@ def test_the_deploy_health_check_is_networkless_and_hardened_like_the_web() -> N
     assert _one(path, "PathExists") == "/var/lib/finans-deploy/saglik/istek"
     assert _one(service, "ExecStartPre") == "/usr/bin/rm -f /var/lib/finans-deploy/saglik/istek"
     assert "$$SERVICE_RESULT" in _one(service, "ExecStopPost")
+
+
+RUNNER_HARDENING = {
+    name: value
+    for name, value in WEB_HARDENING.items()
+    if name not in {"PrivateNetwork", "RestrictAddressFamilies", "MemoryDenyWriteExecute"}
+    and not name.startswith("RuntimeDirectory")
+    and name != "ReadWritePaths"
+}
+
+
+def test_the_deploy_runner_sees_only_the_telegram_token() -> None:
+    """K-133: çalıştırıcı ağa açıktır ve GitHub'dan çekilen kodu hazırlar; öbür sırlar yalnız
+    ağsız sağlık birimindedir."""
+    runner = _unit(UNITS / "finans-deploy.service")["Service"]
+    restart = _unit(UNITS / "finans-web-restart.service")["Service"]
+
+    assert [value for key, value in runner if key == "LoadCredential"] == [
+        f"{kur.TELEGRAM_CREDENTIAL}:/etc/finans/credstore/{kur.TELEGRAM_CREDENTIAL}"
+    ]
+    assert not {"LoadCredential", "EnvironmentFile"} & {key for key, _ in restart}
+    assert _one(runner, "EnvironmentFile") == "/etc/finans/finans.env"
+    assert (_one(runner, "User"), _one(runner, "Group")) == ("finans", "finans")
+    assert _one(runner, "ExecStart") == f"/usr/bin/python3 -I {kur.URETIM.betikler / 'kur'}"
+    assert "kur" in kur.SCRIPTS
+
+
+def test_the_deploy_runner_cannot_change_its_own_code_units_or_freeze() -> None:
+    runner = _unit(UNITS / "finans-deploy.service")["Service"]
+    writable = [Path(root) for root in _one(runner, "ReadWritePaths").split()]
+    paths = kur.URETIM
+    written = [
+        paths.istek,
+        paths.sonuc,
+        paths.repo,
+        paths.surumler,
+        paths.current,
+        paths.python,
+        paths.uv_cache,
+        *paths.kilitler,
+        paths.web_istek,
+        paths.saglik,
+    ]
+    environment = dict(value.split("=", 1) for key, value in runner if key == "Environment")
+
+    assert {name: _one(runner, name) for name in RUNNER_HARDENING} == RUNNER_HARDENING
+    assert _one(runner, "RestrictAddressFamilies") == "AF_UNIX AF_INET AF_INET6"
+    assert writable == [Path("/opt/finans"), Path("/var/lib/finans-deploy"), paths.kilitler[0]]
+    assert all(any(path.is_relative_to(root) for root in writable) for path in written)
+    assert not any(
+        path.is_relative_to(root)
+        for path in (paths.dondur, paths.systemd, paths.betikler)
+        for root in writable
+    )
+    assert environment["HOME"] == _one(runner, "WorkingDirectory") == str(paths.uv_cache.parent)
+    assert environment["PATH"] == "/usr/local/bin:/usr/bin:/bin"
+
+
+@pytest.mark.parametrize(
+    ("unit", "request_file"),
+    [
+        ("finans-deploy", kur.URETIM.istek),
+        ("finans-web-restart", kur.URETIM.web_istek),
+        ("finans-deploy-saglik", kur.URETIM.saglik / "istek"),
+    ],
+)
+def test_each_deploy_request_file_starts_its_own_unit(unit: str, request_file: Path) -> None:
+    watched = _unit(UNITS / f"{unit}.path")["Path"]
+
+    assert _one(watched, "PathExists") == str(request_file)
+    assert _one(watched, "Unit") == f"{unit}.service"
+
+
+def test_the_ssh_command_and_the_runner_share_the_request_result_and_lock() -> None:
+    assert (istek.URETIM.istek, istek.URETIM.sonuc) == (kur.URETIM.istek, kur.URETIM.sonuc)
+    assert istek.URETIM.kilit == kur.URETIM.sonuc / "kur.lock"
+
+
+def test_the_web_restart_runs_two_fixed_commands_as_root() -> None:
+    """K-133: root çalışan tek adım; komutlarına dışarıdan değer girmez."""
+    service = _unit(UNITS / "finans-web-restart.service")["Service"]
+
+    assert [value for key, value in service if key.startswith("Exec")] == [
+        f"/usr/bin/rm -f {kur.URETIM.web_istek}",
+        "/usr/bin/systemctl restart finans-web.service",
+    ]
+    assert not {"User", "Environment", "EnvironmentFile"} & {key for key, _ in service}
+    assert {
+        name: _one(service, name)
+        for name in (
+            "NoNewPrivileges",
+            "ProtectSystem",
+            "ReadWritePaths",
+            "PrivateNetwork",
+            "RestrictAddressFamilies",
+            "CapabilityBoundingSet",
+        )
+    } == {
+        "NoNewPrivileges": "yes",
+        "ProtectSystem": "strict",
+        "ReadWritePaths": str(kur.URETIM.web_istek.parent),
+        "PrivateNetwork": "yes",
+        "RestrictAddressFamilies": "AF_UNIX",
+        "CapabilityBoundingSet": "CAP_DAC_OVERRIDE",
+    }
+
+
+def test_units_and_wrappers_run_the_current_release() -> None:
+    """K-134: kod `/opt/finans/current` sürümünden çalışır; eski checkout yolu kalırsa ilk
+    deploy'dan sonra işler eski kodu çalıştırırdı."""
+    files = [path for path in UNITS.rglob("*") if path.is_file()]
+    files += [DEPLOY / "ft-finans", DEPLOY / "ft-sanal"]
+    old = re.compile(r"/opt/finans/(?!current/)")
+
+    assert [str(path) for path in files if old.search(path.read_text(encoding="utf-8"))] == []

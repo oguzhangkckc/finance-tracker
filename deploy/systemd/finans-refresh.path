@@ -1,6 +1,6 @@
 [Unit]
 Description=finans-takip elle fiyat güncelleme isteği
-Documentation=file:/opt/finans/docs/DESIGN.md
+Documentation=file:/opt/finans/current/docs/DESIGN.md
 
 [Path]
 PathExists=/var/lib/finans/refresh/real.request
