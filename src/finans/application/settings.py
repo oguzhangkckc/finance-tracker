@@ -11,6 +11,7 @@ from typing import Final, Literal
 
 from finans.domain.models import DomainError, YearMonth
 from finans.domain.portfolio import ConfigError, ConfigIssue, PortfolioConfig
+from finans.domain.schedule import payday_on
 from finans.domain.settings import (
     ClassChanges,
     SettingField,
@@ -52,6 +53,28 @@ def effective_config(uow: UnitOfWork, toml: PortfolioConfig, *, on: date) -> Por
         monthly_contribution=version.monthly_contribution,
         targets=dict(version.targets),
     )
+
+
+def planned_contributions(
+    uow: UnitOfWork, toml: PortfolioConfig, months: Sequence[YearMonth]
+) -> dict[YearMonth, Decimal | None]:
+    """Her ayın planlanan katkısı o ayın maaş gününde yürürlükte olan sürümden; maaş günü
+    tanımsız aylarda ayın 1'indekinden. Sürüm yoksa portfolio.toml."""
+    versions = active_versions(uow)
+    schedule = payday_schedule(versions, fallback=toml.payday)
+    planned: dict[YearMonth, Decimal | None] = {}
+    for month in months:
+        payday = schedule(month)
+        day = (
+            date(month.year, month.month, 1)
+            if payday is None
+            else payday_on(month.year, month.month, payday)
+        )
+        version = effective_version(versions, day)
+        planned[month] = (
+            toml.monthly_contribution if version is None else version.monthly_contribution
+        )
+    return planned
 
 
 def payday_for(uow: UnitOfWork, toml: PortfolioConfig) -> Callable[[YearMonth], int | None]:

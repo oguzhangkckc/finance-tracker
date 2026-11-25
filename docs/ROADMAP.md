@@ -113,9 +113,9 @@ Geliştirme kapısı: sıralama, filtre ve sayfalama birim testleri (Decimal, s�
 Takvim: geliştirme 10–18 Aralık; Pi'ye toplu kurulumla.
 
 ### W2d · Ayarlar
-Maaş günü, aylık katkı ve hedef dağılım veritabanında, yürürlük tarihli; `portfolio.toml` ilk değer; değişiklik geçmişi (K-127).
-Geliştirme kapısı: migration öncesi ve sonrası bütün rapor türleri aynı; Ocak'tan geçerli katkı Ekim raporunu değiştirmez; geriye tarih ve toplamı 1 olmayan hedef reddedilir; TOML sınıf kuralları; CLI ile eşlik.
-Takvim: geliştirme W2c'den sonra; Pi'ye toplu kurulumla.
+Maaş günü, aylık katkı ve hedef dağılım veritabanında, yürürlük tarihli; `portfolio.toml` ilk değer; değişiklik geçmişi (K-127). `0006_settings.sql`; `config apply` başlangıç sürümünü yazar, `doctor` "Ayarlar" denetimi; `ft ayar` (`goster`, `gecmis`, `katki`, `maas-gunu`, `hedef`, `vazgec`; `--sonrakilere-de`, `--deneme`); web `/<profil>/ayarlar` (yüzdeyle hedef ve canlı toplam, "Sanal portföye de uygula", "Sonraki planlanan sürümlere de uygula", vazgeçme); katkı grafiğinin planlanan çubuğu her ayın maaş günündeki ayardan.
+Geliştirme kapısı: migration öncesi ve sonrası bütün rapor türleri aynı; Ocak'tan geçerli katkı Ekim raporunu değiştirmez; geriye tarih ve toplamı 1 olmayan hedef reddedilir; TOML sınıf kuralları; CLI ile eşlik; maaş günü değişikliği iki yönde; Ocak katkısı ve Mart hedefi senaryosu taşımalı ve taşımasız; iki profile ayrı yazım ve ayrı sonuç; hedef toplamı Chrome'da; log'da tutar yok.
+Takvim: geliştirme 25 Kasım (bitti); Pi'ye toplu kurulumla. Kurulumda iki profilde `ft db migrate` ve `ft config apply`; `doctor` "Ayarlar: başlangıç sürümü (portfolio.toml)" göstermeli.
 
 ## D1 · Otomatik deploy
 GitHub Actions → Tailscale (`tag:ci`) → yalnız tek bir betiği çalıştırabilen deploy kullanıcısı → sürüm dizinleri, sağlık kontrolü, otomatik geri dönüş, Telegram bildirimi, dondurma anahtarı. Birim dosyası, deploy betiği ya da migration değişirse otomatik kurulum durur ve elle kurulum istenir. Karar satırları D1 dalında yazılır; imzalı commit doğrulaması şimdilik yok.

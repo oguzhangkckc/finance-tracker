@@ -230,9 +230,7 @@ CONTRIBUTION_MONTHS = 12
 
 
 def contribution_view(settings: Settings, clock: Clock) -> list[MonthContribution]:
-    """Planlanan katkı W2d'ye kadar portfolio.toml'dan (K-129)."""
-    planned = load_config(settings).monthly_contribution
+    """Planlanan çubuk her ayın maaş gününde yürürlükte olan katkı (K-127)."""
+    config = load_config(settings)
     with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
-        return monthly_contributions(
-            uow, end=clock.today(), months=CONTRIBUTION_MONTHS, planned=planned
-        )
+        return monthly_contributions(uow, config, end=clock.today(), months=CONTRIBUTION_MONTHS)
