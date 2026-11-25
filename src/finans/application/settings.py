@@ -231,9 +231,16 @@ def add_version(
 def cancel_version(
     uow: UnitOfWork, setting_id: int, *, reason: str, today: date, at: datetime
 ) -> SettingVersion:
-    """Yalnız yürürlük günü bugünden sonra olan sürümden vazgeçilir; satır silinmez."""
+    """Satır silinmez; vazgeçme ve gerekçesi geçmişte kalır."""
     if not reason.strip():
         raise DomainError("Vazgeçme gerekçesi boş olamaz.")
+    stored = cancellable(uow, setting_id, today=today)
+    uow.settings.cancel(setting_id, reason=reason.strip(), at=at)
+    return stored.version
+
+
+def cancellable(uow: UnitOfWork, setting_id: int, *, today: date) -> StoredSetting:
+    """Yalnız yürürlük günü bugünden sonra olan sürümden vazgeçilir."""
     stored = next((s for s in uow.settings.list() if s.id == setting_id), None)
     if stored is None:
         raise DomainError(f"{setting_id} numaralı ayar sürümü yok.")
@@ -244,8 +251,7 @@ def cancel_version(
             f"{setting_id} numaralı ayar sürümü yürürlüğe girmiş; vazgeçilemez. Değiştirmek için"
             " yeni bir sürüm ekle."
         )
-    uow.settings.cancel(setting_id, reason=reason.strip(), at=at)
-    return stored.version
+    return stored
 
 
 def toml_warning(current: SettingVersion, toml: PortfolioConfig) -> str | None:

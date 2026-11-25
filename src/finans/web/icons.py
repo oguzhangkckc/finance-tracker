@@ -24,6 +24,10 @@ ICONS: Final = {
     "raporlar": _icon('<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/>'),
     "alarmlar": _icon('<path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4z"/><path d="M10 21h4"/>'),
     "sistem": _icon('<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>'),
+    "ayarlar": _icon(
+        '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/>'
+        '<circle cx="10" cy="17" r="2"/>'
+    ),
     "daha": _icon(
         '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/>'
         '<circle cx="19" cy="12" r="1.6"/>',

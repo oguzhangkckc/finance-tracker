@@ -273,6 +273,22 @@ input, select, textarea {
 
 .field .error svg { width: 16px; height: 16px; flex: none; margin-top: 2px; }
 
+.targets { min-width: 0; margin: 0 0 18px; padding: 0; border: 0; }
+
+.targets legend { margin: 0 0 10px; padding: 0; font-weight: 600; font-size: 0.9375rem; }
+
+.targets .error { display: flex; gap: 6px; align-items: flex-start; margin: 0 0 8px; color: var(--loss); font-size: 0.875rem; }
+
+.targets .error svg { width: 16px; height: 16px; flex: none; margin-top: 2px; }
+
+.targets .hint { margin: 0; color: var(--ink-2); font-size: 0.8125rem; }
+
+.target-total { margin: 0 0 8px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.target-total.off { color: var(--warn); }
+
+.profile-plan { margin: 0 0 24px; }
+
 textarea { min-height: 88px; padding: 10px 12px; }
 
 input[type="checkbox"] { width: 22px; height: 22px; min-height: 0; margin: 2px 0 0; flex: none; accent-color: var(--accent); }

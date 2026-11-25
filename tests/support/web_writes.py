@@ -11,12 +11,14 @@ import pytest
 from pydantic import SecretStr
 from typer.testing import CliRunner
 
+from finans import bootstrap
 from finans.adapters.sqlite.connection import connect
 from finans.adapters.sqlite.migrate import apply, bundled
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.application.password import hash_password
 from finans.cli.main import app as ft_app
 from finans.domain.models import PricePoint
+from finans.domain.settings import start_version
 from finans.ports.repositories import StoredTransaction
 from finans.settings import Profile, Settings, profile_settings
 from finans.web.app import create_app
@@ -120,3 +122,12 @@ def cli_rows(settings: Settings, profile: Profile) -> list[StoredTransaction]:
     conf = profile_settings(settings)[profile]
     with SqliteUnitOfWork(conf.db_path, readonly=True, sanal=profile == "sanal") as uow:
         return uow.transactions.list(include_voided=True)
+
+
+def start_settings(settings: Settings) -> None:
+    """İki profile de ilk `config apply`'ın yazacağı ayar başlangıç sürümü (K-127)."""
+    assert settings.portfolio_path is not None
+    start = start_version(bootstrap.portfolio_source().load(settings.portfolio_path))
+    for profile, conf in profile_settings(settings).items():
+        with SqliteUnitOfWork(conf.db_path, sanal=profile == "sanal") as uow:
+            uow.settings.add(start, source="toml", at=NOW)

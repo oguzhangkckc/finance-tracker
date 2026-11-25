@@ -27,6 +27,7 @@ PAGES = (
     "/raporlar/aylik",
     "/raporlar/maas-gunu",
     "/alarmlar",
+    "/ayarlar",
     "/islemler",
     "/sistem",
     "/daha",

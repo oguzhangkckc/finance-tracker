@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% from "_ui.html" import steps, target_profile %}
+{% set stored = row.stored %}
+{% block title %}Ayar sürümü #{{ stored.id }} · vazgeç · finans-takip{% endblock %}
+{% block content %}
+<h1>Ayar sürümü #{{ stored.id }}: vazgeç</h1>
+<p class="muted">Kayıt silinmez; vazgeçildiği ve gerekçesi geçmişte kalır.{% if mode == "onizle" %} Henüz bir şey kaydedilmedi.{% endif %}</p>
+{{ steps(2 if mode == "onizle" else 1) }}
+{% if changed %}
+<div class="notice warn" role="alert">{{ icon("uyari") }}<p><strong>Önizlemeden sonra veriler değişti; kayıt yapılmadı.</strong> Yeni önizlemeyi kontrol et.</p></div>
+{% endif %}
+{% if mode == "onizle" %}{{ target_profile(profile) }}{% endif %}
+<div class="panel">
+  <dl class="summary">
+    <dt>Yürürlük</dt><dd>{{ stored.version.effective_from | gun(case="den") }} itibaren</dd>
+    {% for name, change in describe(row.previous, stored.version, row.changed) %}
+    <dt>{{ name }}</dt><dd>{{ change }}</dd>
+    {% endfor %}
+    {% if mode == "onizle" %}<dt class="total">Gerekçe</dt><dd class="total">{{ reason }}</dd>{% endif %}
+  </dl>
+</div>
+{% if mode == "onizle" %}
+<form class="actions" method="post" action="{{ prefix }}/ayarlar/kaydet">
+  <input type="hidden" name="belirtec" value="{{ csrf }}">
+  {% for name, value in signed.items() %}
+  <input type="hidden" name="{{ name }}" value="{{ value }}">
+  {% endfor %}
+  <button class="btn btn-danger" type="submit">Vazgeçmeyi kaydet</button>
+</form>
+<form class="actions" method="post" action="{{ prefix }}/ayarlar/{{ stored.id }}/vazgec">
+  <input type="hidden" name="belirtec" value="{{ csrf }}">
+  <input type="hidden" name="duzenle" value="1">
+  <input type="hidden" name="gerekce" value="{{ reason }}">
+  <button class="btn btn-secondary" type="submit">Düzenle</button>
+</form>
+{% else %}
+{% set error = errors.get("gerekce") %}
+<form class="form" method="post" action="{{ prefix }}/ayarlar/{{ stored.id }}/vazgec">
+  <input type="hidden" name="belirtec" value="{{ csrf }}">
+  <div class="field{% if error %} invalid{% endif %}">
+    <label for="gerekce">Gerekçe</label>
+    <textarea id="gerekce" name="gerekce" maxlength="200" required aria-describedby="{% if error %}gerekce-hata {% endif %}gerekce-ipucu"{% if error %} aria-invalid="true"{% endif %}>{{ reason }}</textarea>
+    {% if error %}<p class="error" id="gerekce-hata">{{ icon("hata") }}{{ error }}</p>{% endif %}
+    <p class="hint" id="gerekce-ipucu">Ör. "yanlış tutar", "plan değişti". Kayıtta kalır.</p>
+  </div>
+  <div class="actions"><button class="btn btn-primary" type="submit">Önizle</button><a class="btn btn-secondary" href="{{ prefix }}/ayarlar">Vazgeç</a></div>
+</form>
+{% endif %}
+{% endblock %}
