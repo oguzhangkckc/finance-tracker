@@ -8,12 +8,17 @@ import os
 import re
 import shutil
 import subprocess
+from datetime import date
+from decimal import Decimal
 from pathlib import Path
 from typing import Literal
 
 import pytest
 
-from tests.support.web_writes import REAL_BUY, Site, post_preview, start_settings
+from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
+from finans.domain.models import Side, Transaction
+from finans.domain.settings import SettingVersion
+from tests.support.web_writes import NOW, REAL_BUY, Site, post_preview, start_settings
 
 STATIC = Path(__file__).parents[2] / "src" / "finans" / "web" / "static"
 _CANDIDATES = (
@@ -134,15 +139,53 @@ window.addEventListener("load", function () {
 """
 
 
-def _run(chrome: str, page: str, tmp_path: Path, width: int) -> dict[str, object]:
+# Yalnız teste ait: masaüstü tablosunda dar sütunlardaki her kelime tek satırda mı. Ekran okuyucu
+# metni (`.sr`, 1 piksel) ve uzun serbest metin sütunları (`.wrap`) sayılmaz.
+WORDS = r"""
+window.addEventListener("load", function () {
+  var broken = [];
+  var cells = document.querySelectorAll("table.cards th, table.cards td:not(.wrap)");
+  Array.prototype.forEach.call(cells, function (cell) {
+    var walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+    var node;
+    while ((node = walker.nextNode())) {
+      if (node.parentElement.closest(".sr")) { continue; }
+      var words = /\S+/g;
+      var match;
+      while ((match = words.exec(node.data))) {
+        var range = document.createRange();
+        range.setStart(node, match.index);
+        range.setEnd(node, match.index + match[0].length);
+        var lines = {};
+        Array.prototype.forEach.call(range.getClientRects(), function (rect) {
+          if (rect.width > 0) { lines[Math.round(rect.top)] = true; }
+        });
+        if (Object.keys(lines).length > 1) { broken.push(match[0]); }
+      }
+    }
+  });
+  var overflow = document.documentElement.scrollWidth > window.innerWidth;
+  var out = {broken: broken, overflow: overflow};
+  document.getElementById("sonuc").textContent = JSON.stringify(out);
+});
+"""
+
+
+def _run(
+    chrome: str, page: str, tmp_path: Path, width: int, harness: str = HARNESS
+) -> dict[str, object]:
     script = re.compile(r'<script src="/static/app\.[0-9a-f]{12}\.js" defer></script>')
     assert script.search(page), "sayfa app.js'i yüklemiyor"
+    style = re.compile(r'<link rel="stylesheet" href="/static/site\.[0-9a-f]{12}\.css">')
+    assert style.search(page), "sayfa site.css'i yüklemiyor"
     local = script.sub('<script src="app.js" defer></script>', page)
+    local = style.sub('<link rel="stylesheet" href="site.css">', local)
     local = local.replace(
         "</body>", '<pre id="sonuc"></pre><script src="harness.js" defer></script></body>'
     )
     shutil.copy(STATIC / "app.js", tmp_path / "app.js")
-    (tmp_path / "harness.js").write_text(HARNESS, encoding="utf-8")
+    shutil.copy(STATIC / "site.css", tmp_path / "site.css")
+    (tmp_path / "harness.js").write_text(harness, encoding="utf-8")
     (tmp_path / "page.html").write_text(local, encoding="utf-8")
     command = [
         chrome,
@@ -248,3 +291,29 @@ def test_the_target_total_is_live_and_previewing_waits_for_exactly_one_hundred(
         ["Toplam hesaplanamadı: her alan virgüllü bir sayı olmalı (ör. 17,5).", True],
         ["Toplam %100", False],
     ]
+
+
+@pytest.mark.parametrize("width", [800, 1024, 1470])
+@pytest.mark.parametrize("page_path", ["/gercek/islemler", "/gercek/ayarlar"])
+def test_desktop_tables_never_break_a_word_in_a_narrow_column(
+    site: Site, tmp_path: Path, chrome: str, page_path: str, width: int
+) -> None:
+    """Uzun not ya da değişiklik metni yalnız kendi sütununda kırılır; iki haneli işlem numarası,
+    "alış", "geçerli" ve "portfolio.toml" gibi kısa değerler harf harf bölünmez."""
+    start_settings(site.settings)
+    conf = site.conf("real")
+    with SqliteUnitOfWork(conf.db_path) as uow:
+        for day in range(16, 28):
+            trade = Transaction(
+                "XHT", date(2026, 11, day), Side.BUY, Decimal(732), Decimal("1.48181")
+            )
+            note = f"sanal-maas-gunu:2026-11-{day}:XHT"
+            uow.transactions.add(trade, external_ref=None, note=note, created_at=NOW)
+        targets = {"hisse": Decimal("0.7"), "dusuk_risk": Decimal("0.3")}
+        planned = SettingVersion(date(2027, 1, 1), 20, Decimal(1500), targets)
+        uow.settings.add(planned, source="web", at=NOW)
+    page = site.browser().get(page_path).text
+
+    out = _run(chrome, page, tmp_path, width, harness=WORDS)
+
+    assert out == {"broken": [], "overflow": False}
