@@ -127,9 +127,12 @@ def migrate_database(settings: Settings, clock: Clock | None = None) -> Migratio
     )
 
 
-def open_unit_of_work(settings: Settings, *, readonly: bool = False) -> UnitOfWork:
+def open_unit_of_work(
+    settings: Settings, *, readonly: bool = False, migrate: bool = True
+) -> UnitOfWork:
+    """`migrate=False`: web yazar ama şemayı değiştirmez; migration elle yapılır (K-126)."""
     sanal = is_sanal_profile(settings)
-    if readonly:
+    if readonly or not migrate:
         if not settings.db_path.exists():
             first = "ft sanal init" if sanal else "ft db migrate"
             raise SetupError(
