@@ -13,7 +13,7 @@ from typing import Literal
 
 import pytest
 
-from tests.support.web_writes import REAL_BUY, Site, post_preview
+from tests.support.web_writes import REAL_BUY, Site, post_preview, start_settings
 
 STATIC = Path(__file__).parents[2] / "src" / "finans" / "web" / "static"
 _CANDIDATES = (
@@ -78,6 +78,24 @@ window.addEventListener("load", function () {
     out.emptyAfterZzz = shown(document.getElementById("ara-bos"));
     type("");
     out.cleared = visible();
+  }
+  var total = document.getElementById("hedef-toplam");
+  if (total) {
+    var targets = Array.prototype.slice.call(document.querySelectorAll("input[data-hedef]"));
+    var preview = document.getElementById("onizle");
+    var fill = function (values) {
+      values.forEach(function (value, i) {
+        targets[i].value = value;
+        targets[i].dispatchEvent(new Event("input", {bubbles: true}));
+      });
+      return [total.textContent, preview.disabled];
+    };
+    out.totals = [[total.textContent, preview.disabled]];
+    out.totals.push(fill(["60", "37,5"]));
+    out.totals.push(fill(["62,5", "37,5"]));
+    out.totals.push(fill(["70", "40,25"]));
+    out.totals.push(fill(["6.5", "40"]));
+    out.totals.push(fill(["0,1", "99,9"]));
   }
   var sort = document.getElementById("siralama");
   if (sort) {
@@ -212,3 +230,21 @@ def test_a_missing_chrome_fails_on_ci_and_is_skipped_only_locally(
     ci: str | None, action: str
 ) -> None:
     assert missing_chrome(ci) == action
+
+
+def test_the_target_total_is_live_and_previewing_waits_for_exactly_one_hundred(
+    site: Site, tmp_path: Path, chrome: str
+) -> None:
+    start_settings(site.settings)
+    page = site.browser().get("/gercek/ayarlar/yeni").text
+
+    out = _run(chrome, page, tmp_path, PHONE)
+
+    assert out["totals"] == [
+        ["Toplam %100", False],
+        ["Toplam %97,5 · %2,5 eksik", True],
+        ["Toplam %100", False],
+        ["Toplam %110,25 · %10,25 fazla", True],
+        ["Toplam hesaplanamadı: her alan virgüllü bir sayı olmalı (ör. 17,5).", True],
+        ["Toplam %100", False],
+    ]

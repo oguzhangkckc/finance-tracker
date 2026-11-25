@@ -1,9 +1,10 @@
-"""İş kaydı, alarm durumu ve dağılım durumu repository'leri (M4, 0004)."""
+"""İş kaydı, alarm durumu, dağılım durumu, web gönderimi ve ayar repository'leri."""
 
+import json
 import sqlite3
 from collections.abc import Sequence
 from datetime import date, datetime
-from typing import Final
+from typing import Any, Final
 
 from finans.adapters.sqlite.codec import (
     decode_date,
@@ -14,12 +15,15 @@ from finans.adapters.sqlite.codec import (
     encode_timestamp,
 )
 from finans.domain.allocation import Direction, EventKind
+from finans.domain.settings import SettingVersion
 from finans.ports.repositories import (
     AlertEvent,
     AlertState,
     JobStatus,
+    SettingSource,
     StoredAlertEvent,
     StoredRun,
+    StoredSetting,
 )
 
 _STATUS: Final[dict[str, JobStatus]] = {
@@ -235,3 +239,64 @@ class SqliteSubmissionRepo:
             "INSERT INTO web_submission (nonce, ref, used_at) VALUES (?, ?, ?)",
             (nonce, ref, encode_timestamp(at)),
         )
+
+
+_SETTING_SELECT = (
+    "SELECT id, effective_from, payday, monthly_contribution, targets, source, recorded_at,"
+    " cancelled_at, cancel_reason FROM setting_version"
+)
+
+
+class SqliteSettingRepo:
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+
+    def list(self) -> list[StoredSetting]:
+        rows = self._conn.execute(_SETTING_SELECT + " ORDER BY id").fetchall()
+        return [_setting(row) for row in rows]
+
+    def add(self, version: SettingVersion, *, source: SettingSource, at: datetime) -> int:
+        targets = json.dumps(
+            {name: encode_decimal(value) for name, value in version.targets.items()},
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        contribution = version.monthly_contribution
+        cursor = self._conn.execute(
+            "INSERT INTO setting_version (effective_from, payday, monthly_contribution, targets,"
+            " source, recorded_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                version.effective_from.isoformat(),
+                version.payday,
+                None if contribution is None else encode_decimal(contribution),
+                targets,
+                source,
+                encode_timestamp(at),
+            ),
+        )
+        return int(cursor.lastrowid or 0)
+
+    def cancel(self, setting_id: int, *, reason: str, at: datetime) -> None:
+        self._conn.execute(
+            "UPDATE setting_version SET cancelled_at = ?, cancel_reason = ?"
+            " WHERE id = ? AND cancelled_at IS NULL",
+            (encode_timestamp(at), reason, setting_id),
+        )
+
+
+def _setting(row: tuple[Any, ...]) -> StoredSetting:
+    setting_id, effective, payday, contribution, targets, source, recorded, cancelled, reason = row
+    version = SettingVersion(
+        date.fromisoformat(effective),
+        payday,
+        None if contribution is None else decode_decimal(contribution),
+        {name: decode_decimal(value) for name, value in json.loads(targets).items()},
+    )
+    return StoredSetting(
+        setting_id,
+        version,
+        source,
+        decode_timestamp(recorded),
+        None if cancelled is None else decode_timestamp(cancelled),
+        reason,
+    )

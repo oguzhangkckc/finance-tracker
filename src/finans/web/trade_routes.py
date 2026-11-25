@@ -3,6 +3,7 @@ kayıt (K-105, K-113, K-116, K-125, K-126). Her uç önce formu ve kilidi denetl
 
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, Final, Protocol
 
 from starlette.concurrency import run_in_threadpool
@@ -18,7 +19,7 @@ from finans.ports.clock import Clock
 from finans.ports.unit_of_work import StorageBusyError
 from finans.settings import Profile, Settings
 from finans.web.confirm import sign, verify
-from finans.web.forms import REFUSED, read_form
+from finans.web.forms import MAX_FIELDS, REFUSED, read_form
 from finans.web.lock import WriteLock
 from finans.web.views import PAGE_ERRORS, PageError, load_config
 from finans.web.writes import (
@@ -93,40 +94,55 @@ class WriteContext:
 
 
 type Handler = Callable[[Request], Coroutine[Any, Any, Response]]
+type Body = Callable[[Request, dict[str, str]], Response]
+
+
+def write_gate(w: WriteContext, request: Request, back: str) -> Response | None:
+    state = w.lock.state(request.state.session)
+    if state.status == "disabled":
+        return w.lock_page(request, back, status=403)
+    if state.status == "locked":
+        return RedirectResponse(f"{w.prefix}/kilit?sonra={back}", status_code=303)
+    return None
+
+
+def write_failure(w: WriteContext, request: Request, message: str, status: int) -> Response:
+    return w.page(request, "hata.html", {"message": message}, status=status)
+
+
+def write_posted(
+    w: WriteContext, body: Body, *, back: str, max_fields: int = MAX_FIELDS
+) -> Handler:
+    """`back`: meşgul sayfasındaki dönüş bağlantısı."""
+
+    async def handler(request: Request) -> Response:
+        form = await read_form(request, origin=w.origin, key=w.key, max_fields=max_fields)
+        if isinstance(form, Response):
+            return form
+        try:
+            return await run_in_threadpool(body, request, form)
+        except StorageBusyError:
+            # Nonce harcanmadı; aynı form aynı adrese yeniden gönderilebilir.
+            context: dict[str, object] = {
+                "action": request.url.path,
+                "fields": form,
+                "back": back,
+            }
+            response = w.page(request, "mesgul.html", context, status=503)
+            response.headers["Retry-After"] = "5"
+            return response
+        except (PageError, *PAGE_ERRORS) as exc:
+            return write_failure(w, request, str(exc), 503)
+
+    return handler
 
 
 def write_routes(w: WriteContext) -> list[BaseRoute]:
     sanal = w.profile == "sanal"
     prefix = w.prefix
-
-    def gate(request: Request, back: str) -> Response | None:
-        state = w.lock.state(request.state.session)
-        if state.status == "disabled":
-            return w.lock_page(request, back, status=403)
-        if state.status == "locked":
-            return RedirectResponse(f"{prefix}/kilit?sonra={back}", status_code=303)
-        return None
-
-    def failure(request: Request, message: str, status: int) -> Response:
-        return w.page(request, "hata.html", {"message": message}, status=status)
-
-    def posted(body: Callable[[Request, dict[str, str]], Response]) -> Handler:
-        async def handler(request: Request) -> Response:
-            form = await read_form(request, origin=w.origin, key=w.key)
-            if isinstance(form, Response):
-                return form
-            try:
-                return await run_in_threadpool(body, request, form)
-            except StorageBusyError:
-                # Nonce harcanmadı; aynı form aynı adrese yeniden gönderilebilir.
-                context: dict[str, object] = {"action": request.url.path, "fields": form}
-                response = w.page(request, "mesgul.html", context, status=503)
-                response.headers["Retry-After"] = "5"
-                return response
-            except (PageError, *PAGE_ERRORS) as exc:
-                return failure(request, str(exc), 503)
-
-        return handler
+    gate = partial(write_gate, w)
+    failure = partial(write_failure, w)
+    posted = partial(write_posted, w, back=f"{prefix}/islemler")
 
     def form_page(
         request: Request,

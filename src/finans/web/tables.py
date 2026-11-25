@@ -4,6 +4,7 @@ from collections.abc import Callable, Sequence
 from decimal import Decimal
 from typing import Final
 
+from finans.application.settings import HistoryRow, SettingState
 from finans.domain.models import Side
 from finans.ports.repositories import StoredRun
 from finans.web.table import Choice, Column, TableSpec
@@ -200,4 +201,39 @@ RUNS: Final = TableSpec[StoredRun](
         ),
     ),
     day=lambda r: r.logical_date,
+)
+
+SETTING_SOURCES: Final = {"toml": "portfolio.toml", "cli": "CLI", "web": "Web"}
+_SETTING_STATES: Final[dict[str, tuple[SettingState, str]]] = {
+    "gecerli": ("in_force", "Geçerli"),
+    "planlandi": ("planned", "Planlandı"),
+    "gecmis": ("past", "Geçmiş"),
+    "degisti": ("replaced", "Aynı gün yenisi kaydedildi"),
+    "vazgecildi": ("cancelled", "Vazgeçildi"),
+}
+
+SETTINGS: Final = TableSpec[HistoryRow](
+    columns=(
+        Column("kayit", "Kayıt", lambda r: r.stored.recorded_at, _NEWEST),
+        Column("yururluk", "Yürürlük", lambda r: r.stored.version.effective_from, _NEWEST),
+        Column("no", "No", lambda r: r.stored.id, _SIZE),
+    ),
+    default_sort="kayit",
+    default_descending=True,
+    tiebreak=lambda r: r.stored.id,
+    choices=(
+        Choice(
+            "durum",
+            "Durum",
+            lambda _: [(slug, label) for slug, (_, label) in _SETTING_STATES.items()],
+            lambda r, v: r.state == _SETTING_STATES[v][0],
+        ),
+        Choice(
+            "kaynak",
+            "Kaynak",
+            lambda _: list(SETTING_SOURCES.items()),
+            lambda r, v: r.stored.source == v,
+        ),
+    ),
+    day=lambda r: r.stored.version.effective_from,
 )

@@ -9,6 +9,7 @@ from finans.ports.repositories import (
     PriceRepo,
     RawPayloadRepo,
     RunRepo,
+    SettingRepo,
     SubmissionRepo,
     TransactionRepo,
 )
@@ -30,6 +31,7 @@ class UnitOfWork(Protocol):
     alerts: AlertRepo
     allocation_state: AllocationStateRepo
     submissions: SubmissionRepo
+    settings: SettingRepo
 
     def __enter__(self) -> Self: ...
 

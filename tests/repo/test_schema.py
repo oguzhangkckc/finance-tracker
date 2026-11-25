@@ -55,6 +55,7 @@ def test_expected_tables_and_all_strict(conn: sqlite3.Connection) -> None:
         "alert_event",
         "allocation_state",
         "web_submission",
+        "setting_version",
     }
     assert all(
         sql.rstrip().endswith(("STRICT", "STRICT, WITHOUT ROWID")) for sql in tables.values()

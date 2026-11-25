@@ -1,9 +1,10 @@
+from collections.abc import Callable
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 import pytest
 
-from finans.domain.models import DomainError
+from finans.domain.models import DomainError, YearMonth
 from finans.domain.schedule import JOBS, logical_date, payday_on
 
 ISTANBUL = ZoneInfo("Europe/Istanbul")
@@ -107,3 +108,40 @@ def test_late_payday_moves_to_the_last_day_of_short_months(
     assert logical_date("payday", on_the_day, payday=payday) == expected
     day_before = _at(expected.year, expected.month, expected.day - 1, 23, 0)
     assert logical_date("payday", day_before, payday=payday) < date(year, month, 1)
+
+
+def _moved(before: int, after: int) -> Callable[[YearMonth], int | None]:
+    """Maaş günü 1 Ocak 2027'den itibaren değişir (K-127: yalnız bir ayın 1'inden)."""
+    return lambda month: after if month >= YearMonth(2027, 1) else before
+
+
+@pytest.mark.parametrize(
+    ("now", "expected"),
+    [
+        (_at(2026, 12, 21, 10, 0), date(2026, 12, 20)),
+        (_at(2027, 1, 10, 10, 0), date(2026, 12, 20)),
+        (_at(2027, 1, 15, 9, 0), date(2027, 1, 15)),
+    ],
+)
+def test_moving_the_payday_earlier_keeps_the_old_months_payday(
+    now: datetime, expected: date
+) -> None:
+    """20'den 15'e: Aralık'ın maaş günü (20) kaybolmaz, Ocak 15'i yeni gündür."""
+    assert logical_date("payday", now, payday=_moved(20, 15)) == expected
+
+
+@pytest.mark.parametrize(
+    ("now", "expected"),
+    [
+        (_at(2027, 1, 16, 10, 0), date(2026, 12, 15)),
+        (_at(2027, 1, 20, 9, 0), date(2027, 1, 20)),
+    ],
+)
+def test_moving_the_payday_later_gives_one_payday_per_month(now: datetime, expected: date) -> None:
+    """15'ten 20'ye: Ocak'ta 15'i maaş günü sayılmaz, ayda tek maaş günü kalır."""
+    assert logical_date("payday", now, payday=_moved(15, 20)) == expected
+
+
+def test_a_schedule_without_any_payday_is_refused() -> None:
+    with pytest.raises(DomainError, match="payday"):
+        logical_date("payday", _at(2027, 1, 16, 10, 0), payday=lambda _month: None)

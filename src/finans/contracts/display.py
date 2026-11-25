@@ -72,8 +72,8 @@ MONTHS: Final = (
     "Kasım",
     "Aralık",
 )
-# Yalın, ilgi (-ın: "Kasım'ın") ve bulunma (-da: "Kasım'da") hâli.
-type Case = Literal["", "in", "de"]
+# Yalın, ilgi (-ın: "Kasım'ın"), bulunma (-da: "Kasım'da") ve ayrılma (-dan: "Kasım'dan") hâli.
+type Case = Literal["", "in", "de", "den"]
 _VOWELS: Final = "aıoueiöü"
 _BACK_VOWELS: Final = "aıou"
 _VOICELESS: Final = "fstkçşhp"
@@ -112,7 +112,8 @@ def _suffix(word: str, case: Case) -> str:
         buffer = "n" if word[-1] in _VOWELS else ""
         return f"'{buffer}{_GENITIVE_VOWEL[vowel]}n"
     consonant = "t" if word[-1] in _VOICELESS else "d"
-    return f"'{consonant}{'a' if vowel in _BACK_VOWELS else 'e'}"
+    ending = "n" if case == "den" else ""
+    return f"'{consonant}{'a' if vowel in _BACK_VOWELS else 'e'}{ending}"
 
 
 def day_label(day: date, *, today: date, case: Case = "", year: bool | None = None) -> str:

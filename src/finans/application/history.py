@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
+from finans.application.settings import planned_contributions
 from finans.domain.history import (
     cpi_is_estimated,
     inflation_adjusted_contribution,
@@ -14,6 +15,7 @@ from finans.domain.history import (
 )
 from finans.domain.inflation import CpiSeries, reference_period
 from finans.domain.models import DomainError, YearMonth
+from finans.domain.portfolio import PortfolioConfig
 from finans.domain.positions import build_positions
 from finans.domain.valuation import PriceHistory, value_book
 from finans.ports.unit_of_work import UnitOfWork
@@ -73,10 +75,12 @@ def value_history(uow: UnitOfWork, *, end: date, cpi_series: str) -> list[ValueP
 
 
 def monthly_contributions(
-    uow: UnitOfWork, *, end: date, months: int, planned: Decimal | None
+    uow: UnitOfWork, toml: PortfolioConfig, *, end: date, months: int
 ) -> list[MonthContribution]:
+    """Planlanan katkı her ayın maaş gününde yürürlükte olan ayardan (K-127)."""
     last = YearMonth.of(end)
     periods = [last.shift(offset) for offset in range(1 - months, 1)]
     flows = [stored.transaction.cash_flow() for stored in uow.transactions.list(until=end)]
     totals = monthly_net_contributions(flows, periods)
-    return [MonthContribution(period, totals[period], planned) for period in periods]
+    planned = planned_contributions(uow, toml, periods)
+    return [MonthContribution(period, totals[period], planned[period]) for period in periods]

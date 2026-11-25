@@ -5,11 +5,13 @@ from typing import Literal
 
 from finans.application.data_check import price_series, tracked_instruments
 from finans.application.password import well_formed
+from finans.application.settings import active_versions, toml_warning
 from finans.domain.models import YearMonth
 from finans.domain.numeric import canonical_text
 from finans.domain.portfolio import PortfolioConfig
 from finans.domain.positions import build_positions
 from finans.domain.quality import check_staleness
+from finans.domain.settings import class_changes, effective_version
 from finans.ports.unit_of_work import UnitOfWork
 
 Status = Literal["ok", "warn", "fail"]
@@ -57,6 +59,43 @@ def inactive_holdings_check(uow: UnitOfWork) -> Check:
     if not held:
         return Check("Pasif varlıkta pay", "ok", "yok")
     return Check("Pasif varlıkta pay", "warn", f"{'; '.join(held)} (satış girilebilir)")
+
+
+def settings_check(uow: UnitOfWork, config: PortfolioConfig, *, today: date) -> Check:
+    """Ayarın değeri gösterilmez; yalnız sürüm günleri ve farklı olan ayarın adı (K-127)."""
+    name = "Ayarlar"
+    versions = active_versions(uow)
+    current = effective_version(versions, today)
+    if current is None:
+        return Check(
+            name, "warn", "sürüm yok, portfolio.toml kullanılıyor; `ft config apply` çalıştır"
+        )
+    changes = class_changes(versions, config.targets.keys(), today=today)
+    if changes.blocked:
+        return Check(
+            name,
+            "warn",
+            "`ft config apply` reddeder: ağırlığı 0 olmayan sınıf silinmiş"
+            f" ({', '.join(changes.blocked)}); önce ağırlığını 0 yap.",
+        )
+    parts: list[str] = []
+    if changes.added or changes.removed:
+        listed = [f"eklenecek sınıf: {', '.join(changes.added)}"] * bool(changes.added)
+        listed += [f"çıkarılacak sınıf: {', '.join(changes.removed)}"] * bool(changes.removed)
+        parts.append(f"`ft config apply` gerekli; {'; '.join(listed)}.")
+    warning = toml_warning(current, config)
+    if warning is not None:
+        parts.append(warning)
+    if parts:
+        return Check(name, "warn", " ".join(parts))
+    if current.effective_from == date.min:
+        detail = "başlangıç sürümü (portfolio.toml)"
+    else:
+        detail = f"yürürlükteki sürüm: {current.effective_from.isoformat()}"
+    planned = sorted({v.effective_from.isoformat() for v in versions if v.effective_from > today})
+    if planned:
+        detail += f"; planlanan: {', '.join(planned)}"
+    return Check(name, "ok", detail)
 
 
 def cpi_check(uow: UnitOfWork, series: str, *, today: date) -> Check:

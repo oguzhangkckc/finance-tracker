@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import date, timedelta
 from decimal import Decimal
@@ -29,6 +29,20 @@ from finans.application.price_sync import PriceSyncReport, sync_prices
 from finans.application.prices import set_manual_price
 from finans.application.reconcile import reconcile_statement
 from finans.application.report import ReportKind, build_report, payday_plan
+from finans.application.settings import (
+    FROM_SETTINGS,
+    KEEP,
+    STATE_LABELS,
+    FromSettings,
+    HistoryRow,
+    Keep,
+    LaterRewrite,
+    cancel_version,
+    payday_for,
+    propose,
+    save_proposal,
+    setting_history,
+)
 from finans.application.transactions import (
     add_transaction,
     import_transactions,
@@ -42,8 +56,15 @@ from finans.domain.portfolio import ConfigError, QualityThresholds
 from finans.domain.quality import DataIssue
 from finans.domain.reconcile import PriceDateEvidence
 from finans.domain.schedule import logical_date
+from finans.domain.settings import (
+    FIELD_LABELS,
+    FIELDS,
+    SettingField,
+    SettingValues,
+    SettingVersion,
+)
 from finans.ports.clock import BUSINESS_TZ
-from finans.ports.repositories import StoredTransaction
+from finans.ports.repositories import StoredSetting, StoredTransaction
 from finans.settings import Settings, load_settings
 
 app = typer.Typer(
@@ -80,6 +101,11 @@ app.add_typer(sanal_app, name="sanal")
 app.add_typer(backup_app, name="backup")
 web_app = typer.Typer(no_args_is_help=True, help="Web arayüzü (K-123, K-126).")
 app.add_typer(web_app, name="web")
+ayar_app = typer.Typer(
+    no_args_is_help=True,
+    help="Maaş günü, aylık katkı ve hedefler; yürürlük tarihli sürümler (K-127).",
+)
+app.add_typer(ayar_app, name="ayar")
 
 
 class SideChoice(StrEnum):
@@ -131,13 +157,278 @@ def config_check(file: FileOption = None) -> None:
 
 @config_app.command("apply")
 def config_apply(file: FileOption = None) -> None:
-    """portfolio.toml'u doğrular ve varlık tanımlarını veritabanına yazar."""
+    """portfolio.toml'u doğrular; varlık tanımlarını ve ayarların başlangıç sürümünü yazar."""
     settings = _load_settings_or_exit()
+    clock = bootstrap.system_clock()
     with _user_errors():
         config = bootstrap.portfolio_source().load(_portfolio_path(settings, file))
         with bootstrap.open_unit_of_work(settings) as uow:
-            report = apply_portfolio(uow, config)
+            report = apply_portfolio(uow, config, today=clock.today(), at=clock.now())
     _print_apply(report)
+
+
+EffectiveOption = Annotated[
+    str, typer.Option("--tarih", help="Yürürlük günü (YYYY-AA-GG); en erken bugün")
+]
+CarryOption = Annotated[
+    bool,
+    typer.Option(
+        "--sonrakilere-de",
+        help="Değişikliği eski değerle taşıyan ileri tarihli planlanan sürümlere de uygula.",
+    ),
+]
+DryRunOption = Annotated[
+    bool, typer.Option("--deneme", help="Yazmadan önizlemeyi ve uyarıları göster.")
+]
+
+
+@ayar_app.command("goster")
+def ayar_show() -> None:
+    """Bugün geçerli ayarı ve planlanan sürümleri gösterir."""
+    settings = _load_settings_or_exit()
+    today = bootstrap.system_clock().today()
+    with _user_errors():
+        config = bootstrap.portfolio_source().load(_portfolio_path(settings, None))
+        with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+            history = setting_history(uow, today=today)
+    order = list(config.targets)
+    current = next((row for row in history if row.state == "in_force"), None)
+    values: SettingValues = config
+    if current is None:
+        typer.echo(
+            "Ayar sürümü yok; portfolio.toml kullanılıyor. Başlangıç sürümünü `ft config apply`"
+            " yazar."
+        )
+    else:
+        values = current.stored.version
+        start = current.stored.version.effective_from == date.min
+        name = "başlangıç sürümü (portfolio.toml)" if start else _version_day(current.stored)
+        typer.echo(f"Geçerli ayar: {name if start else f'#{current.stored.id}, {name}'}")
+    for field in FIELDS:
+        typer.echo(f"  {FIELD_LABELS[field].capitalize()}: {_setting_text(values, field, order)}")
+    for row in history:
+        if row.state == "planned":
+            change = _history_change(row, order)
+            typer.echo(f"Planlanan: #{row.stored.id}, {_version_day(row.stored)}: {change}")
+
+
+@ayar_app.command("gecmis")
+def ayar_history() -> None:
+    """Bütün ayar sürümleri; vazgeçilenler gerekçesiyle, silinmez."""
+    settings = _load_settings_or_exit()
+    today = bootstrap.system_clock().today()
+    with _user_errors():
+        config = bootstrap.portfolio_source().load(_portfolio_path(settings, None))
+        with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+            history = setting_history(uow, today=today)
+    if not history:
+        typer.echo("Ayar sürümü yok; başlangıç sürümünü `ft config apply` yazar.")
+    order = list(config.targets)
+    for row in history:
+        stored = row.stored
+        state = STATE_LABELS[row.state]
+        if stored.cancel_reason is not None:
+            state += f" ({stored.cancel_reason})"
+        recorded = stored.recorded_at.astimezone(BUSINESS_TZ)
+        parts = [
+            f"#{stored.id}",
+            _version_day(stored),
+            state,
+            stored.source,
+            f"{recorded:%Y-%m-%d %H:%M}",
+            _history_change(row, order),
+        ]
+        typer.echo("  ".join(parts))
+
+
+@ayar_app.command("katki")
+def ayar_contribution(
+    amount: Annotated[str, typer.Argument(help="Aylık katkı (TL); ondalık ayırıcı nokta")],
+    effective: EffectiveOption,
+    carry: CarryOption = False,
+    dry_run: DryRunOption = False,
+) -> None:
+    """Aylık katkıyı yürürlük gününden itibaren değiştirir."""
+    _save_setting(effective, carry, dry_run, contribution=_parse_decimal("katkı", amount))
+
+
+@ayar_app.command("maas-gunu")
+def ayar_payday(
+    day: Annotated[int, typer.Argument(help="Maaş günü (1 ile 31 arası)")],
+    effective: EffectiveOption,
+    carry: CarryOption = False,
+    dry_run: DryRunOption = False,
+) -> None:
+    """Maaş gününü değiştirir; değişiklik yalnız bir ayın 1'inden geçerli olabilir."""
+    _save_setting(effective, carry, dry_run, payday=day)
+
+
+@ayar_app.command("hedef")
+def ayar_targets(
+    pairs: Annotated[
+        list[str],
+        typer.Argument(help="Bütün sınıflar SINIF=ORAN olarak; örnek: hisse=0.6 dusuk_risk=0.4"),
+    ],
+    effective: EffectiveOption,
+    carry: CarryOption = False,
+    dry_run: DryRunOption = False,
+) -> None:
+    """Hedef dağılımı değiştirir; oranlar noktalı ve toplamı tam 1."""
+    _save_setting(effective, carry, dry_run, targets=_parse_targets(pairs))
+
+
+@ayar_app.command("vazgec")
+def ayar_cancel(
+    setting_id: Annotated[int, typer.Argument(help="Ayar sürümü numarası (`ft ayar gecmis`)")],
+    reason: Annotated[str, typer.Option("--gerekce", help="Vazgeçme gerekçesi")],
+) -> None:
+    """Henüz yürürlüğe girmemiş bir sürümden vazgeçer; kayıt ve gerekçe kalır."""
+    settings = _load_settings_or_exit()
+    clock = bootstrap.system_clock()
+    with _user_errors(), bootstrap.open_unit_of_work(settings) as uow:
+        version = cancel_version(
+            uow, setting_id, reason=reason, today=clock.today(), at=clock.now()
+        )
+    day = version.effective_from.isoformat()
+    typer.echo(f"Vazgeçildi: ayar sürümü #{setting_id} (yürürlük {day} olacaktı).")
+
+
+def _save_setting(
+    effective: str,
+    carry: bool,
+    dry_run: bool,
+    *,
+    payday: int | Keep = KEEP,
+    contribution: Decimal | Keep = KEEP,
+    targets: Mapping[str, Decimal] | Keep = KEEP,
+) -> None:
+    settings = _load_settings_or_exit()
+    day = _parse_date(effective)
+    clock = bootstrap.system_clock()
+    with _user_errors():
+        config = bootstrap.portfolio_source().load(_portfolio_path(settings, None))
+        with _setting_issues(), bootstrap.open_unit_of_work(settings, readonly=dry_run) as uow:
+            proposal = propose(
+                uow,
+                config,
+                effective_from=day,
+                today=clock.today(),
+                payday=payday,
+                contribution=contribution,
+                targets=targets,
+            )
+            if dry_run and proposal.issues:
+                raise ConfigError(proposal.issues)
+            saved = None
+            if not dry_run:
+                saved = save_proposal(
+                    uow,
+                    config,
+                    proposal,
+                    source="cli",
+                    today=clock.today(),
+                    at=clock.now(),
+                    carry_later=carry,
+                )
+    order = list(config.targets)
+    change = _change_text(proposal.base, proposal.version, proposal.changed, order)
+    if saved is None:
+        typer.echo(f"Önizleme (kaydedilmedi); yürürlük {day.isoformat()}: {change}")
+    else:
+        typer.echo(
+            f"Ayar sürümü #{saved.setting_id} kaydedildi; yürürlük {day.isoformat()}: {change}"
+        )
+    replaced = {} if saved is None else dict(saved.rewritten)
+    for later in proposal.later:
+        _print_later(later, order, carry=carry, saved=saved is not None, replaced=replaced)
+
+
+def _print_later(
+    later: LaterRewrite, order: Sequence[str], *, carry: bool, saved: bool, replaced: dict[int, int]
+) -> None:
+    stored = later.stored
+    moved = _change_text(stored.version, later.rewritten, later.fields, order)
+    if stored.id in replaced:
+        typer.echo(
+            f"Sonraki sürüme taşındı: #{stored.id} yerine #{replaced[stored.id]},"
+            f" {_version_day(stored)}: {moved}"
+        )
+        return
+    if carry and not saved:
+        typer.echo(f"Sonraki sürüme taşınacak: #{stored.id}, {_version_day(stored)}: {moved}")
+        return
+    kept = " ve ".join(
+        f"{FIELD_LABELS[f]} {_setting_text(stored.version, f, order)}" for f in later.fields
+    )
+    advice = (
+        " Taşımak için komut `--sonrakilere-de` ile verilir; şimdi düzeltmek için"
+        f" #{stored.id} sürümünden vazgeçip yeniden ekle."
+        if saved
+        else " Taşımak için komutu `--sonrakilere-de` ile ver."
+    )
+    typer.echo(
+        f"Uyarı: yürürlüğü {stored.version.effective_from.isoformat()} olan planlanan"
+        f" sürüm (#{stored.id}) bu değişikliği taşımıyor; o günden itibaren {kept} olur.{advice}"
+    )
+
+
+@contextmanager
+def _setting_issues() -> Iterator[None]:
+    try:
+        yield
+    except ConfigError as exc:
+        typer.echo(f"Ayar kaydedilmedi; {len(exc.issues)} hata var:", err=True)
+        for issue in exc.issues:
+            typer.echo(f"  - {issue}", err=True)
+        raise typer.Exit(code=1) from exc
+
+
+def _parse_targets(pairs: Sequence[str]) -> dict[str, Decimal]:
+    targets: dict[str, Decimal] = {}
+    for pair in pairs:
+        name, equals, text = pair.partition("=")
+        if not equals or not name:
+            _usage_error(InputError(f"Hedef SINIF=ORAN biçiminde yazılır; {pair!r} verildi."))
+        if name in targets:
+            _usage_error(InputError(f"{name} iki kez verildi."))
+        targets[name] = _parse_decimal(name, text)
+    return targets
+
+
+def _version_day(stored: StoredSetting) -> str:
+    day = stored.version.effective_from
+    return "başlangıç (portfolio.toml)" if day == date.min else f"yürürlük {day.isoformat()}"
+
+
+def _setting_text(values: SettingValues, field: SettingField, order: Sequence[str]) -> str:
+    if field == "payday":
+        return "tanımlı değil" if values.payday is None else str(values.payday)
+    if field == "monthly_contribution":
+        amount = values.monthly_contribution
+        return "tanımlı değil" if amount is None else canonical_text(amount)
+    names = [name for name in order if name in values.targets]
+    names += sorted(set(values.targets) - set(order))
+    return " ".join(f"{name}={canonical_text(values.targets[name])}" for name in names)
+
+
+def _change_text(
+    old: SettingVersion | None,
+    new: SettingVersion,
+    fields: Sequence[SettingField],
+    order: Sequence[str],
+) -> str:
+    if old is None:
+        shown = [f"{FIELD_LABELS[f]} {_setting_text(new, f, order)}" for f in FIELDS]
+    else:
+        shown = [
+            f"{FIELD_LABELS[f]} {_setting_text(old, f, order)} → {_setting_text(new, f, order)}"
+            for f in fields
+        ]
+    return " · ".join(shown) or "değişiklik yok"
+
+
+def _history_change(row: HistoryRow, order: Sequence[str]) -> str:
+    return _change_text(row.previous, row.stored.version, row.changed, order)
 
 
 @tx_app.command("add")
@@ -585,14 +876,15 @@ def job_run(
         typer.echo("--bugun yalnız sync-prices ile ve --logical-date olmadan verilir.", err=True)
         raise typer.Exit(code=2)
     with _user_errors():
-        payday = bootstrap.portfolio_source().load(_portfolio_path(settings, None)).payday
         if today:
             # K-123: elle güncelleme bugünü hedefler; bugün "ok" ise iş istek atmadan atlar.
             day = clock.today()
         elif logical is not None:
             day = _parse_date(logical)
         else:
-            day = logical_date(name.value, clock.now().astimezone(BUSINESS_TZ), payday=payday)
+            day = logical_date(
+                name.value, clock.now().astimezone(BUSINESS_TZ), payday=_payday(settings, name)
+            )
         outcome = bootstrap.run_scheduled_job(settings, clock, name.value, day)
     typer.echo(f"{name.value} {day}: {_OUTCOME_LABELS[outcome.status]}")
     for key, value in outcome.detail.items():
@@ -720,8 +1012,8 @@ def report_payday(
     day = clock.today() if on is None else _parse_date(on)
     with _user_errors():
         config = bootstrap.portfolio_source().load(_portfolio_path(settings, None))
-        amount = (
-            config.monthly_contribution
+        amount: Decimal | FromSettings = (
+            FROM_SETTINGS
             if contribution is None
             else _parse_decimal("--contribution", contribution)
         )
@@ -729,6 +1021,16 @@ def report_payday(
             plan = payday_plan(uow, config, on=day, contribution=amount, profile=settings.profile)
     renderer = bootstrap.report_renderer(fmt.value, payday_amounts=not hide_amounts)
     typer.echo(renderer.payday(plan))
+
+
+def _payday(settings: Settings, name: JobChoice) -> Callable[[YearMonth], int | None] | None:
+    """Maaş günü işinin mantıksal günü her ayın kendi ayarındaki maaş gününe göre (K-127);
+    iş birimi işlerin yaptığı gibi migration'lı açılır."""
+    if name.value != "payday":
+        return None
+    config = bootstrap.portfolio_source().load(_portfolio_path(settings, None))
+    with bootstrap.open_unit_of_work(settings) as uow:
+        return payday_for(uow, config)
 
 
 def _show_report(
@@ -743,8 +1045,8 @@ def _show_report(
             if on is None
             else _parse_date(on)
         )
-        amount = (
-            config.monthly_contribution
+        amount: Decimal | FromSettings = (
+            FROM_SETTINGS
             if contribution is None
             else _parse_decimal("--contribution", contribution)
         )
@@ -770,8 +1072,9 @@ def sanal_init_command() -> None:
         bootstrap.require_sanal(settings)
         config = bootstrap.portfolio_source().load(_portfolio_path(settings, None))
         bootstrap.sanal_init(settings)
+        clock = bootstrap.system_clock()
         with bootstrap.open_unit_of_work(settings) as uow:
-            report = apply_portfolio(uow, config)
+            report = apply_portfolio(uow, config, today=clock.today(), at=clock.now())
     typer.echo(f"Sanal veritabanı kuruldu: {settings.db_path}")
     _print_apply(report)
 
@@ -848,14 +1151,16 @@ def sanal_payday_command(
     clock = bootstrap.system_clock()
     with _user_errors():
         config = bootstrap.portfolio_source().load(_portfolio_path(settings, None))
-        if config.payday is None:
-            raise DomainError("portfolio.toml'da [contribution] payday tanımlı değil.")
-        day = (
-            _parse_date(payday)
-            if payday is not None
-            else logical_date("payday", clock.now().astimezone(BUSINESS_TZ), payday=config.payday)
-        )
         with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+            day = (
+                _parse_date(payday)
+                if payday is not None
+                else logical_date(
+                    "payday",
+                    clock.now().astimezone(BUSINESS_TZ),
+                    payday=payday_for(uow, config),
+                )
+            )
             plan = plan_payday_purchases(
                 uow, config, payday=day, today=clock.today(), reapply_voided=reapply_voided
             )
@@ -1007,10 +1312,12 @@ def _print_apply(report: ApplyReport) -> None:
         )
         if codes
     ]
-    if not changes:
+    if not changes and not report.settings:
         typer.echo("Değişiklik yok.")
     for label, codes in changes:
         typer.echo(f"{label}: {', '.join(codes)}")
+    for note in report.settings:
+        typer.echo(f"Ayarlar: {note}")
     for warning in report.warnings:
         typer.echo(f"Uyarı: {warning}")
 

@@ -71,8 +71,28 @@ def test_apply_writes_instruments_and_reports_changes(portfolio: Path) -> None:
     first = runner.invoke(app, ["config", "apply"])
     assert first.exit_code == 0, first.output
     assert "Eklenen: ALTIN_GR, TTE" in first.output
+    assert (
+        "Ayarlar: başlangıç sürümü portfolio.toml'dan yazıldı (yürürlük 0001-01-01)."
+        in first.output
+    )
     second = runner.invoke(app, ["config", "apply"])
-    assert "Değişiklik yok." in second.output
+    assert second.output == "Değişiklik yok.\n"
+
+
+def test_apply_refuses_removing_a_class_that_still_has_weight(portfolio: Path) -> None:
+    assert runner.invoke(app, ["config", "apply"]).exit_code == 0
+    shares_only = VALID.replace("hisse = 0.6\naltin = 0.4", "hisse = 1").split(
+        '[[instruments]]\ncode = "ALTIN_GR"'
+    )[0]
+    portfolio.write_text(shares_only, encoding="utf-8")
+
+    result = runner.invoke(app, ["config", "apply"])
+
+    assert result.exit_code == 1
+    assert "Config'te 1 hata var:" in result.output
+    assert "targets.altin: portfolio.toml'dan silinmiş" in result.output
+    assert "Önce ağırlığını 0 yap" in result.output
+    assert "Pasif yapılan" not in result.output
 
 
 def test_file_option_overrides_the_environment(portfolio: Path, tmp_path: Path) -> None:

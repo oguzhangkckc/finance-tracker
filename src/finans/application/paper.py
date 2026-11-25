@@ -165,7 +165,7 @@ def plan_payday_purchases(
     reapply_voided: bool = False,
 ) -> PaydayPurchasePlan:
     """Plan maaş gününün değerlemesinden; tekrar çalıştırmada değişmez (K-113)."""
-    plan = payday_plan(uow, config, on=payday, contribution=config.monthly_contribution)
+    plan = payday_plan(uow, config, on=payday)
     window_end = payday_window_end(payday)
     stored = uow.transactions.list(include_voided=True)
     applied = {s.external_ref for s in stored if not s.is_voided}

@@ -55,6 +55,7 @@ from finans.application.doctor import (
     inactive_holdings_check,
     portfolio_checks,
     price_check,
+    settings_check,
     web_password_check,
 )
 from finans.application.jobs import JobContext, JobOutcome, job_body, run_job
@@ -338,12 +339,13 @@ def run_doctor(settings: Settings) -> list[Check]:
             schema_ok = checks[-1].status == "ok"
     config = _config_check(settings, checks)
     if schema_ok:
+        today = SystemClock().today()
         with open_unit_of_work(settings, readonly=True) as uow:
             if config is None:
                 checks.append(inactive_holdings_check(uow))
             else:
                 checks.extend(portfolio_checks(uow, config))
-            today = SystemClock().today()
+                checks.append(settings_check(uow, config, today=today))
             checks.append(price_check(uow, today=today))
             checks.append(cpi_check(uow, settings.cpi_series, today=today))
     checks.append(_evds_key_check(settings))

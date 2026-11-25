@@ -90,6 +90,8 @@ Toplu kurulum (2026-11-25 kararı): kurulumlar kabul sürelerine göre bölünme
 - Her aşamadan sonra iki profilde `doctor` ve `job list`, arayüzde sayfalar kontrol edilir.
 - Geri dönüş: kod önceki commit'e döndürülür ve kurulum öncesi yedek geri yüklenir; migration'lar geri alınamaz.
 - `ft_web_password`, `finans-web` yeniden başlatılmadan önce oluşturulur.
+- `portfolio.toml`'u Pi'ye kopyala (yerel kurulum kılavuzu Adım 8'deki gibi), sha256 karşılaştır. `config apply`'dan önce yapılır: ayarların başlangıç sürümü bu dosyadan yazılır.
+- İki profilde `ft db migrate` (0005, 0006) ve ardından `ft config apply`: ayarların başlangıç sürümü `portfolio.toml`'dan yazılır (K-127); `doctor` "Ayarlar: başlangıç sürümü (portfolio.toml)" gösterir.
 Kabul süreleri: M3 ve M4 kurulumun bittiği gün yeniden başlar. Mevcut sürelerin "toplu kurulum nedeniyle yeniden başlatıldı" notuyla kapatılması ve yeni tarihler kurulumdan sonra ayrı, küçük bir PR'dır.
 
 ### W2a · Tasarım sistemi ve iskelet
@@ -111,9 +113,9 @@ Geliştirme kapısı: sıralama, filtre ve sayfalama birim testleri (Decimal, s�
 Takvim: geliştirme 10–18 Aralık; Pi'ye toplu kurulumla.
 
 ### W2d · Ayarlar
-Maaş günü, aylık katkı ve hedef dağılım veritabanında, yürürlük tarihli; `portfolio.toml` ilk değer; değişiklik geçmişi (K-127).
-Geliştirme kapısı: migration öncesi ve sonrası bütün rapor türleri aynı; Ocak'tan geçerli katkı Ekim raporunu değiştirmez; geriye tarih ve toplamı 1 olmayan hedef reddedilir; TOML sınıf kuralları; CLI ile eşlik.
-Takvim: geliştirme W2c'den sonra; Pi'ye toplu kurulumla.
+Maaş günü, aylık katkı ve hedef dağılım veritabanında, yürürlük tarihli; `portfolio.toml` ilk değer; değişiklik geçmişi (K-127). `0006_settings.sql`; `config apply` başlangıç sürümünü yazar, `doctor` "Ayarlar" denetimi; `ft ayar` (`goster`, `gecmis`, `katki`, `maas-gunu`, `hedef`, `vazgec`; `--sonrakilere-de`, `--deneme`); web `/<profil>/ayarlar` (yüzdeyle hedef ve canlı toplam, "Sanal portföye de uygula", "Sonraki planlanan sürümlere de uygula", vazgeçme); katkı grafiğinin planlanan çubuğu her ayın maaş günündeki ayardan.
+Geliştirme kapısı: migration öncesi ve sonrası bütün rapor türleri aynı; Ocak'tan geçerli katkı Ekim raporunu değiştirmez; geriye tarih ve toplamı 1 olmayan hedef reddedilir; TOML sınıf kuralları; CLI ile eşlik; maaş günü değişikliği iki yönde; Ocak katkısı ve Mart hedefi senaryosu taşımalı ve taşımasız; iki profile ayrı yazım ve ayrı sonuç; hedef toplamı Chrome'da; log'da tutar yok.
+Takvim: geliştirme 25 Kasım (bitti); Pi'ye toplu kurulumla. Kurulumda iki profilde `ft db migrate` ve `ft config apply`; `doctor` "Ayarlar: başlangıç sürümü (portfolio.toml)" göstermeli.
 
 ## D1 · Otomatik deploy
 GitHub Actions → Tailscale (`tag:ci`) → yalnız tek bir betiği çalıştırabilen deploy kullanıcısı → sürüm dizinleri, sağlık kontrolü, otomatik geri dönüş, Telegram bildirimi, dondurma anahtarı. Birim dosyası, deploy betiği ya da migration değişirse otomatik kurulum durur ve elle kurulum istenir. Karar satırları D1 dalında yazılır; imzalı commit doğrulaması şimdilik yok.

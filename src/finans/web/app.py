@@ -40,6 +40,7 @@ from finans.web.icons import icon
 from finans.web.lock import Attempt, WriteLock
 from finans.web.security import BodyLimitMiddleware, IdentityMiddleware, SecurityHeadersMiddleware
 from finans.web.session import SessionMiddleware, csrf_token
+from finans.web.setting_routes import setting_routes
 from finans.web.svg import allocation_bar, contribution_chart, value_chart
 from finans.web.table import table
 from finans.web.tables import (
@@ -81,6 +82,7 @@ NAV: Final = (
     ("/getiri", "Getiri", "getiri"),
     ("/raporlar", "Raporlar", "raporlar"),
     ("/alarmlar", "Alarmlar", "alarmlar"),
+    ("/ayarlar", "Ayarlar", "ayarlar"),
     ("/sistem", "Sistem", "sistem"),
 )
 # Telefonda alt sekmeler; geri kalanlar "Daha fazla" sayfasında (K-128).
@@ -105,6 +107,8 @@ SAVED: Final = {
     "satis": "Satış #{no} kaydedildi.",
     "iptal": "#{no} numaralı işlem iptal edildi.",
     "maas-gunu": "Maaş günü planı uygulandı: {no} sanal alım.",
+    "ayar": "Ayar sürümü #{no} kaydedildi.",
+    "ayar-vazgec": "Ayar sürümü #{no} için vazgeçildi.",
 }
 
 
@@ -213,7 +217,7 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
 
     templates.env.filters.update(gun=day, local=local, local_gun=local_day)
 
-    def profile_routes(profile: Profile, conf: Settings) -> list[BaseRoute]:
+    def profile_routes(profile: Profile, conf: Settings, sanal: Settings) -> list[BaseRoute]:
         prefix = f"/{SLUGS[profile]}"
 
         def page(
@@ -392,6 +396,7 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
                 return RedirectResponse(back, status_code=303)
             return unlock_page(request, back, attempt, status=ATTEMPT_STATUS[attempt.status])
 
+        writing = WriteContext(profile, prefix, conf, key, origin, lock, time, page, unlock_page)
         return [
             *(
                 Route(f"{prefix}{path}", view(name, load), methods=["GET"])
@@ -405,9 +410,8 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
             Route(f"{prefix}/fiyat-guncelle", refresh, methods=["POST"]),
             Route(f"{prefix}/kilit", unlock_form, methods=["GET"]),
             Route(f"{prefix}/kilit", unlock, methods=["POST"]),
-            *write_routes(
-                WriteContext(profile, prefix, conf, key, origin, lock, time, page, unlock_page)
-            ),
+            *write_routes(writing),
+            *setting_routes(writing, sanal=sanal),
         ]
 
     def home(_request: Request) -> Response:
@@ -420,7 +424,7 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
             *(
                 route
                 for profile, conf in profiles.items()
-                for route in profile_routes(profile, conf)
+                for route in profile_routes(profile, conf, profiles["sanal"])
             ),
             Route("/static/{served:path}", assets.serve, methods=["GET"]),
         ],

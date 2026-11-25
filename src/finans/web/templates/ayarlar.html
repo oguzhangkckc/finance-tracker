@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% from "_table.html" import tools, th, pager %}
+{% block title %}Ayarlar · finans-takip{% endblock %}
+{% block content %}
+  <h1>Ayarlar</h1>
+  <p class="muted">Maaş günü, aylık katkı ve hedef dağılım yürürlük tarihli sürümlerdir; geçmiş raporlar o dönemin ayarıyla üretilir. Sınıflar ve fonlar portfolio.toml'dadır.</p>
+  {% set writable = lock.status != "disabled" %}
+  {% if writable %}
+  <div class="actions page-actions"><a class="btn btn-primary" href="{{ prefix }}/ayarlar/yeni">Yeni ayar sürümü</a></div>
+  {% else %}
+  <p class="note">Yazma bu cihazda kurulmadı.</p>
+  {% endif %}
+
+  <h2>Geçerli ayar</h2>
+  {% set row = settings.current_row %}
+  {% if row is none %}
+  <p class="note">Ayar sürümü yok; portfolio.toml kullanılıyor. Başlangıç sürümünü <code>ft config apply</code> yazar.</p>
+  {% elif row.stored.version.effective_from.year == 1 %}
+  <p class="muted">Başlangıç (portfolio.toml)</p>
+  {% else %}
+  <p class="muted">{{ row.stored.version.effective_from | gun(case="den") }} beri geçerli · #{{ row.stored.id }}</p>
+  {% endif %}
+  <div class="panel">
+    <dl class="summary">
+      <dt>Maaş günü</dt><dd>{% if settings.current.payday is none %}tanımlı değil{% else %}ayın {{ settings.current.payday }}. günü{% endif %}</dd>
+      <dt>Aylık katkı</dt><dd class="num">{% if settings.current.monthly_contribution is none %}tanımlı değil{% else %}{{ settings.current.monthly_contribution | money }}{% endif %}</dd>
+      {% for code in settings.classes %}
+      <dt>{{ settings.cls(code) }}</dt><dd class="num">%{{ pct(settings.current.targets.get(code, 0)) }}</dd>
+      {% endfor %}
+    </dl>
+  </div>
+
+  {% if settings.planned %}
+  <h2>Planlanan</h2>
+  <ul class="cards">
+    {% for planned in settings.planned %}
+    <li>
+      <div class="row"><strong>{{ planned.stored.version.effective_from | gun(case="den") }} itibaren</strong><span class="muted">#{{ planned.stored.id }}</span></div>
+      {% for name, change in describe(planned.previous, planned.stored.version, planned.changed) %}
+      <div>{{ name }}: {{ change }}</div>
+      {% endfor %}
+      {% if writable %}<a href="{{ prefix }}/ayarlar/{{ planned.stored.id }}/vazgec">Vazgeç<span class="sr"> (#{{ planned.stored.id }})</span></a>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <h2>Geçmiş</h2>
+  {% set view = table %}
+  {% set action = prefix ~ "/ayarlar" %}
+  {{ tools(view, action, "") }}
+  {% if view.rows %}
+  <table class="cards" id="tablo">
+    <thead>
+      <tr>{{ th(view, "no", "#") }}{{ th(view, "kayit", "Kayıt") }}{{ th(view, "yururluk", "Yürürlük") }}<th>Değişiklik</th><th>Durum</th><th>Kaynak</th></tr>
+    </thead>
+    <tbody>
+      {% for item in view.rows %}
+      {% set stored = item.stored %}
+      <tr{% if stored.cancelled_at %} class="voided"{% endif %}>
+        <td data-label="#">{{ stored.id }}</td>
+        <td data-label="Kayıt">{{ stored.recorded_at | local }}</td>
+        <td data-label="Yürürlük">{% if stored.version.effective_from.year == 1 %}Başlangıç (portfolio.toml){% else %}{{ stored.version.effective_from | gun(case="den") }} itibaren{% endif %}</td>
+        <td data-label="Değişiklik">{% for name, change in describe(item.previous, stored.version, item.changed) %}<div>{{ name }}: {{ change }}</div>{% else %}değişiklik yok{% endfor %}</td>
+        <td data-label="Durum">{{ states[item.state] }}{% if stored.cancel_reason %}: {{ stored.cancel_reason }}{% endif %}{% if item.state == "planned" and writable %} · <a href="{{ prefix }}/ayarlar/{{ stored.id }}/vazgec">Vazgeç<span class="sr"> (#{{ stored.id }})</span></a>{% endif %}</td>
+        <td data-label="Kaynak">{{ sources[stored.source] }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {{ pager(view, action) }}
+  {% elif view.active %}
+  <div class="panel empty">{{ icon("bos") }}<p>Bu filtrelerle ayar sürümü yok. <a href="{{ action }}">Filtreleri temizle</a></p></div>
+  {% else %}
+  <div class="panel empty">{{ icon("bos") }}<p>Henüz ayar sürümü yok.</p></div>
+  {% endif %}
+{% endblock %}

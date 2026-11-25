@@ -113,6 +113,23 @@ def test_a_shown_year_takes_the_suffix_by_how_it_is_read(
     assert day_label(day, today=TODAY, year=True, case="de") == f"25 Kasım {locative}"
 
 
+@pytest.mark.parametrize(
+    ("day", "expected"),
+    [
+        (date(2026, 1, 1), "1 Ocak'tan"),
+        (date(2026, 11, 15), "15 Kasım'dan"),
+        (date(2026, 9, 1), "1 Eylül'den"),
+        (date(2026, 2, 1), "1 Şubat'tan"),
+        (date(2027, 1, 1), "1 Ocak 2027'den"),
+        (date(2040, 3, 1), "1 Mart 2040'tan"),
+        (date(2030, 3, 1), "1 Mart 2030'dan"),
+    ],
+)
+def test_the_ablative_follows_the_same_harmony_as_the_locative(day: date, expected: str) -> None:
+    """ "1 Ocak 2027'den itibaren": yürürlük günü bu ekle söylenir (K-127)."""
+    assert day_label(day, today=TODAY, case="den") == expected
+
+
 def test_the_year_is_shown_only_when_it_differs_or_is_asked_for() -> None:
     assert day_label(date(2026, 11, 25), today=TODAY) == "25 Kasım"
     assert day_label(date(2025, 12, 31), today=TODAY) == "31 Aralık 2025"

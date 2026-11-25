@@ -6,6 +6,7 @@ from typing import Literal, Protocol
 
 from finans.domain.allocation import Direction, EventKind
 from finans.domain.models import CpiPoint, Instrument, PricePoint, Transaction
+from finans.domain.settings import SettingVersion
 from finans.ports.sources import RawPayload
 
 
@@ -163,6 +164,31 @@ class AlertRepo(Protocol):
 class AllocationStateRepo(Protocol):
     def quiet_ended_on(self) -> date | None: ...
     def end_quiet(self, day: date) -> None: ...
+
+
+SettingSource = Literal["toml", "cli", "web"]
+
+
+@dataclass(frozen=True, slots=True)
+class StoredSetting:
+    id: int
+    version: SettingVersion
+    source: SettingSource
+    recorded_at: datetime
+    cancelled_at: datetime | None
+    cancel_reason: str | None
+
+    @property
+    def is_cancelled(self) -> bool:
+        return self.cancelled_at is not None
+
+
+class SettingRepo(Protocol):
+    """Ayar sürümleri (K-127); `list` kayıt sırasıyla döner, vazgeçilenler dahil."""
+
+    def list(self) -> list[StoredSetting]: ...
+    def add(self, version: SettingVersion, *, source: SettingSource, at: datetime) -> int: ...
+    def cancel(self, setting_id: int, *, reason: str, at: datetime) -> None: ...
 
 
 class SubmissionRepo(Protocol):

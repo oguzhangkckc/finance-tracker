@@ -487,3 +487,21 @@ def test_unknown_code_lists_the_defined_codes(monkeypatch: pytest.MonkeyPatch) -
 
     assert result.exit_code == 1
     assert "KOD tanımlı değil. Tanımlı kodlar: XHT." in result.output
+
+
+def test_each_profile_keeps_its_own_settings(
+    monkeypatch: pytest.MonkeyPatch, real_db: Path
+) -> None:
+    clock = FixedClock(datetime(2026, 11, 25, 10, 0, tzinfo=UTC))
+    monkeypatch.setattr(bootstrap, "system_clock", lambda: clock)
+    _sanal(monkeypatch)
+    assert runner.invoke(app, ["sanal", "init"]).exit_code == 0
+
+    saved = runner.invoke(app, ["ayar", "katki", "500", "--tarih", "2026-11-25"])
+    sanal = runner.invoke(app, ["ayar", "goster"])
+    monkeypatch.delenv("FT_PROFILE")
+    real = runner.invoke(app, ["ayar", "goster"])
+
+    assert saved.exit_code == 0, saved.output
+    assert "  Aylık katkı: 500" in sanal.output.splitlines()
+    assert "  Aylık katkı: tanımlı değil" in real.output.splitlines()

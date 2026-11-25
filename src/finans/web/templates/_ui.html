@@ -46,12 +46,12 @@
 {%- endmacro %}
 
 {# Alan hatası alanın altında, simgeli ve metinli; ipucu da ekran okuyucuya bağlı (K-128). #}
-{% macro field(name, label, values, errors, hint="", affix="", optional=false, inputmode="", maxlength=0, type="text") -%}
+{% macro field(name, label, values, errors, hint="", affix="", optional=false, inputmode="", maxlength=0, type="text", marker="") -%}
   {%- set error = errors.get(name) -%}
   {%- set described = ([name ~ "-hata"] if error else []) + ([name ~ "-ipucu"] if hint else []) -%}
   <div class="field{% if error %} invalid{% endif %}">
     <label for="{{ name }}">{{ label }}{% if optional %} <span class="muted">(isteğe bağlı)</span>{% endif %}</label>
-    {% if affix %}<div class="affix">{% endif %}<input id="{{ name }}" name="{{ name }}" type="{{ type }}" value="{{ values.get(name, '') }}" autocomplete="off"{% if inputmode %} inputmode="{{ inputmode }}"{% endif %}{% if maxlength %} maxlength="{{ maxlength }}"{% endif %}{% if not optional %} required{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if described %} aria-describedby="{{ described | join(' ') }}"{% endif %}>{% if affix %}<span>{{ affix }}</span></div>{% endif %}
+    {% if affix %}<div class="affix">{% endif %}<input id="{{ name }}" name="{{ name }}" type="{{ type }}" value="{{ values.get(name, '') }}" autocomplete="off"{% if inputmode %} inputmode="{{ inputmode }}"{% endif %}{% if maxlength %} maxlength="{{ maxlength }}"{% endif %}{% if marker %} {{ marker }}{% endif %}{% if not optional %} required{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if described %} aria-describedby="{{ described | join(' ') }}"{% endif %}>{% if affix %}<span>{{ affix }}</span></div>{% endif %}
     {% if error %}<p class="error" id="{{ name }}-hata">{{ icon("hata") }}{{ error }}</p>{% endif %}
     {% if hint %}<p class="hint" id="{{ name }}-ipucu">{{ hint }}</p>{% endif %}
   </div>

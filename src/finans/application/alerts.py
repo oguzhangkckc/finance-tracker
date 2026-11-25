@@ -9,6 +9,7 @@ from finans.application.portfolio_view import (
     instruments_by_code,
     missing_in_allocation,
 )
+from finans.application.settings import effective_config
 from finans.contracts.report import AlertNotice
 from finans.domain.allocation import (
     QUIET_MONTHS,
@@ -51,7 +52,9 @@ def is_quiet_hour(moment: datetime) -> bool:
 def evaluate_alerts(
     uow: UnitOfWork, config: PortfolioConfig, *, on: date, now: datetime
 ) -> AlertEvaluation:
-    """Sapma alarmları (K-45, K-46); fiyat eksikse (K-85) ya da sessiz dönemde (K-75) atlanır."""
+    """Sapma alarmları (K-45, K-46); fiyat eksikse (K-85) ya da sessiz dönemde (K-75) atlanır.
+    Hedefler ve sessiz dönem eşiği değerlendirilen günün ayarından (K-127)."""
+    config = effective_config(uow, config, on=on)
     instruments = instruments_by_code(uow)
     transactions = [s.transaction for s in uow.transactions.list(until=on)]
     valuation = value_book(
