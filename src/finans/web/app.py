@@ -40,6 +40,8 @@ from finans.web.lock import Attempt, WriteLock
 from finans.web.security import BodyLimitMiddleware, IdentityMiddleware, SecurityHeadersMiddleware
 from finans.web.session import SessionMiddleware, csrf_token
 from finans.web.svg import allocation_bar
+from finans.web.table import table
+from finans.web.tables import PAGE_PARAMS, TRANSACTIONS
 from finans.web.trade_routes import WriteContext, write_routes
 from finans.web.views import (
     PAGE_ERRORS,
@@ -54,7 +56,7 @@ from finans.web.views import (
     report_text,
     stale_by_instrument,
     system_view,
-    transactions,
+    transaction_rows,
 )
 
 NAV: Final = (
@@ -171,9 +173,11 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
     templates = Jinja2Templates(env=_environment())
     templates.env.globals.update(asset=assets.url, same_places=same_places)
 
-    def day(value: date, case: Case = "", year: bool | None = None) -> str:
-        """Bugünün yılı uygulamanın saatinden; saatler her zaman İstanbul'a göre (K-99)."""
-        return day_label(value, today=time.today(), case=case, year=year)
+    def day(value: date | str, case: Case = "", year: bool | None = None) -> str:
+        """Bugünün yılı uygulamanın saatinden; saatler her zaman İstanbul'a göre (K-99).
+        Adres parametresindeki ISO gün de kabul edilir (ör. filtre etiketleri)."""
+        shown = date.fromisoformat(value) if isinstance(value, str) else value
+        return day_label(shown, today=time.today(), case=case, year=year)
 
     def local(moment: datetime) -> str:
         here = moment.astimezone(BUSINESS_TZ)
@@ -272,7 +276,6 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
                 "alarmlar.html",
                 lambda: {**report_context("weekly"), "quiet_ended": quiet_ended_on(conf)},
             ),
-            ("/islemler", "islemler.html", lambda: {"transactions": transactions(conf)}),
             ("/sistem", "sistem.html", lambda: {"system": system_view(conf, time)}),
             ("/daha", "daha.html", lambda: {}),
         ]
@@ -290,6 +293,14 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
                 return page(request, "hata.html", {"message": message}, status=503)
             target = f"{prefix}/?istek=alindi" if status.decision.allowed else f"{prefix}/"
             return RedirectResponse(target, status_code=303)
+
+        def transactions_page(request: Request) -> Response:
+            try:
+                rows = transaction_rows(conf)
+            except (PageError, *PAGE_ERRORS) as exc:
+                return page(request, "hata.html", {"message": str(exc)}, status=503)
+            view = table(rows, request.query_params, TRANSACTIONS, passthrough=PAGE_PARAMS)
+            return page(request, "islemler.html", {"table": view})
 
         def next_page(raw: str | None) -> str:
             return raw if raw and NEXT_PAGE.fullmatch(raw) else f"{prefix}/"
@@ -321,6 +332,7 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
                 Route(f"{prefix}{path}", view(name, load), methods=["GET"])
                 for path, name, load in pages
             ),
+            Route(f"{prefix}/islemler", transactions_page, methods=["GET"]),
             Route(f"{prefix}/fiyat-guncelle", refresh, methods=["POST"]),
             Route(f"{prefix}/kilit", unlock_form, methods=["GET"]),
             Route(f"{prefix}/kilit", unlock, methods=["POST"]),

@@ -1,0 +1,68 @@
+{# Tablo araçları (K-129): adres parametreleriyle çalışır, JavaScript gerekmez. #}
+{% macro tools(view, action, search_hint) -%}
+<form class="table-tools" method="get" action="{{ action }}">
+  <div class="toolbar">
+    <div class="field">
+      <label for="ara">Ara</label>
+      <input id="ara" name="ara" type="search" value="{{ view.value('ara') }}" placeholder="{{ search_hint }}" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="siralama">Sırala</label>
+      <select id="siralama" name="siralama">
+        {% for value, label, selected in view.sort_choices %}
+        <option value="{{ value }}"{% if selected %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="actions"><button class="btn btn-secondary" type="submit">Uygula</button></div>
+  </div>
+  <details class="filters">
+    <summary>Filtreler{% if view.active %} <span class="count">· {{ view.active | length }} etkin</span>{% endif %}</summary>
+    <div class="panel filter-grid">
+      {% for choice in view.spec.choices %}
+      {% set current = view.value(choice.key) or choice.default or "" %}
+      <div class="field">
+        <label for="f-{{ choice.key }}">{{ choice.label }}</label>
+        <select id="f-{{ choice.key }}" name="{{ choice.key }}">
+          {% if choice.default is none %}<option value="">Hepsi</option>{% endif %}
+          {% for value, label in view.options[choice.key] %}
+          <option value="{{ value }}"{% if value == current %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endfor %}
+      {% if view.spec.day %}
+      <div class="field"><label for="f-bas">Başlangıç</label><input id="f-bas" name="bas" type="date" value="{{ view.value('bas') }}"></div>
+      <div class="field"><label for="f-bit">Bitiş</label><input id="f-bit" name="bit" type="date" value="{{ view.value('bit') }}"></div>
+      {% endif %}
+      <div class="actions"><button class="btn btn-primary" type="submit">Uygula</button><a class="btn btn-secondary" href="{{ action }}">Temizle</a></div>
+    </div>
+  </details>
+</form>
+{% if view.active %}
+<ul class="chips" aria-label="Etkin filtreler">
+  {% for chip in view.active %}
+  <li><a href="{{ action }}{{ chip.remove }}">{{ chip.name }}: {% if chip.day %}{{ chip.value | gun }}{% else %}{{ chip.value }}{% endif %}<span aria-hidden="true">×</span><span class="sr"> filtresini kaldır</span></a></li>
+  {% endfor %}
+  <li><a class="clear" href="{{ action }}">Hepsini temizle</a></li>
+</ul>
+{% endif %}
+{% if view.misunderstood %}
+<p class="note">Filtre anlaşılmadı: {{ view.misunderstood }}. Yok sayıldı.</p>
+{% endif %}
+{%- endmacro %}
+
+{# Masaüstünde sütun başlığı sıralama bağlantısıdır; seçili sütun aria-sort taşır. #}
+{% macro th(view, key, label, num=false) -%}
+<th{% if num %} class="num"{% endif %} aria-sort="{{ view.aria_sort(key) }}"><a href="{{ view.sort_url(key) }}">{{ label }}{% if view.sort == key %}<span aria-hidden="true"> {{ "↓" if view.descending else "↑" }}</span>{% endif %}</a></th>
+{%- endmacro %}
+
+{% macro pager(view, action) -%}
+{% if view.pages > 1 %}
+<nav class="pager" aria-label="Tablo sayfaları">
+  {% if view.page > 1 %}<a class="btn btn-secondary" rel="prev" href="{{ action }}{{ view.url(sayfa=(view.page - 1) | string) }}">Önceki</a>{% endif %}
+  <span>Sayfa {{ view.page }} / {{ view.pages }} · {{ view.total }} satır</span>
+  {% if view.page < view.pages %}<a class="btn btn-secondary" rel="next" href="{{ action }}{{ view.url(sayfa=(view.page + 1) | string) }}">Sonraki</a>{% endif %}
+</nav>
+{% endif %}
+{%- endmacro %}

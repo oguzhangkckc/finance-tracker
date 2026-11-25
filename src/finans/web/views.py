@@ -3,15 +3,17 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, timedelta
+from decimal import Decimal
 
 from finans import bootstrap
 from finans.application.backup import BackupCheck, verify_backups
 from finans.application.doctor import Check
 from finans.application.price_refresh import RefreshStatus, refresh_status, request_refresh
 from finans.application.report import ReportKind, build_report, payday_plan
+from finans.contracts.display import class_label
 from finans.contracts.report import Report
 from finans.domain.models import DomainError
-from finans.domain.portfolio import PortfolioConfig
+from finans.domain.portfolio import ConfigError, PortfolioConfig
 from finans.domain.schedule import logical_date
 from finans.ports.clock import BUSINESS_TZ, Clock
 from finans.ports.repositories import StoredRun, StoredTransaction
@@ -97,9 +99,34 @@ def class_names(settings: Settings) -> Mapping[str, str]:
     return load_config(settings).class_labels
 
 
-def transactions(settings: Settings) -> list[StoredTransaction]:
+@dataclass(frozen=True, slots=True)
+class TransactionRow:
+    stored: StoredTransaction
+    asset_class: str
+    class_name: str
+    amount: Decimal
+
+
+def transaction_rows(settings: Settings) -> list[TransactionRow]:
+    """İşlemler tablosunun satırları; tutar adet × birim fiyattır (komisyon ayrı sütunda)."""
+    try:
+        labels = load_config(settings).class_labels
+    except (PageError, ConfigError):
+        # Sınıf adı yalnız gösterim içindir; config okunamazsa ad koddan türetilir (doctor uyarır).
+        labels = {}
     with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
-        return list(reversed(uow.transactions.list(include_voided=True)))
+        stored = uow.transactions.list(include_voided=True)
+        classes = {
+            item.instrument.code: item.instrument.asset_class
+            for item in uow.instruments.list(include_inactive=True)
+        }
+    rows = []
+    for item in stored:
+        tx = item.transaction
+        asset_class = classes.get(tx.instrument, "")
+        name = class_label(asset_class, labels) if asset_class else ""
+        rows.append(TransactionRow(item, asset_class, name, tx.units * tx.unit_price))
+    return rows
 
 
 def refresh_view(settings: Settings, clock: Clock) -> RefreshStatus:
