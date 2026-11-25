@@ -122,7 +122,9 @@ Takvim: geliştirme 25 Kasım (bitti); Pi'ye toplu kurulumla. Kurulumda iki prof
 ## D1 · Otomatik deploy
 GitHub Actions → Tailscale (`tag:ci`) → yalnız tek bir betiği çalıştırabilen deploy kullanıcısı → sürüm dizinleri, sağlık kontrolü, otomatik geri dönüş, Telegram bildirimi, dondurma anahtarı. Birim dosyası, deploy betiği ya da migration değişirse otomatik kurulum durur ve elle kurulum istenir. Karar satırları D1 dalında yazılır; imzalı commit doğrulaması şimdilik yok.
 Geliştirme kapısı: kalıp ve doğrulama, dondurma, zamanlayıcı penceresi ve kilit, geri dönüş testleri; `deploy.yml`'nin yapısı (tetikleyici koşulları, izinler, SHA sabitleri); birim sertleştirmesi.
-Takvim: geliştirme W2b'den sonra; Pi'ye 26–30 Aralık.
+Kararlar K-132…K-135. Betikler sistem Python'uyla çalışır; testleri CI'da Python 3.12 ile de koşar (Pi'nin sistem Python'u 3.12).
+Takvim: geliştirme 2026-11-25'te başladı. Pi'ye kurulum 16–18 Aralık, 15 Aralık maaş günü işlerinden sonra; maaş günü planı bilinen sürümle çalışsın diye.
+Kabul süreleri: D1 kurulumu bütün birimlerin ve elle komut sarmalayıcılarının yolunu değiştirir (sürüm dizinleri, `current`). Kabul edilen sistem değiştiği için M3 ve M4 kurulum günü yeniden başlar; bu, kabul sürelerinin üçüncü yeniden başlatılmasıdır. M3'ün bitişini (25 Aralık) beklemek yerine bu yeniden başlatma bilerek kabul edildi (kullanıcı kararı, 2026-11-25); kurulumdan sonra ROADMAP'e yeni tarihler yazılır.
 
 ## M5 · OpenClaw ve güvenlik sertleştirmesi
 JSON anlık görüntüleri ve rrsync ile aktarımı (yalnızca çekirdekten dışarı), ft-agent (boru hattı ve veri tazeliği için iki ayrı bayatlık sinyali), JSON Schema kontratı, SKILL.md, PPK özeti akışı (oranlar kodla çıkarılır), asistan botu; iki makine, ayrı OS kullanıcıları, systemd sertleştirmesinin geri kalanı (LoadCredential K-92 ve beş ayar K-98 ile M4'te geldi), makine bazında egress allowlist.
