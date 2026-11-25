@@ -5,10 +5,30 @@ from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal
+from typing import Final, Literal, Protocol
 
 from finans.domain.models import ZERO, DomainError, YearMonth
 from finans.domain.numeric import canonical_text, in_domain_context
 from finans.domain.portfolio import ONE, ConfigIssue, PortfolioConfig
+
+SettingField = Literal["payday", "monthly_contribution", "targets"]
+FIELDS: Final[tuple[SettingField, ...]] = ("payday", "monthly_contribution", "targets")
+FIELD_LABELS: Final[Mapping[SettingField, str]] = {
+    "payday": "maaş günü",
+    "monthly_contribution": "aylık katkı",
+    "targets": "hedefler",
+}
+
+
+class SettingValues(Protocol):
+    """Sürüm ve portfolio.toml aynı üç ayarı taşır."""
+
+    @property
+    def payday(self) -> int | None: ...
+    @property
+    def monthly_contribution(self) -> Decimal | None: ...
+    @property
+    def targets(self) -> Mapping[str, Decimal]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -179,11 +199,31 @@ def with_classes(
 
 
 @in_domain_context
+def changed_fields(old: SettingValues, new: SettingValues) -> tuple[SettingField, ...]:
+    same: dict[SettingField, bool] = {
+        "payday": old.payday == new.payday,
+        "monthly_contribution": old.monthly_contribution == new.monthly_contribution,
+        "targets": dict(old.targets) == dict(new.targets),
+    }
+    return tuple(field for field in FIELDS if not same[field])
+
+
+@in_domain_context
+def overridden_on(
+    new: SettingVersion, versions: Iterable[SettingVersion], fields: Collection[SettingField]
+) -> tuple[date, ...]:
+    """Her sürüm üç ayarı birden taşır: değiştirilen ayarı başka değerle taşıyan sonraki bir
+    sürümün yürürlük gününden itibaren bu değişiklik geçerli olmaz."""
+    days = {
+        version.effective_from
+        for version in versions
+        if version.effective_from > new.effective_from
+        and set(changed_fields(version, new)) & set(fields)
+    }
+    return tuple(sorted(days))
+
+
+@in_domain_context
 def toml_differences(version: SettingVersion, config: PortfolioConfig) -> list[str]:
     """Başlangıçtan sonra TOML'daki değer kullanılmaz; farklı olan ayarın yalnız adı verilir."""
-    same = (
-        ("maaş günü", version.payday == config.payday),
-        ("aylık katkı", version.monthly_contribution == config.monthly_contribution),
-        ("hedefler", dict(version.targets) == dict(config.targets)),
-    )
-    return [name for name, equal in same if not equal]
+    return [FIELD_LABELS[field] for field in changed_fields(version, config)]

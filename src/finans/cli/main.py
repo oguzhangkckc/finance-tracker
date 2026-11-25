@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import date, timedelta
 from decimal import Decimal
@@ -29,7 +29,19 @@ from finans.application.price_sync import PriceSyncReport, sync_prices
 from finans.application.prices import set_manual_price
 from finans.application.reconcile import reconcile_statement
 from finans.application.report import ReportKind, build_report, payday_plan
-from finans.application.settings import FROM_SETTINGS, FromSettings, payday_for
+from finans.application.settings import (
+    FROM_SETTINGS,
+    KEEP,
+    STATE_LABELS,
+    FromSettings,
+    HistoryRow,
+    Keep,
+    add_version,
+    cancel_version,
+    payday_for,
+    propose,
+    setting_history,
+)
 from finans.application.transactions import (
     add_transaction,
     import_transactions,
@@ -43,8 +55,15 @@ from finans.domain.portfolio import ConfigError, QualityThresholds
 from finans.domain.quality import DataIssue
 from finans.domain.reconcile import PriceDateEvidence
 from finans.domain.schedule import logical_date
+from finans.domain.settings import (
+    FIELD_LABELS,
+    FIELDS,
+    SettingField,
+    SettingValues,
+    SettingVersion,
+)
 from finans.ports.clock import BUSINESS_TZ
-from finans.ports.repositories import StoredTransaction
+from finans.ports.repositories import StoredSetting, StoredTransaction
 from finans.settings import Settings, load_settings
 
 app = typer.Typer(
@@ -81,6 +100,11 @@ app.add_typer(sanal_app, name="sanal")
 app.add_typer(backup_app, name="backup")
 web_app = typer.Typer(no_args_is_help=True, help="Web arayüzü (K-123, K-126).")
 app.add_typer(web_app, name="web")
+ayar_app = typer.Typer(
+    no_args_is_help=True,
+    help="Maaş günü, aylık katkı ve hedefler; yürürlük tarihli sürümler (K-127).",
+)
+app.add_typer(ayar_app, name="ayar")
 
 
 class SideChoice(StrEnum):
@@ -140,6 +164,211 @@ def config_apply(file: FileOption = None) -> None:
         with bootstrap.open_unit_of_work(settings) as uow:
             report = apply_portfolio(uow, config, today=clock.today(), at=clock.now())
     _print_apply(report)
+
+
+EffectiveOption = Annotated[
+    str, typer.Option("--tarih", help="Yürürlük günü (YYYY-AA-GG); en erken bugün")
+]
+
+
+@ayar_app.command("goster")
+def ayar_show() -> None:
+    """Bugün geçerli ayarı ve planlanan sürümleri gösterir."""
+    settings = _load_settings_or_exit()
+    today = bootstrap.system_clock().today()
+    with _user_errors():
+        config = bootstrap.portfolio_source().load(_portfolio_path(settings, None))
+        with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+            history = setting_history(uow, today=today)
+    order = list(config.targets)
+    current = next((row for row in history if row.state == "in_force"), None)
+    values: SettingValues = config
+    if current is None:
+        typer.echo(
+            "Ayar sürümü yok; portfolio.toml kullanılıyor. Başlangıç sürümünü `ft config apply`"
+            " yazar."
+        )
+    else:
+        values = current.stored.version
+        start = current.stored.version.effective_from == date.min
+        name = "başlangıç sürümü (portfolio.toml)" if start else _version_day(current.stored)
+        typer.echo(f"Geçerli ayar: {name if start else f'#{current.stored.id}, {name}'}")
+    for field in FIELDS:
+        typer.echo(f"  {FIELD_LABELS[field].capitalize()}: {_setting_text(values, field, order)}")
+    for row in history:
+        if row.state == "planned":
+            change = _history_change(row, order)
+            typer.echo(f"Planlanan: #{row.stored.id}, {_version_day(row.stored)}: {change}")
+
+
+@ayar_app.command("gecmis")
+def ayar_history() -> None:
+    """Bütün ayar sürümleri; vazgeçilenler gerekçesiyle, silinmez."""
+    settings = _load_settings_or_exit()
+    today = bootstrap.system_clock().today()
+    with _user_errors():
+        config = bootstrap.portfolio_source().load(_portfolio_path(settings, None))
+        with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+            history = setting_history(uow, today=today)
+    if not history:
+        typer.echo("Ayar sürümü yok; başlangıç sürümünü `ft config apply` yazar.")
+    order = list(config.targets)
+    for row in history:
+        stored = row.stored
+        state = STATE_LABELS[row.state]
+        if stored.cancel_reason is not None:
+            state += f" ({stored.cancel_reason})"
+        recorded = stored.recorded_at.astimezone(BUSINESS_TZ)
+        parts = [
+            f"#{stored.id}",
+            _version_day(stored),
+            state,
+            stored.source,
+            f"{recorded:%Y-%m-%d %H:%M}",
+            _history_change(row, order),
+        ]
+        typer.echo("  ".join(parts))
+
+
+@ayar_app.command("katki")
+def ayar_contribution(
+    amount: Annotated[str, typer.Argument(help="Aylık katkı (TL); ondalık ayırıcı nokta")],
+    effective: EffectiveOption,
+) -> None:
+    """Aylık katkıyı yürürlük gününden itibaren değiştirir."""
+    _save_setting(effective, contribution=_parse_decimal("katkı", amount))
+
+
+@ayar_app.command("maas-gunu")
+def ayar_payday(
+    day: Annotated[int, typer.Argument(help="Maaş günü (1 ile 31 arası)")],
+    effective: EffectiveOption,
+) -> None:
+    """Maaş gününü değiştirir; değişiklik yalnız bir ayın 1'inden geçerli olabilir."""
+    _save_setting(effective, payday=day)
+
+
+@ayar_app.command("hedef")
+def ayar_targets(
+    pairs: Annotated[
+        list[str],
+        typer.Argument(help="Bütün sınıflar SINIF=ORAN olarak; örnek: hisse=0.6 dusuk_risk=0.4"),
+    ],
+    effective: EffectiveOption,
+) -> None:
+    """Hedef dağılımı değiştirir; oranlar noktalı ve toplamı tam 1."""
+    _save_setting(effective, targets=_parse_targets(pairs))
+
+
+@ayar_app.command("vazgec")
+def ayar_cancel(
+    setting_id: Annotated[int, typer.Argument(help="Ayar sürümü numarası (`ft ayar gecmis`)")],
+    reason: Annotated[str, typer.Option("--gerekce", help="Vazgeçme gerekçesi")],
+) -> None:
+    """Henüz yürürlüğe girmemiş bir sürümden vazgeçer; kayıt ve gerekçe kalır."""
+    settings = _load_settings_or_exit()
+    clock = bootstrap.system_clock()
+    with _user_errors(), bootstrap.open_unit_of_work(settings) as uow:
+        version = cancel_version(
+            uow, setting_id, reason=reason, today=clock.today(), at=clock.now()
+        )
+    day = version.effective_from.isoformat()
+    typer.echo(f"Vazgeçildi: ayar sürümü #{setting_id} (yürürlük {day} olacaktı).")
+
+
+def _save_setting(
+    effective: str,
+    *,
+    payday: int | Keep = KEEP,
+    contribution: Decimal | Keep = KEEP,
+    targets: Mapping[str, Decimal] | Keep = KEEP,
+) -> None:
+    settings = _load_settings_or_exit()
+    day = _parse_date(effective)
+    clock = bootstrap.system_clock()
+    with _user_errors():
+        config = bootstrap.portfolio_source().load(_portfolio_path(settings, None))
+        with _setting_issues(), bootstrap.open_unit_of_work(settings) as uow:
+            proposal = propose(
+                uow,
+                config,
+                effective_from=day,
+                today=clock.today(),
+                payday=payday,
+                contribution=contribution,
+                targets=targets,
+            )
+            if proposal.issues:
+                raise ConfigError(proposal.issues)
+            setting_id = add_version(
+                uow, config, proposal.version, source="cli", today=clock.today(), at=clock.now()
+            )
+    change = _change_text(proposal.base, proposal.version, proposal.changed, list(config.targets))
+    typer.echo(f"Ayar sürümü #{setting_id} kaydedildi; yürürlük {day.isoformat()}: {change}")
+    for later in proposal.overridden_on:
+        typer.echo(
+            f"Uyarı: yürürlüğü {later.isoformat()} olan planlanan sürüm bu değişikliği"
+            " taşımıyor; o günden itibaren onun değeri geçerli olur."
+        )
+
+
+@contextmanager
+def _setting_issues() -> Iterator[None]:
+    try:
+        yield
+    except ConfigError as exc:
+        typer.echo(f"Ayar kaydedilmedi; {len(exc.issues)} hata var:", err=True)
+        for issue in exc.issues:
+            typer.echo(f"  - {issue}", err=True)
+        raise typer.Exit(code=1) from exc
+
+
+def _parse_targets(pairs: Sequence[str]) -> dict[str, Decimal]:
+    targets: dict[str, Decimal] = {}
+    for pair in pairs:
+        name, equals, text = pair.partition("=")
+        if not equals or not name:
+            _usage_error(InputError(f"Hedef SINIF=ORAN biçiminde yazılır; {pair!r} verildi."))
+        if name in targets:
+            _usage_error(InputError(f"{name} iki kez verildi."))
+        targets[name] = _parse_decimal(name, text)
+    return targets
+
+
+def _version_day(stored: StoredSetting) -> str:
+    day = stored.version.effective_from
+    return "başlangıç (portfolio.toml)" if day == date.min else f"yürürlük {day.isoformat()}"
+
+
+def _setting_text(values: SettingValues, field: SettingField, order: Sequence[str]) -> str:
+    if field == "payday":
+        return "tanımlı değil" if values.payday is None else str(values.payday)
+    if field == "monthly_contribution":
+        amount = values.monthly_contribution
+        return "tanımlı değil" if amount is None else canonical_text(amount)
+    names = [name for name in order if name in values.targets]
+    names += sorted(set(values.targets) - set(order))
+    return " ".join(f"{name}={canonical_text(values.targets[name])}" for name in names)
+
+
+def _change_text(
+    old: SettingVersion | None,
+    new: SettingVersion,
+    fields: Sequence[SettingField],
+    order: Sequence[str],
+) -> str:
+    if old is None:
+        shown = [f"{FIELD_LABELS[f]} {_setting_text(new, f, order)}" for f in FIELDS]
+    else:
+        shown = [
+            f"{FIELD_LABELS[f]} {_setting_text(old, f, order)} → {_setting_text(new, f, order)}"
+            for f in fields
+        ]
+    return " · ".join(shown) or "değişiklik yok"
+
+
+def _history_change(row: HistoryRow, order: Sequence[str]) -> str:
+    return _change_text(row.previous, row.stored.version, row.changed, order)
 
 
 @tx_app.command("add")

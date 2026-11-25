@@ -14,7 +14,14 @@ from finans.adapters.sqlite.migrate import apply, bundled
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.application.alerts import AlertEvaluation, evaluate_alerts
 from finans.application.report import ReportKind, build_report, payday_plan
-from finans.application.settings import add_version, cancel_version, payday_for
+from finans.application.settings import (
+    HistoryRow,
+    add_version,
+    cancel_version,
+    payday_for,
+    propose,
+    setting_history,
+)
 from finans.contracts.report import PaydayPlan, Report
 from finans.domain.models import CpiPoint, DomainError, YearMonth
 from finans.domain.portfolio import ConfigError
@@ -215,3 +222,67 @@ def test_only_a_planned_version_can_be_cancelled(
         cancel_version(uow, setting_id, reason=reason, today=TODAY, at=RECORDED)
 
     assert str(refused.value) == message
+
+
+def test_a_proposal_starts_from_the_version_in_force_on_its_day(migrated_db: Path) -> None:
+    with SqliteUnitOfWork(migrated_db) as uow:
+        uow.settings.add(START, source="toml", at=RECORDED)
+        uow.settings.add(JANUARY, source="cli", at=RECORDED)
+        retargeted = {"hisse": D("0.7"), "dusuk_risk": D("0.3")}
+        february = propose(
+            uow, CONFIG, effective_from=date(2027, 2, 1), today=TODAY, targets=retargeted
+        )
+        december = propose(
+            uow, CONFIG, effective_from=date(2026, 12, 1), today=TODAY, targets=retargeted
+        )
+
+    assert february.base == JANUARY
+    assert february.version == replace(JANUARY, effective_from=date(2027, 2, 1), targets=retargeted)
+    assert (february.changed, february.issues, february.overridden_on) == (("targets",), (), ())
+    assert december.base == START
+    assert december.overridden_on == (date(2027, 1, 1),)
+
+
+def test_a_proposal_that_changes_nothing_or_breaks_a_rule_has_issues(migrated_db: Path) -> None:
+    with SqliteUnitOfWork(migrated_db) as uow:
+        uow.settings.add(START, source="toml", at=RECORDED)
+        same = propose(uow, CONFIG, effective_from=TODAY, today=TODAY, contribution=D("1000.00"))
+        mid_month = propose(uow, CONFIG, effective_from=date(2026, 12, 10), today=TODAY, payday=20)
+
+    assert [str(issue) for issue in same.issues] == [
+        "ayar: o günkü ayarla aynı; yeni sürüm gerekmiyor."
+    ]
+    assert [str(issue) for issue in mid_month.issues] == [
+        "effective_from: maaş günü değişikliği yalnız bir ayın 1'inden geçerli olabilir."
+    ]
+
+
+def test_there_is_nothing_to_propose_before_the_first_config_apply(migrated_db: Path) -> None:
+    with pytest.raises(DomainError) as refused, SqliteUnitOfWork(migrated_db) as uow:
+        propose(uow, CONFIG, effective_from=TODAY, today=TODAY, contribution=D(1200))
+
+    assert str(refused.value) == (
+        "Ayarların başlangıç sürümü yok; önce `ft config apply` çalıştır."
+    )
+
+
+def test_the_history_shows_each_version_with_its_state_and_change(migrated_db: Path) -> None:
+    today_raise = replace(START, effective_from=TODAY, monthly_contribution=D(1100))
+    corrected = replace(JANUARY, monthly_contribution=D(1300))
+    february = replace(corrected, effective_from=date(2027, 2, 1), payday=20)
+    with SqliteUnitOfWork(migrated_db) as uow:
+        for version in (START, today_raise, JANUARY, corrected, february):
+            uow.settings.add(version, source="web", at=RECORDED)
+        uow.settings.cancel(5, reason="yanlış ay", at=RECORDED)
+        history = setting_history(uow, today=TODAY)
+
+    def summary(row: HistoryRow) -> tuple[int, str, tuple[str, ...], SettingVersion | None]:
+        return row.stored.id, row.state, row.changed, row.previous
+
+    assert [summary(row) for row in history] == [
+        (1, "past", (), None),
+        (2, "in_force", ("monthly_contribution",), START),
+        (3, "replaced", ("monthly_contribution",), today_raise),
+        (4, "planned", ("monthly_contribution",), JANUARY),
+        (5, "cancelled", ("payday",), corrected),
+    ]

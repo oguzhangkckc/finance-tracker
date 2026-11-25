@@ -2,20 +2,24 @@
 başlangıç sürümünü yazana kadar davranış değişmez. Her okuyucu ilgili günün sürümünü kullanır:
 rapor mantıksal gününü, maaş günü planı maaş gününü, alarm değerlendirildiği günü."""
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime
+from decimal import Decimal
 from enum import Enum
-from typing import Final
+from typing import Final, Literal
 
 from finans.domain.models import DomainError, YearMonth
-from finans.domain.portfolio import ConfigError, PortfolioConfig
+from finans.domain.portfolio import ConfigError, ConfigIssue, PortfolioConfig
 from finans.domain.settings import (
     ClassChanges,
+    SettingField,
     SettingVersion,
+    changed_fields,
     check_version,
     class_changes,
     effective_version,
+    overridden_on,
     payday_schedule,
     start_version,
     toml_differences,
@@ -53,6 +57,110 @@ def effective_config(uow: UnitOfWork, toml: PortfolioConfig, *, on: date) -> Por
 def payday_for(uow: UnitOfWork, toml: PortfolioConfig) -> Callable[[YearMonth], int | None]:
     """Her ayın maaş günü o ayın 1'indeki sürümden; maaş günü işinin mantıksal günü buna göre."""
     return payday_schedule(active_versions(uow), fallback=toml.payday)
+
+
+class Keep(Enum):
+    """Yeni sürümde bu ayar, yürürlük gününde geçerli olan sürümdeki değeriyle kalır."""
+
+    VALUE = "aynı"
+
+
+KEEP: Final = Keep.VALUE
+
+
+@dataclass(frozen=True, slots=True)
+class Proposal:
+    version: SettingVersion
+    base: SettingVersion
+    changed: tuple[SettingField, ...]
+    overridden_on: tuple[date, ...]
+    issues: tuple[ConfigIssue, ...]
+
+
+def propose(
+    uow: UnitOfWork,
+    toml: PortfolioConfig,
+    *,
+    effective_from: date,
+    today: date,
+    payday: int | Keep | None = KEEP,
+    contribution: Decimal | Keep | None = KEEP,
+    targets: Mapping[str, Decimal] | Keep = KEEP,
+) -> Proposal:
+    """Değişmeyen ayarlar yürürlük gününde geçerli olan sürümden alınır; bugünkünden değil, yoksa
+    araya planlanmış bir sürümün değişikliği geri alınırdı."""
+    versions = active_versions(uow)
+    current = effective_version(versions, today)
+    if current is None:
+        raise DomainError("Ayarların başlangıç sürümü yok; önce `ft config apply` çalıştır.")
+    base = effective_version(versions, effective_from) or current
+    new = SettingVersion(
+        effective_from,
+        base.payday if isinstance(payday, Keep) else payday,
+        base.monthly_contribution if isinstance(contribution, Keep) else contribution,
+        dict(base.targets) if isinstance(targets, Keep) else dict(targets),
+    )
+    changed = changed_fields(base, new)
+    issues = check_version(new, versions=versions, classes=toml.targets.keys(), today=today)
+    if not changed:
+        issues.append(ConfigIssue("ayar", "o günkü ayarla aynı; yeni sürüm gerekmiyor."))
+    return Proposal(new, base, changed, overridden_on(new, versions, changed), tuple(issues))
+
+
+SettingState = Literal["in_force", "past", "planned", "replaced", "cancelled"]
+STATE_LABELS: Final[Mapping[SettingState, str]] = {
+    "in_force": "geçerli",
+    "past": "geçmiş",
+    "planned": "planlandı",
+    "replaced": "aynı gün yenisi kaydedildi",
+    "cancelled": "vazgeçildi",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class HistoryRow:
+    """`previous`: bu sürüm kaydedilmeseydi o gün geçerli olacak sürüm; başlangıçta None."""
+
+    stored: StoredSetting
+    state: SettingState
+    previous: SettingVersion | None
+    changed: tuple[SettingField, ...]
+
+
+def setting_history(uow: UnitOfWork, *, today: date) -> list[HistoryRow]:
+    rows = uow.settings.list()
+    active = [s for s in rows if not s.is_cancelled]
+    current = effective_version([s.version for s in active], today)
+    history: list[HistoryRow] = []
+    for stored in rows:
+        day = stored.version.effective_from
+        before = [
+            s.version
+            for s in active
+            if s.version.effective_from < day
+            or (s.version.effective_from == day and s.id < stored.id)
+        ]
+        previous = effective_version(before, day)
+        changed = () if previous is None else changed_fields(previous, stored.version)
+        state = _state(stored, active, current, today)
+        history.append(HistoryRow(stored, state, previous, changed))
+    return history
+
+
+def _state(
+    stored: StoredSetting,
+    active: Sequence[StoredSetting],
+    current: SettingVersion | None,
+    today: date,
+) -> SettingState:
+    day = stored.version.effective_from
+    if stored.is_cancelled:
+        return "cancelled"
+    if any(s.id > stored.id and s.version.effective_from == day for s in active):
+        return "replaced"
+    if day > today:
+        return "planned"
+    return "in_force" if stored.version is current else "past"
 
 
 def add_version(

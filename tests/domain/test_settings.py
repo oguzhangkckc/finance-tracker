@@ -11,9 +11,11 @@ from finans.domain.portfolio import AlertThresholds, PortfolioConfig
 from finans.domain.settings import (
     ClassChanges,
     SettingVersion,
+    changed_fields,
     check_version,
     class_changes,
     effective_version,
+    overridden_on,
     payday_schedule,
     start_version,
     toml_differences,
@@ -180,3 +182,31 @@ def test_toml_values_that_differ_from_the_setting_are_named_without_values() -> 
     assert toml_differences(START, TOML) == []
     assert toml_differences(START, same_amount) == []
     assert toml_differences(START, other) == ["maaş günü", "aylık katkı", "hedefler"]
+
+
+def test_changed_fields_name_only_the_settings_that_differ() -> None:
+    retargeted = replace(JANUARY, targets={"hisse": D("0.7"), "dusuk_risk": D("0.3")})
+
+    assert changed_fields(START, START) == ()
+    assert (
+        changed_fields(START, replace(START, targets={"dusuk_risk": D("0.40"), "hisse": D("0.60")}))
+        == ()
+    )
+    assert changed_fields(START, JANUARY) == ("monthly_contribution",)
+    assert changed_fields(START, retargeted) == ("monthly_contribution", "targets")
+
+
+def test_a_later_version_carrying_another_value_overrides_the_change_from_its_day() -> None:
+    february = replace(
+        START, effective_from=date(2027, 2, 1), targets={"hisse": D("0.7"), "dusuk_risk": D("0.3")}
+    )
+    march_old_targets = replace(
+        START, effective_from=date(2027, 3, 1), monthly_contribution=D(1500)
+    )
+    march_new_targets = replace(february, effective_from=date(2027, 3, 1))
+
+    assert overridden_on(february, [START, JANUARY, march_old_targets], ["targets"]) == (
+        date(2027, 3, 1),
+    )
+    assert overridden_on(february, [START, JANUARY, march_new_targets], ["targets"]) == ()
+    assert overridden_on(february, [START, march_old_targets], []) == ()

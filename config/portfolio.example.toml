@@ -3,6 +3,9 @@
 # Doğrulama: ft config check   Uygulama: ft config apply
 
 # Dağılım içi varlık sınıflarının hedef ağırlıkları; toplam tam 1 olmalı.
+# Yalnız ilk değerdir: ilk `ft config apply` bunu ayarların başlangıç sürümü olarak yazar; sonra
+# hedefler panelden ya da `ft ayar hedef` ile değişir ve buradaki değer kullanılmaz (K-127).
+# Sınıf eklemek ve silmek yine buradan yapılır; silinecek sınıfın ağırlığı önce 0 yapılır.
 [targets]
 hisse_tr = 0.30
 hisse_yabanci = 0.15
@@ -19,6 +22,8 @@ altin = "Altın"
 
 # Aylık katkı (TL) ve maaş günü (1–31; ay daha kısaysa ayın son günü).
 # monthly yazılmazsa katkı "tanımlı değil" sayılır (K-56); payday için monthly zorunludur (K-83).
+# Hedefler gibi yalnız ilk değerdir; sonra panelden ya da `ft ayar katki` ve `ft ayar maas-gunu`
+# ile değişir (K-127).
 [contribution]
 monthly = 10000
 payday = 15
