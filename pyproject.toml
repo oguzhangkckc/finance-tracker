@@ -114,6 +114,7 @@ modules = [
     "finans.adapters.json_log",
     "finans.adapters.lock",
     "finans.adapters.portfolio_toml",
+    "finans.adapters.refresh_request",
     "finans.adapters.render",
     "finans.adapters.sqlite",
     "finans.adapters.tefas",

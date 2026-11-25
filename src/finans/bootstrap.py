@@ -19,6 +19,7 @@ from finans.adapters.healthcheck import HealthcheckPing
 from finans.adapters.json_log import JsonFormatter
 from finans.adapters.lock import FlockJobLock
 from finans.adapters.portfolio_toml import TomlPortfolioSource
+from finans.adapters.refresh_request import FileRefreshRequests
 from finans.adapters.render.json import JsonRenderer
 from finans.adapters.render.text import TextRenderer
 from finans.adapters.sqlite.connection import (
@@ -60,6 +61,7 @@ from finans.contracts.report import SANAL_NOTICE
 from finans.domain.portfolio import ConfigError, PortfolioConfig
 from finans.ports.clock import Clock
 from finans.ports.notifier import Notifier, NotifyError
+from finans.ports.operations import RefreshRequests
 from finans.ports.render import ReportRenderer
 from finans.ports.sources import (
     CpiSource,
@@ -87,6 +89,7 @@ __all__ = [
     "open_unit_of_work",
     "portfolio_source",
     "price_source",
+    "refresh_requests",
     "report_renderer",
     "require_sanal",
     "run_doctor",
@@ -456,3 +459,8 @@ def _env_check(path: Path) -> Check:
 def web_listener(settings: Settings) -> socket.socket:
     """finans-web'in dinlediği tek yer: 0600 izinli Unix soketi, TCP yok (K-101, K-123)."""
     return listen_unix(settings.web_socket)
+
+
+def refresh_requests(settings: Settings) -> RefreshRequests:
+    """İstek dosyaları veritabanının yanında; sanal ve gerçek profil ayrı dosyalarda (K-123)."""
+    return FileRefreshRequests(settings.db_path.parent / "refresh", settings.profile)
