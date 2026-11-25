@@ -7,6 +7,8 @@
 {{ steps(2) }}
 {% if changed %}
 <div class="notice warn" role="alert">{{ icon("uyari") }}<p><strong>Önizlemeden sonra veriler değişti; kayıt yapılmadı.</strong> Yeni önizlemeyi kontrol et.</p></div>
+{% elif choice_changed %}
+<div class="notice info" role="status">{{ icon("bilgi") }}<p><strong>Kutunun seçimi önizlemedekinden farklı; kayıt yapılmadı.</strong> Önizleme yeni seçime göre yenilendi; kontrol edip yeniden kaydet.</p></div>
 {% endif %}
 {% for plan in plans %}
 <section class="profile-plan">
@@ -29,7 +31,11 @@
   <div class="notice error" role="alert">{{ icon("hata") }}<p>{{ issue.message[:1] | upper }}{{ issue.message[1:] }}</p></div>
   {% endfor %}
   {% for later in proposal.later %}
+  {% if carry %}
+  <div class="notice info" role="status">{{ icon("bilgi") }}<p>Yürürlüğü {{ later.stored.version.effective_from | gun }} olan planlanan sürüm (#{{ later.stored.id }}) bu değişikliği taşımıyordu; kaydedilince ona da taşınacak.</p></div>
+  {% else %}
   <div class="notice warn" role="status">{{ icon("uyari") }}<p>Yürürlüğü {{ later.stored.version.effective_from | gun }} olan planlanan sürüm (#{{ later.stored.id }}) bu değişikliği taşımıyor; o günden itibaren {{ kept(later.stored, later.fields) }} olur.</p></div>
+  {% endif %}
   {% endfor %}
   {% endif %}
 </section>
@@ -42,8 +48,12 @@
   {% endfor %}
   {% if carry_option %}
   <div class="field">
-    <label class="check"><input type="checkbox" name="sonrakilere" value="1"><span>Sonraki planlanan sürümlere de uygula</span></label>
-    <p class="hint">Seçilirse şu sürümlerden "yeni değişiklik taşındı" gerekçesiyle vazgeçilir ve aynı yürürlük günüyle, yalnız değişen ayar güncellenmiş olarak yeniden yazılır:</p>
+    <label class="check"><input type="checkbox" name="sonrakilere" value="1"{% if carry %} checked{% endif %}><span>Sonraki planlanan sürümlere de uygula</span></label>
+    {% if carry %}
+    <p class="hint">Kaydedilince şu sürümlerden "yeni değişiklik taşındı" gerekçesiyle vazgeçilecek ve aynı yürürlük günüyle, yalnız değişen ayar güncellenmiş olarak yeniden yazılacak. Kutuyu kaldırırsan önce yeni önizleme gösterilir.</p>
+    {% else %}
+    <p class="hint">Seçilirse şu sürümlerden "yeni değişiklik taşındı" gerekçesiyle vazgeçilir ve aynı yürürlük günüyle, yalnız değişen ayar güncellenmiş olarak yeniden yazılır. Kutuyu işaretleyip gönderirsen önce bu seçimle yeni önizleme gösterilir:</p>
+    {% endif %}
     <ul class="plain">
       {% for plan in plans if plan.proposal %}
       {% for later in plan.proposal.later %}

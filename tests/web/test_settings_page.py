@@ -253,7 +253,12 @@ def test_a_january_contribution_lasts_past_a_planned_march_change_only_when_carr
     me = started.browser()
 
     preview = me.post("/gercek/ayarlar/yeni", {**FORM, "gun": "2027-01-01", "katki": "1200"})
-    _confirm(me, preview.text, **({"sonrakilere": "1"} if carry else {}))
+    if carry:
+        carried = _confirm(me, preview.text, sonrakilere="1")
+        assert "kaydedilince ona da taşınacak" in carried.text
+        _confirm(me, carried.text, sonrakilere="1")
+    else:
+        _confirm(me, preview.text)
 
     warning = (
         "Yürürlüğü 1 Mart 2027 olan planlanan sürüm (#2) bu değişikliği taşımıyor; o günden"
@@ -266,6 +271,27 @@ def test_a_january_contribution_lasts_past_a_planned_march_change_only_when_carr
     assert _contribution_and_targets(started, date(2027, 3, 15)) == (in_march, MARCH.targets)
     if carry:
         assert _rows(started, "real")[1].cancel_reason == "yeni değişiklik taşındı: #3"
+
+
+@pytest.mark.parametrize("previewed_carry", [False, True])
+def test_a_carry_choice_other_than_the_previewed_one_saves_nothing_and_previews_again(
+    started: Site, previewed_carry: bool
+) -> None:
+    """Kutu imzasızdır, önizlenen seçim imzalıdır; farklı gönderilen seçim kaydedilmez."""
+    _add(started, "real", MARCH)
+    me = started.browser()
+    preview = me.post("/gercek/ayarlar/yeni", {**FORM, "gun": "2027-01-01", "katki": "1200"})
+    if previewed_carry:
+        preview = _confirm(me, preview.text, sonrakilere="1")
+    assert ("checked" in preview.text.split('name="sonrakilere"')[1][:20]) is previewed_carry
+
+    flipped = _confirm(me, preview.text, **({} if previewed_carry else {"sonrakilere": "1"}))
+
+    assert flipped.status_code == 200
+    assert "Kutunun seçimi önizlemedekinden farklı; kayıt yapılmadı." in flipped.text
+    assert len(_rows(started, "real")) == 2
+    expected_box = "" if previewed_carry else " checked"
+    assert f'name="sonrakilere" value="1"{expected_box}>' in flipped.text
 
 
 def test_a_planned_version_is_cancelled_with_a_reason_and_its_row_stays(started: Site) -> None:

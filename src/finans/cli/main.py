@@ -36,6 +36,7 @@ from finans.application.settings import (
     FromSettings,
     HistoryRow,
     Keep,
+    LaterRewrite,
     cancel_version,
     payday_for,
     propose,
@@ -176,6 +177,9 @@ CarryOption = Annotated[
         help="Değişikliği eski değerle taşıyan ileri tarihli planlanan sürümlere de uygula.",
     ),
 ]
+DryRunOption = Annotated[
+    bool, typer.Option("--deneme", help="Yazmadan önizlemeyi ve uyarıları göster.")
+]
 
 
 @ayar_app.command("goster")
@@ -242,9 +246,10 @@ def ayar_contribution(
     amount: Annotated[str, typer.Argument(help="Aylık katkı (TL); ondalık ayırıcı nokta")],
     effective: EffectiveOption,
     carry: CarryOption = False,
+    dry_run: DryRunOption = False,
 ) -> None:
     """Aylık katkıyı yürürlük gününden itibaren değiştirir."""
-    _save_setting(effective, carry, contribution=_parse_decimal("katkı", amount))
+    _save_setting(effective, carry, dry_run, contribution=_parse_decimal("katkı", amount))
 
 
 @ayar_app.command("maas-gunu")
@@ -252,9 +257,10 @@ def ayar_payday(
     day: Annotated[int, typer.Argument(help="Maaş günü (1 ile 31 arası)")],
     effective: EffectiveOption,
     carry: CarryOption = False,
+    dry_run: DryRunOption = False,
 ) -> None:
     """Maaş gününü değiştirir; değişiklik yalnız bir ayın 1'inden geçerli olabilir."""
-    _save_setting(effective, carry, payday=day)
+    _save_setting(effective, carry, dry_run, payday=day)
 
 
 @ayar_app.command("hedef")
@@ -265,9 +271,10 @@ def ayar_targets(
     ],
     effective: EffectiveOption,
     carry: CarryOption = False,
+    dry_run: DryRunOption = False,
 ) -> None:
     """Hedef dağılımı değiştirir; oranlar noktalı ve toplamı tam 1."""
-    _save_setting(effective, carry, targets=_parse_targets(pairs))
+    _save_setting(effective, carry, dry_run, targets=_parse_targets(pairs))
 
 
 @ayar_app.command("vazgec")
@@ -289,6 +296,7 @@ def ayar_cancel(
 def _save_setting(
     effective: str,
     carry: bool,
+    dry_run: bool,
     *,
     payday: int | Keep = KEEP,
     contribution: Decimal | Keep = KEEP,
@@ -299,7 +307,7 @@ def _save_setting(
     clock = bootstrap.system_clock()
     with _user_errors():
         config = bootstrap.portfolio_source().load(_portfolio_path(settings, None))
-        with _setting_issues(), bootstrap.open_unit_of_work(settings) as uow:
+        with _setting_issues(), bootstrap.open_unit_of_work(settings, readonly=dry_run) as uow:
             proposal = propose(
                 uow,
                 config,
@@ -309,37 +317,59 @@ def _save_setting(
                 contribution=contribution,
                 targets=targets,
             )
-            saved = save_proposal(
-                uow,
-                config,
-                proposal,
-                source="cli",
-                today=clock.today(),
-                at=clock.now(),
-                carry_later=carry,
-            )
+            if dry_run and proposal.issues:
+                raise ConfigError(proposal.issues)
+            saved = None
+            if not dry_run:
+                saved = save_proposal(
+                    uow,
+                    config,
+                    proposal,
+                    source="cli",
+                    today=clock.today(),
+                    at=clock.now(),
+                    carry_later=carry,
+                )
     order = list(config.targets)
     change = _change_text(proposal.base, proposal.version, proposal.changed, order)
-    typer.echo(f"Ayar sürümü #{saved.setting_id} kaydedildi; yürürlük {day.isoformat()}: {change}")
-    replaced = dict(saved.rewritten)
+    if saved is None:
+        typer.echo(f"Önizleme (kaydedilmedi); yürürlük {day.isoformat()}: {change}")
+    else:
+        typer.echo(
+            f"Ayar sürümü #{saved.setting_id} kaydedildi; yürürlük {day.isoformat()}: {change}"
+        )
+    replaced = {} if saved is None else dict(saved.rewritten)
     for later in proposal.later:
-        stored = later.stored
-        moved = _change_text(stored.version, later.rewritten, later.fields, order)
-        if stored.id in replaced:
-            typer.echo(
-                f"Sonraki sürüme taşındı: #{stored.id} yerine #{replaced[stored.id]},"
-                f" {_version_day(stored)}: {moved}"
-            )
-        else:
-            kept = " ve ".join(
-                f"{FIELD_LABELS[f]} {_setting_text(stored.version, f, order)}" for f in later.fields
-            )
-            typer.echo(
-                f"Uyarı: yürürlüğü {stored.version.effective_from.isoformat()} olan planlanan"
-                f" sürüm (#{stored.id}) bu değişikliği taşımıyor; o günden itibaren {kept} olur."
-                " Taşımak için komut `--sonrakilere-de` ile verilir; şimdi düzeltmek için"
-                f" #{stored.id} sürümünden vazgeçip yeniden ekle."
-            )
+        _print_later(later, order, carry=carry, saved=saved is not None, replaced=replaced)
+
+
+def _print_later(
+    later: LaterRewrite, order: Sequence[str], *, carry: bool, saved: bool, replaced: dict[int, int]
+) -> None:
+    stored = later.stored
+    moved = _change_text(stored.version, later.rewritten, later.fields, order)
+    if stored.id in replaced:
+        typer.echo(
+            f"Sonraki sürüme taşındı: #{stored.id} yerine #{replaced[stored.id]},"
+            f" {_version_day(stored)}: {moved}"
+        )
+        return
+    if carry and not saved:
+        typer.echo(f"Sonraki sürüme taşınacak: #{stored.id}, {_version_day(stored)}: {moved}")
+        return
+    kept = " ve ".join(
+        f"{FIELD_LABELS[f]} {_setting_text(stored.version, f, order)}" for f in later.fields
+    )
+    advice = (
+        " Taşımak için komut `--sonrakilere-de` ile verilir; şimdi düzeltmek için"
+        f" #{stored.id} sürümünden vazgeçip yeniden ekle."
+        if saved
+        else " Taşımak için komutu `--sonrakilere-de` ile ver."
+    )
+    typer.echo(
+        f"Uyarı: yürürlüğü {stored.version.effective_from.isoformat()} olan planlanan"
+        f" sürüm (#{stored.id}) bu değişikliği taşımıyor; o günden itibaren {kept} olur.{advice}"
+    )
 
 
 @contextmanager

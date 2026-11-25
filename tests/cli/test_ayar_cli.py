@@ -227,3 +227,43 @@ def test_before_the_first_apply_the_toml_is_shown_and_changes_are_refused() -> N
         *START_VALUES,
     ]
     assert _ok("gecmis") == "Ayar sürümü yok; başlangıç sürümünü `ft config apply` yazar.\n"
+
+
+@pytest.mark.parametrize(
+    ("extra", "later"),
+    [
+        (
+            [],
+            "Uyarı: yürürlüğü 2027-03-01 olan planlanan sürüm (#2) bu değişikliği taşımıyor;"
+            " o günden itibaren aylık katkı 1000 olur. Taşımak için komutu `--sonrakilere-de`"
+            " ile ver.",
+        ),
+        (
+            ["--sonrakilere-de"],
+            "Sonraki sürüme taşınacak: #2, yürürlük 2027-03-01: aylık katkı 1000 → 1200",
+        ),
+    ],
+)
+def test_a_dry_run_shows_the_same_preview_and_warnings_without_writing(
+    db: Path, extra: list[str], later: str
+) -> None:
+    _ok("hedef", "hisse=0.7", "dusuk_risk=0.3", "--tarih", "2027-03-01")
+
+    shown = _ok("katki", "1200", "--tarih", "2027-01-01", "--deneme", *extra)
+
+    assert shown.splitlines() == [
+        "Önizleme (kaydedilmedi); yürürlük 2027-01-01: aylık katkı 1000 → 1200",
+        later,
+    ]
+    assert _versions(db) == 2
+
+
+def test_a_dry_run_of_a_broken_change_shows_the_issues(db: Path) -> None:
+    result = runner.invoke(app, ["ayar", "maas-gunu", "20", "--tarih", "2026-12-10", "--deneme"])
+
+    assert result.exit_code == 1
+    assert (
+        "  - effective_from: maaş günü değişikliği yalnız bir ayın 1'inden geçerli olabilir."
+        in result.output.splitlines()
+    )
+    assert _versions(db) == 1

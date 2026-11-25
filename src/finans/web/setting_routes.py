@@ -107,8 +107,11 @@ def setting_routes(w: WriteContext, *, sanal: Settings | None) -> list[BaseRoute
         edit: dict[str, str],
         *,
         changed: bool = False,
+        carry: bool = False,
+        choice_changed: bool = False,
     ) -> Response:
-        """`changed`: onayda sonuç farklı çıktı; yeni önizleme 409 ile gösterilir."""
+        """`changed`: onayda sonuç farklı çıktı; yeni önizleme 409 ile gösterilir.
+        `carry`: sonraki sürümlere taşıma seçimi; önizlenen seçim imzalanır."""
         settings = view()
         today = w.time.today()
         plans = [plan_settings(w.conf, setting, today=today)]
@@ -116,12 +119,15 @@ def setting_routes(w: WriteContext, *, sanal: Settings | None) -> list[BaseRoute
             plans.append(plan_settings(other, setting, today=today))
         if plans[0].problem is not None:
             return form_page(request, edit, problem=plans[0].problem, status=409)
+        carry_option = any(p.proposal is not None and p.proposal.later for p in plans)
+        carry = carry and carry_option
         signed = None
         if all(plan.ready for plan in plans):
             fields = {
                 "profil": w.profile,
                 "islem": "ayar",
                 **request_fields(setting, settings.classes),
+                "tasima": "1" if carry else "",
             }
             for plan, name in zip(plans, ("sonuc", "sonuc_sanal"), strict=False):
                 if plan.proposal is not None:
@@ -133,7 +139,9 @@ def setting_routes(w: WriteContext, *, sanal: Settings | None) -> list[BaseRoute
             "signed": signed,
             "edit": edit,
             "changed": changed,
-            "carry_option": any(p.proposal is not None and p.proposal.later for p in plans),
+            "carry_option": carry_option,
+            "carry": carry,
+            "choice_changed": choice_changed,
             "day": setting.day,
         }
         return w.page(request, "ayar_onizle.html", context, status=409 if changed else 200)
@@ -205,6 +213,11 @@ def setting_routes(w: WriteContext, *, sanal: Settings | None) -> list[BaseRoute
             return PlainTextResponse(REFUSED, status_code=403)
         if setting.also_sanal and other is None:
             return PlainTextResponse(REFUSED, status_code=403)
+        if carry != (fields.get("tasima") == "1"):
+            # Kutu imzasızdır; önizlenmemiş bir sonuç kaydedilmesin diye yeniden önizlenir.
+            return preview_page(
+                request, setting, edit_values(setting), carry=carry, choice_changed=True
+            )
         try:
             outcome = record_settings(
                 w.conf,
@@ -216,7 +229,7 @@ def setting_routes(w: WriteContext, *, sanal: Settings | None) -> list[BaseRoute
                 today=w.time.today(),
             )
         except ResultChanged:
-            return preview_page(request, setting, edit_values(setting), changed=True)
+            return preview_page(request, setting, edit_values(setting), changed=True, carry=carry)
         except DomainError as exc:
             return failure(request, str(exc), 409)
         if not setting.also_sanal:
