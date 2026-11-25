@@ -9,13 +9,16 @@
   {%- endif -%}
 {%- endmacro %}
 
-{% macro allocation(lines, cls) -%}
+{# K-129: sapma yeşil ya da kırmızıyla gösterilmez; açık alarmı olan sınıf Kehribar ve ⚠ alır. #}
+{% macro allocation(lines, cls, alerts=()) -%}
+  {% set alerted = alerts | map(attribute="asset_class") | list %}
   <div class="panel alloc">
     {% for line in lines %}
+    {% set alarm = line.asset_class in alerted %}
     <div class="alloc-row">
-      <div class="alloc-top"><span class="name">{{ cls(line.asset_class) }}</span><span class="num">{{ line.weight | percent(places=1) }} <span class="muted">· hedef {{ line.target | percent(places=1) }}</span></span></div>
-      {{ allocation_bar(line.weight, line.target) }}
-      <div class="alloc-dev">{% if line.deviation > 0 %}▲{% elif line.deviation < 0 %}▼{% endif %} {{ line.deviation | points }}</div>
+      <div class="alloc-top"><span class="name">{{ cls(line.asset_class) }}</span><span class="num">{{ line.weight | percent(places=1) }} <span class="muted">· hedef {{ line.target | percent(places=1) }} · {{ line.deviation | sapma }}</span></span></div>
+      {{ allocation_bar(line.weight, line.target, alarm=alarm) }}
+      {% if alarm %}<div class="alloc-dev warn">{{ icon("uyari") }}Alarm eşiği aşıldı</div>{% endif %}
     </div>
     {% endfor %}
   </div>

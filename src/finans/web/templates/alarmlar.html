@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% from "_table.html" import tools, th, pager %}
 {% block title %}Alarmlar · finans-takip{% endblock %}
 {% block content %}
   <h1>Alarmlar</h1>
   {% if quiet_ended %}
-  <p class="muted">Sessiz dönem {{ quiet_ended }} tarihinde bitti; sapma alarmları açık.</p>
+  <p class="muted">Sessiz dönem {{ quiet_ended | gun(case="de") }} bitti; sapma alarmları açık.</p>
   {% else %}
   <p class="note">Portföy henüz küçük; sapma alarmları 3 aylık katkıya ulaşınca başlar.</p>
   {% endif %}
@@ -11,10 +12,39 @@
     {% for alert in report.alerts %}
     <li>
       <div class="row"><strong>{{ cls(alert.asset_class) }}</strong><span class="num">{% if alert.deviation is not none %}{{ alert.deviation | points }}{% endif %}</span></div>
-      <div class="muted">{% if alert.direction == "above" %}hedefin üstünde{% else %}hedefin altında{% endif %} · açıldı {{ alert.opened_at.date() }}</div>
+      <div class="muted">{% if alert.direction == "above" %}hedefin üstünde{% else %}hedefin altında{% endif %} · açıldı {{ alert.opened_at | local_gun }}</div>
     </li>
     {% else %}
     <li>Açık alarm yok.</li>
     {% endfor %}
   </ul>
+
+  <h2>Alarm geçmişi</h2>
+  {% set view = table %}
+  {% set action = prefix ~ "/alarmlar" %}
+  {{ tools(view, action, "") }}
+  {% if view.rows %}
+  <table class="cards">
+    <thead>
+      <tr>{{ th(view, "tarih", "Tarih") }}{{ th(view, "sinif", "Sınıf") }}<th>Olay</th>{{ th(view, "sapma", "Sapma", num=true) }}<th>Bildirim</th></tr>
+    </thead>
+    <tbody>
+      {% for row in view.rows %}
+      {% set event = row.stored.event %}
+      <tr>
+        <td data-label="Tarih">{{ event.occurred_at | local }}</td>
+        <td data-label="Sınıf">{{ row.class_name }}</td>
+        <td data-label="Olay">{% if event.kind == "opened" %}açıldı{% else %}kapandı{% endif %} · {% if event.direction == "above" %}hedefin üstünde{% else %}hedefin altında{% endif %}</td>
+        <td data-label="Sapma" class="num">{{ event.deviation | points }}</td>
+        <td data-label="Bildirim">{% if row.stored.notified_at %}{{ row.stored.notified_at | local }}{% else %}bekliyor{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {{ pager(view, action) }}
+  {% elif view.active %}
+  <div class="panel empty">{{ icon("bos") }}<p>Bu filtrelerle alarm olayı yok. <a href="{{ action }}">Filtreleri temizle</a></p></div>
+  {% else %}
+  <div class="panel empty">{{ icon("bos") }}<p>Henüz alarm olayı yok.</p></div>
+  {% endif %}
 {% endblock %}

@@ -103,7 +103,7 @@ def test_an_accepted_request_leaves_the_file_and_closes_the_button(migrated_db: 
     assert 'action="/gercek/fiyat-guncelle"' not in after.text
     assert (
         "Elle güncelleme şu an kapalı: son güncellemeden bu yana 1 saat geçmedi. "
-        "En erken 2026-11-25 13:30."
+        "En erken 25 Kasım 13:30."
     ) in after.text
 
 
@@ -188,7 +188,7 @@ def test_weekends_close_the_button_and_refuse_the_request(migrated_db: Path) -> 
 
     assert 'action="/gercek/fiyat-guncelle"' not in page
     assert (
-        "Elle güncelleme şu an kapalı: hafta sonu fiyat yayımlanmaz. En erken 2026-11-30 00:00."
+        "Elle güncelleme şu an kapalı: hafta sonu fiyat yayımlanmaz. En erken 30 Kasım 00:00."
     ) in page
     assert response.status_code == 303
     assert response.headers["location"] == "/gercek/"
@@ -205,7 +205,7 @@ def test_the_daily_limit_refuses_without_touching_the_log(migrated_db: Path) -> 
 
     response = _post(client, cookie, f"belirtec={token}")
 
-    assert "bugünkü 6 elle güncelleme kullanıldı. En erken 2026-11-26 00:00." in page
+    assert "bugünkü 6 elle güncelleme kullanıldı. En erken 26 Kasım 00:00." in page
     assert response.headers["location"] == "/gercek/"
     assert log.read_text(encoding="utf-8") == six
     assert not (log.parent / "real.request").exists()
@@ -219,8 +219,8 @@ def test_the_last_price_sync_is_shown_and_starts_the_wait(migrated_db: Path) -> 
 
     page = _client(migrated_db).get("/gercek/", headers=ME)
 
-    assert "Son fiyat güncellemesi: 2026-11-25 12:15" in page.text
-    assert "En erken 2026-11-25 13:15." in page.text
+    assert "Son fiyat güncellemesi: 25 Kasım 12:15" in page.text
+    assert "En erken 25 Kasım 13:15." in page.text
 
 
 def test_an_unwritable_request_directory_is_reported(migrated_db: Path) -> None:

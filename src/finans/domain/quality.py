@@ -27,6 +27,18 @@ Series = Mapping[str, Sequence[PricePoint]]
 
 
 @dataclass(frozen=True, slots=True)
+class PriceFinding:
+    """K-64 bulgusunun parçaları. Web bunları kendi biçimiyle gösterir ve önerilen günü
+    düzeltme düğmesine çevirir; CLI `DataIssue.message`'ı yazar, çıktısı değişmez."""
+
+    entered: Decimal
+    published: Decimal | None
+    difference_percent: Decimal | None
+    suggested: date | None = None
+    suggested_price: Decimal | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class DataIssue:
     check: str
     level: Level
@@ -34,6 +46,7 @@ class DataIssue:
     day: date | None
     message: str
     ref: str | None = None
+    price: PriceFinding | None = None
 
     def __str__(self) -> str:
         parts = [str(part) for part in (self.instrument, self.day, self.ref) if part is not None]
@@ -108,9 +121,9 @@ def check_trade_prices(
         prices = {p.price_date: p.price for p in history.get(tx.instrument, ())}
         finding = _trade_finding(inst, tx, prices, days)
         if finding is not None:
-            message, level = finding
+            message, level, price = finding
             issues.append(
-                DataIssue("işlem fiyatı", level, tx.instrument, tx.trade_date, message, ref)
+                DataIssue("işlem fiyatı", level, tx.instrument, tx.trade_date, message, ref, price)
             )
     return issues
 
@@ -152,7 +165,8 @@ def _moves(
         change = current.price / previous.price - 1
         if abs(change) > threshold:
             message = (
-                f"günlük değişim %{_percent(change)} (eşik %{_percent(threshold)}; "
+                f"günlük değişim %{canonical_text(_percent(change))} "
+                f"(eşik %{canonical_text(_percent(threshold))}; "
                 f"önceki {previous.price_date}: {canonical_text(previous.price)})"
             )
             issues.append(DataIssue("sıçrama", "warn", inst.code, current.price_date, message))
@@ -186,51 +200,76 @@ def _gaps(
 
 def _trade_finding(
     inst: Instrument, tx: Transaction, prices: Mapping[date, Decimal], days: Sequence[date]
-) -> tuple[str, Level] | None:
+) -> tuple[str, Level, PriceFinding | None] | None:
     day, entered = tx.trade_date, tx.unit_price
     if not any(abs(d - day) <= NO_DATA_WINDOW for d in prices):
-        return "işlem günü çevresinde fiyat yok; kontrol edilemedi", "info"
+        return "işlem günü çevresinde fiyat yok; kontrol edilemedi", "info", None
     reference = prices.get(day)
     if inst.kind is InstrumentKind.TEFAS_BYF:
         # BYF borsadan alınır; birim pay değeriyle küçük fark olağandır ve tarih önerilmez.
         if reference is None:
-            return _NO_PRICE_ON_DAY, "warn"
+            return _NO_PRICE_ON_DAY, "warn", PriceFinding(entered, None, None)
         difference = abs(entered / reference - 1)
         if difference <= ETF_TOLERANCE:
             return None
+        percent = _percent(difference)
         message = (
-            f"fiyat birim pay değerinden ({canonical_text(reference)}) %{_percent(difference)} "
-            f"farklı (eşik %{_percent(ETF_TOLERANCE)})"
+            f"fiyat birim pay değerinden ({canonical_text(reference)}) %{canonical_text(percent)} "
+            f"farklı (eşik %{canonical_text(_percent(ETF_TOLERANCE))})"
         )
-        return message, "warn"
+        return message, "warn", PriceFinding(entered, reference, percent)
     digits = _decimals(entered)
     if reference is None:
-        hint = _suggestion(entered, day, prices, days) if digits >= MIN_CHECKED_DECIMALS else ""
-        return _NO_PRICE_ON_DAY + hint, "warn"
+        match = (
+            _matching_day(entered, day, prices, days) if digits >= MIN_CHECKED_DECIMALS else None
+        )
+        return _NO_PRICE_ON_DAY + _hint(match), "warn", _finding(entered, None, None, match)
     if digits < MIN_CHECKED_DECIMALS:
-        return f"fiyat {digits} basamakla girilmiş; kontrol için en az 4 basamak gerekir", "info"
+        message = f"fiyat {digits} basamakla girilmiş; kontrol için en az 4 basamak gerekir"
+        return message, "info", None
     if price_matches(entered, reference):
         return None
+    percent = _percent(abs(entered / reference - 1))
+    match = _matching_day(entered, day, prices, days)
     message = (
         f"fiyat {canonical_text(entered)} o günün TEFAS fiyatıyla ({canonical_text(reference)}) "
-        f"uyuşmuyor (fark %{_percent(abs(entered / reference - 1))})"
+        f"uyuşmuyor (fark %{canonical_text(percent)})"
     )
-    return message + _suggestion(entered, day, prices, days), "warn"
+    return message + _hint(match), "warn", _finding(entered, reference, percent, match)
 
 
-def _suggestion(
+def _finding(
+    entered: Decimal,
+    published: Decimal | None,
+    percent: Decimal | None,
+    match: tuple[date, Decimal] | None,
+) -> PriceFinding:
+    if match is None:
+        return PriceFinding(entered, published, percent)
+    return PriceFinding(entered, published, percent, *match)
+
+
+def _matching_day(
     entered: Decimal, day: date, prices: Mapping[date, Decimal], days: Sequence[date]
-) -> str:
+) -> tuple[date, Decimal] | None:
+    """Girilen fiyatla tutan en yakın komşu işlem günü (±5 işlem günü)."""
     index = bisect_left(days, day)
     window = days[max(0, index - NEIGHBOUR_TRADING_DAYS) : index + NEIGHBOUR_TRADING_DAYS + 1]
     candidates = [
         d for d in window if d != day and d in prices and price_matches(entered, prices[d])
     ]
     if not candidates:
-        return ""
+        return None
     best = min(candidates, key=lambda d: (abs(d - day), d))
+    return best, prices[best]
+
+
+def _hint(match: tuple[date, Decimal] | None) -> str:
+    if match is None:
+        return ""
+    best, price = match
     return (
-        f"; {best} gününün fiyatıyla ({canonical_text(prices[best])}) eşleşiyor, "
+        f"; {best} gününün fiyatıyla ({canonical_text(price)}) eşleşiyor, "
         f"tarih büyük olasılıkla {best}"
     )
 
@@ -240,5 +279,5 @@ def _decimals(value: Decimal) -> int:
     return -exponent if isinstance(exponent, int) and exponent < 0 else 0
 
 
-def _percent(ratio: Decimal) -> str:
-    return canonical_text((ratio * 100).quantize(Decimal("0.01")))
+def _percent(ratio: Decimal) -> Decimal:
+    return (ratio * 100).quantize(Decimal("0.01"))

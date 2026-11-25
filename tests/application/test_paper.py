@@ -66,7 +66,26 @@ def test_a_day_without_a_price_is_refused_and_the_nearest_days_are_named(
         "XHT için 2026-06-13 tarihli fiyat yok; fiyat uydurulmaz, gün kaydırılmaz. "
         "En yakın fiyatlı günler: önce 2026-06-12, sonra 2026-06-15."
     )
+    error = caught.value
+    assert (error.code, error.day, error.before, error.after) == (
+        "XHT",
+        date(2026, 6, 13),
+        date(2026, 6, 12),
+        date(2026, 6, 15),
+    )
     assert uow.transactions.list() == []
+
+
+def test_a_fund_priced_only_later_names_only_the_next_day(uow: SqliteUnitOfWork) -> None:
+    """K-109: gün hiçbir zaman kendiliğinden kaydırılmaz; web yalnız seçenek sunar."""
+    with pytest.raises(NoPriceError) as caught:
+        paper_sell(uow, code="XBE", units=D(1), day=date(2026, 6, 13), now=NOW)
+
+    assert str(caught.value) == (
+        "XBE için 2026-06-13 tarihli fiyat yok; fiyat uydurulmaz, gün kaydırılmaz. "
+        "En yakın fiyatlı günler: sonra 2026-06-15."
+    )
+    assert (caught.value.before, caught.value.after) == (None, date(2026, 6, 15))
 
 
 def test_amount_entry_is_refused_for_pension_funds(uow: SqliteUnitOfWork) -> None:

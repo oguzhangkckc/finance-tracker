@@ -16,7 +16,24 @@ from finans.ports.unit_of_work import UnitOfWork
 
 
 class NoPriceError(DomainError):
-    pass
+    """K-109: o günün kayıtlı fiyatı yok; gün kaydırılmaz. En yakın fiyatlı günler yalnız bilgi
+    ve web'de seçenek olarak taşınır; CLI mesajı aynı kalır."""
+
+    def __init__(self, code: str, day: date, before: date | None, after: date | None) -> None:
+        nearest = ", ".join(
+            f"{label} {nearby.isoformat()}"
+            for label, nearby in (("önce", before), ("sonra", after))
+            if nearby is not None
+        )
+        hint = f" En yakın fiyatlı günler: {nearest}." if nearest else " Bu fon için hiç fiyat yok."
+        super().__init__(
+            f"{code} için {day.isoformat()} tarihli fiyat yok; fiyat uydurulmaz, gün kaydırılmaz."
+            f"{hint}"
+        )
+        self.code = code
+        self.day = day
+        self.before = before
+        self.after = after
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,14 +121,11 @@ def _price_on(uow: UnitOfWork, code: str, day: date) -> PricePoint:
     if point is not None:
         return point
     before, after = uow.prices.around(code, day)
-    nearest = ", ".join(
-        f"{label} {p.price_date.isoformat()}"
-        for label, p in (("önce", before), ("sonra", after))
-        if p is not None
-    )
-    hint = f" En yakın fiyatlı günler: {nearest}." if nearest else " Bu fon için hiç fiyat yok."
     raise NoPriceError(
-        f"{code} için {day.isoformat()} tarihli fiyat yok; fiyat uydurulmaz, gün kaydırılmaz.{hint}"
+        code,
+        day,
+        None if before is None else before.price_date,
+        None if after is None else after.price_date,
     )
 
 

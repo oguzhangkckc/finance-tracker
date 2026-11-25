@@ -1,11 +1,11 @@
 """finans-web uygulaması; iki profil tek serviste (K-101…K-106, K-122, K-125, K-126)."""
 
 import re
-from collections.abc import Callable, Mapping
-from datetime import datetime
+from collections.abc import Callable, Mapping, Sequence
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
 from jinja2 import Environment, PackageLoader, StrictUndefined
 from starlette.applications import Starlette
@@ -19,8 +19,19 @@ from starlette.templating import Jinja2Templates
 from finans import bootstrap
 from finans.application.password import well_formed
 from finans.application.report import ReportKind
-from finans.contracts.display import class_label, exact, money, percent, points
-from finans.contracts.report import SANAL_NOTICE
+from finans.contracts.display import (
+    Case,
+    class_label,
+    day_label,
+    exact,
+    gap_text,
+    money,
+    month_label,
+    percent,
+    points,
+    same_places,
+)
+from finans.contracts.report import SANAL_NOTICE, Report
 from finans.ports.clock import BUSINESS_TZ, Clock
 from finans.settings import PROFILES, Profile, Settings, profile_settings
 from finans.web.assets import Assets
@@ -29,22 +40,37 @@ from finans.web.icons import icon
 from finans.web.lock import Attempt, WriteLock
 from finans.web.security import BodyLimitMiddleware, IdentityMiddleware, SecurityHeadersMiddleware
 from finans.web.session import SessionMiddleware, csrf_token
-from finans.web.svg import allocation_bar
+from finans.web.svg import allocation_bar, contribution_chart, value_chart
+from finans.web.table import table
+from finans.web.tables import (
+    ALERT_EVENTS,
+    HOLDINGS,
+    LOTS,
+    PAGE_PARAMS,
+    RUN_STATUS,
+    RUNS,
+    TRANSACTIONS,
+)
 from finans.web.trade_routes import WriteContext, write_routes
 from finans.web.views import (
     PAGE_ERRORS,
     PageError,
+    alert_event_rows,
     ask_for_refresh,
     class_names,
+    contribution_view,
     general_staleness,
+    holding_rows,
     load_report,
+    lot_rows,
     payday_text,
     quiet_ended_on,
     refresh_view,
     report_text,
     stale_by_instrument,
     system_view,
-    transactions,
+    transaction_rows,
+    value_chart_view,
 )
 
 NAV: Final = (
@@ -102,11 +128,6 @@ def _entered(value: Decimal) -> str:
     return f"{value:f}".replace(".", ",")
 
 
-def _local(moment: datetime) -> str:
-    """Saatler her zaman İstanbul'a göre (K-99)."""
-    return f"{moment.astimezone(BUSINESS_TZ):%Y-%m-%d %H:%M}"
-
-
 def _is_current(href: str, subpath: str) -> bool:
     """Alt sayfa (ör. /raporlar/aylik) üst menü öğesini de seçili yapar."""
     return href == subpath or (href != "/" and subpath.startswith(f"{href}/"))
@@ -125,7 +146,13 @@ def _environment() -> Environment:
         undefined=StrictUndefined,
     )
     env.filters.update(
-        money=money, percent=percent, points=points, exact=exact, local=_local, entered=_entered
+        money=money,
+        percent=percent,
+        points=points,
+        exact=exact,
+        entered=_entered,
+        ay=month_label,
+        sapma=gap_text,
     )
     env.globals.update(
         icon=icon,
@@ -164,7 +191,27 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
     lock = WriteLock(stored, time)
     assets = Assets(STATIC)
     templates = Jinja2Templates(env=_environment())
-    templates.env.globals["asset"] = assets.url
+    templates.env.globals.update(
+        asset=assets.url,
+        same_places=same_places,
+        value_chart=value_chart,
+        contribution_chart=contribution_chart,
+    )
+
+    def day(value: date | str, case: Case = "", year: bool | None = None) -> str:
+        """Bugünün yılı uygulamanın saatinden; saatler her zaman İstanbul'a göre (K-99).
+        Adres parametresindeki ISO gün de kabul edilir (ör. filtre etiketleri)."""
+        shown = date.fromisoformat(value) if isinstance(value, str) else value
+        return day_label(shown, today=time.today(), case=case, year=year)
+
+    def local(moment: datetime) -> str:
+        here = moment.astimezone(BUSINESS_TZ)
+        return f"{day(here.date())} {here:%H:%M}"
+
+    def local_day(moment: datetime) -> str:
+        return day(moment.astimezone(BUSINESS_TZ).date())
+
+    templates.env.filters.update(gun=day, local=local, local_gun=local_day)
 
     def profile_routes(profile: Profile, conf: Settings) -> list[BaseRoute]:
         prefix = f"/{SLUGS[profile]}"
@@ -210,15 +257,51 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
 
             return handler
 
-        def report_context(kind: ReportKind) -> dict[str, object]:
+        def report_parts(kind: ReportKind) -> tuple[Report, Mapping[str, str], dict[str, object]]:
             report = load_report(conf, time, kind=kind)
             labels = class_names(conf)
-            return {
+            context: dict[str, object] = {
                 "report": report,
                 "stale": stale_by_instrument(report),
                 "stale_all": general_staleness(report),
                 "cls": lambda code: class_label(code, labels),
             }
+            return report, labels, context
+
+        def report_context(kind: ReportKind) -> dict[str, object]:
+            return report_parts(kind)[2]
+
+        def listing(
+            name: str, load: Callable[[], tuple[Sequence[Any], dict[str, object]]], spec: Any
+        ) -> Callable[[Request], Response]:
+            """Tablolu sayfa: satırlar adres parametreleriyle süzülür ve sıralanır (K-129)."""
+
+            def handler(request: Request) -> Response:
+                try:
+                    rows, context = load()
+                except (PageError, *PAGE_ERRORS) as exc:
+                    return page(request, "hata.html", {"message": str(exc)}, status=503)
+                view = table(rows, request.query_params, spec, passthrough=PAGE_PARAMS)
+                return page(request, name, {**context, "table": view})
+
+            return handler
+
+        def holdings() -> tuple[Sequence[Any], dict[str, object]]:
+            # Lotlar ve para ağırlıklı getiri yalnızca aylık raporda.
+            report, labels, context = report_parts("monthly")
+            return holding_rows(report, labels), context
+
+        def lots() -> tuple[Sequence[Any], dict[str, object]]:
+            report, _, context = report_parts("monthly")
+            return lot_rows(report), context
+
+        def alert_history() -> tuple[Sequence[Any], dict[str, object]]:
+            context = {**report_context("weekly"), "quiet_ended": quiet_ended_on(conf)}
+            return alert_event_rows(conf), context
+
+        def system() -> tuple[Sequence[Any], dict[str, object]]:
+            view = system_view(conf, time)
+            return view.runs, {"system": view, "run_status": RUN_STATUS}
 
         def text(title: str, load: Callable[[], str]) -> Callable[[], dict[str, object]]:
             return lambda: {"title": title, "text": load()}
@@ -227,12 +310,22 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
             (
                 "/",
                 "ozet.html",
-                lambda: {**report_context("weekly"), "refresh": refresh_view(conf, time)},
+                lambda: {
+                    **report_context("weekly"),
+                    "refresh": refresh_view(conf, time),
+                    "chart": value_chart_view(conf, time),
+                },
             ),
-            # Lotlar ve para ağırlıklı getiri yalnızca aylık raporda.
-            ("/varliklar", "varliklar.html", lambda: report_context("monthly")),
             ("/dagilim", "dagilim.html", lambda: report_context("weekly")),
-            ("/getiri", "getiri.html", lambda: report_context("monthly")),
+            (
+                "/getiri",
+                "getiri.html",
+                lambda: {
+                    **report_context("monthly"),
+                    "chart": value_chart_view(conf, time),
+                    "contributions": contribution_view(conf, time),
+                },
+            ),
             ("/raporlar", "raporlar.html", lambda: {}),
             (
                 "/raporlar/haftalik",
@@ -249,13 +342,6 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
                 "rapor.html",
                 text("Maaş günü", lambda: payday_text(conf, time)),
             ),
-            (
-                "/alarmlar",
-                "alarmlar.html",
-                lambda: {**report_context("weekly"), "quiet_ended": quiet_ended_on(conf)},
-            ),
-            ("/islemler", "islemler.html", lambda: {"transactions": transactions(conf)}),
-            ("/sistem", "sistem.html", lambda: {"system": system_view(conf, time)}),
             ("/daha", "daha.html", lambda: {}),
         ]
 
@@ -272,6 +358,14 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
                 return page(request, "hata.html", {"message": message}, status=503)
             target = f"{prefix}/?istek=alindi" if status.decision.allowed else f"{prefix}/"
             return RedirectResponse(target, status_code=303)
+
+        def transactions_page(request: Request) -> Response:
+            try:
+                rows = transaction_rows(conf)
+            except (PageError, *PAGE_ERRORS) as exc:
+                return page(request, "hata.html", {"message": str(exc)}, status=503)
+            view = table(rows, request.query_params, TRANSACTIONS, passthrough=PAGE_PARAMS)
+            return page(request, "islemler.html", {"table": view})
 
         def next_page(raw: str | None) -> str:
             return raw if raw and NEXT_PAGE.fullmatch(raw) else f"{prefix}/"
@@ -303,6 +397,11 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
                 Route(f"{prefix}{path}", view(name, load), methods=["GET"])
                 for path, name, load in pages
             ),
+            Route(f"{prefix}/islemler", transactions_page, methods=["GET"]),
+            Route(f"{prefix}/varliklar", listing("varliklar.html", holdings, HOLDINGS)),
+            Route(f"{prefix}/varliklar/lotlar", listing("lotlar.html", lots, LOTS)),
+            Route(f"{prefix}/alarmlar", listing("alarmlar.html", alert_history, ALERT_EVENTS)),
+            Route(f"{prefix}/sistem", listing("sistem.html", system, RUNS)),
             Route(f"{prefix}/fiyat-guncelle", refresh, methods=["POST"]),
             Route(f"{prefix}/kilit", unlock_form, methods=["GET"]),
             Route(f"{prefix}/kilit", unlock, methods=["POST"]),

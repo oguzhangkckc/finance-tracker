@@ -17,7 +17,7 @@ from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.domain.models import Side, Transaction
 from finans.settings import Profile
 from tests.support import report_scenario as scenario
-from tests.support.web_browser import hidden_fields
+from tests.support.web_browser import HIDDEN, hidden_fields, only_app_script
 from tests.support.web_writes import (
     GERCEK,
     NOW,
@@ -186,7 +186,7 @@ def test_form_errors_keep_the_values_and_say_what_to_fix(
             "sanal",
             "alis",
             {"fon": "XHT", "gun": "2026-11-24", "tutar": "1000"},
-            "tarihli fiyat yok",
+            "kayıtlı fiyat yok",
         ),
         ("sanal", "satis", {"fon": "XHT", "gun": "2026-11-25", "tumu": "1"}, "elde pay yok"),
     ],
@@ -394,7 +394,7 @@ def test_write_pages_keep_the_page_rules(site: Site, path: str) -> None:
 
     assert page.count("<h1") == 1
     assert "style=" not in page
-    assert "<script" not in page
+    assert only_app_script(page)
     for field in re.findall(r'<(?:input|select|textarea) id="([^"]+)"', page):
         assert f'<label for="{field}">' in page
 
@@ -423,3 +423,52 @@ def test_a_save_while_a_job_holds_the_database_is_refused_and_can_be_retried(
     retried = post_confirm(me, "real", busy)
     assert retried.status_code == 303
     assert len(site.rows("real")) == len(scenario.TRADES) + 1
+
+
+def test_a_price_from_another_day_is_shown_with_commas_and_one_tap_moves_the_day(
+    site: Site,
+) -> None:
+    """K-64: uyarı yapısal; web virgülle biçimlendirir, önerilen gün tek dokunuşla düzelir."""
+    me = site.browser()
+
+    preview = post_preview(me, "real", "alis", {**REAL_BUY, "fiyat": "10,500000"})
+
+    published = (
+        "Girdiğin fiyat 10,500000 TL; 25 Kasım'da yayımlanan fiyat 11,000000 TL (fark %4,55)."
+    )
+    matching = "Girdiğin fiyat 20 Kasım'ın fiyatıyla (10,500000 TL) tutuyor"
+    assert published.replace("'", "&#39;") in preview.text
+    assert matching.replace("'", "&#39;") in preview.text
+    assert "İşlem gününü 20 Kasım yap" in preview.text
+    fix = hidden_fields(preview.text, "/gercek/islemler/yeni/alis")
+    assert fix == {**REAL_BUY, "fiyat": "10,500000", "gun": "2026-11-20"}
+    moved = me.post("/gercek/islemler/yeni/alis", fix)
+    assert moved.status_code == 200
+    assert "<dt>İşlem günü</dt><dd>20 Kasım</dd>" in moved.text
+    assert 'class="notice warn"' not in moved.text
+
+
+def test_a_day_without_a_price_offers_the_nearest_days_and_never_moves_by_itself(
+    site: Site,
+) -> None:
+    """K-109: gün kaydırılmaz; önceki ve sonraki fiyatlı gün yalnız seçenek olarak sunulur."""
+    me = site.browser()
+    data = {"fon": "XHT", "gun": "2026-11-24", "tutar": "1000"}
+
+    page = post_preview(me, "sanal", "alis", data)
+
+    assert page.status_code == 400
+    assert "XHT için 24 Kasım&#39;da kayıtlı fiyat yok." in page.text
+    assert "2026-11-24 tarihli" not in page.text
+    assert "Önceki fiyatlı gün: 20 Kasım" in page.text
+    assert "Sonraki fiyatlı gün: 25 Kasım" in page.text
+    assert site.rows("sanal") == []
+    forms = re.findall(r'<form class="actions choose-day"[^>]*>(.*?)</form>', page.text, re.S)
+    assert len(forms) == 2
+    choices = [dict(HIDDEN.findall(form)) for form in forms]
+    assert [c["gun"] for c in choices] == ["2026-11-20", "2026-11-25"]
+    assert all(c["tutar"] == "1000" and c["fon"] == "XHT" for c in choices)
+    chosen = {k: v for k, v in choices[1].items() if k != "belirtec"}
+    moved = me.post("/sanal/islemler/yeni/alis", chosen)
+    assert moved.status_code == 200
+    assert "<dt>Fiyat günü</dt><dd>25 Kasım</dd>" in moved.text

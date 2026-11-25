@@ -7,6 +7,7 @@ from finans.domain.models import Instrument, InstrumentKind, PricePoint, Side, T
 from finans.domain.portfolio import QualityThresholds
 from finans.domain.quality import (
     DataIssue,
+    PriceFinding,
     check_prices,
     check_staleness,
     check_trade_prices,
@@ -269,3 +270,51 @@ def test_etf_without_a_price_on_the_trade_day_is_flagged() -> None:
 def test_mismatch_without_a_matching_neighbour_has_no_suggestion() -> None:
     [issue] = _trade_issues(("#10", _tx("XHT", date(2026, 11, 23), "1.9000")))
     assert issue.message == ("fiyat 1.9 o günün TEFAS fiyatıyla (1.73) uyuşmuyor (fark %9.83)")
+
+
+def test_a_mismatch_carries_both_prices_the_difference_and_the_matching_day() -> None:
+    """Web bunları kendi biçimiyle gösterir ve önerilen günü düzeltme düğmesine çevirir."""
+    [issue] = _trade_issues(("#4", _tx("XHT", date(2026, 11, 23), "1.7443")))
+
+    assert issue.price == PriceFinding(
+        entered=D("1.7443"),
+        published=D("1.73"),
+        difference_percent=D("0.83"),
+        suggested=date(2026, 11, 20),
+        suggested_price=D("1.744322"),
+    )
+    assert issue.price.entered.as_tuple() == D("1.7443").as_tuple()
+
+
+def test_a_day_without_a_price_carries_only_the_matching_day() -> None:
+    [issue] = _trade_issues(("#5", _tx("XHT", date(2026, 11, 21), "1.715559", Side.SELL)))
+
+    assert issue.price == PriceFinding(D("1.715559"), None, None, date(2026, 11, 24), D("1.715559"))
+
+
+def test_a_mismatch_without_a_matching_neighbour_suggests_no_day() -> None:
+    [issue] = _trade_issues(("#10", _tx("XHT", date(2026, 11, 23), "1.9000")))
+
+    assert issue.price == PriceFinding(D("1.9000"), D("1.73"), D("9.83"))
+    assert issue.price.entered.as_tuple() == D("1.9000").as_tuple()
+
+
+def test_an_etf_difference_is_carried_without_a_suggestion() -> None:
+    [issue] = _trade_issues(("#8", _tx("EOZ", date(2026, 11, 23), "22.5")))
+
+    assert issue.price == PriceFinding(D("22.5"), D("21.968691"), D("2.42"))
+
+
+def test_notes_without_a_comparison_carry_no_price_finding() -> None:
+    short, far = _trade_issues(
+        ("#6", _tx("XHT", date(2026, 11, 24), "1.72")),
+        ("#7", _tx("XHT", date(2026, 6, 1), "1.5")),
+    )
+
+    assert (short.price, far.price) == (None, None)
+
+
+def test_every_warning_carries_the_entered_price_even_without_a_published_one() -> None:
+    [issue] = _trade_issues(("#9", _tx("EOZ", date(2026, 11, 24), "22.03")))
+
+    assert issue.price == PriceFinding(D("22.03"), None, None)

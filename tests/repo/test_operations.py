@@ -61,6 +61,36 @@ def test_alert_state_and_events_round_trip(migrated_db: Path) -> None:
         assert uow.alerts.get("drift:altin") is None
 
 
+def test_the_event_history_lists_every_event_with_its_delivery_time(migrated_db: Path) -> None:
+    """Alarmlar tablosu (K-129); bekleyenler de, gönderilenler de, numara sırasıyla."""
+    with SqliteUnitOfWork(migrated_db) as uow:
+        first = uow.alerts.add_event(
+            AlertEvent("drift:hisse", "opened", "above", Decimal("0.07"), T1)
+        )
+        second = uow.alerts.add_event(
+            AlertEvent("drift:hisse", "resolved", "above", Decimal("0.03"), T2)
+        )
+        uow.alerts.mark_notified([first], at=T3)
+
+    with SqliteUnitOfWork(migrated_db, readonly=True) as uow:
+        events = uow.alerts.events()
+
+    assert [(e.id, e.event.kind, e.deviation, e.notified_at) for e in events] == [
+        (first, "opened", Decimal("0.07"), T3),
+        (second, "resolved", Decimal("0.03"), None),
+    ]
+
+
+def test_recent_runs_without_a_start_returns_every_run(migrated_db: Path) -> None:
+    with SqliteUnitOfWork(migrated_db) as uow:
+        old = uow.runs.start("backup", date(2025, 1, 1), at=datetime(2025, 1, 1, 0, 15, tzinfo=UTC))
+        new = uow.runs.start("backup", DAY, at=T1)
+
+    with SqliteUnitOfWork(migrated_db, readonly=True) as uow:
+        assert [run.id for run in uow.runs.recent()] == [old, new]
+        assert [run.id for run in uow.runs.recent(since=T1)] == [new]
+
+
 def test_marking_an_event_again_keeps_its_first_delivery_time(migrated_db: Path) -> None:
     """K-131: işaretleme tekrar çalışsa da ilk teslim zamanı değişmez."""
     with SqliteUnitOfWork(migrated_db) as uow:

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_charts.html" import value_history, contribution_history %}
 {% block title %}Getiri · finans-takip{% endblock %}
 {% macro figure(item) -%}
   {% if item is none %}—
@@ -9,19 +10,22 @@
 {%- endmacro %}
 {% block content %}
   <h1>Getiri</h1>
-  <p class="muted">Değerleme günü {{ report.logical_date }}</p>
+  <p class="muted">Değerleme günü {{ report.logical_date | gun }}</p>
   <dl class="stats">
     <div><dt>Basit getiri</dt><dd class="num">{% if report.summary.simple_return is not none %}{{ report.summary.simple_return | percent }}{% else %}—{% endif %}</dd></div>
     <div><dt>Para ağırlıklı getiri</dt><dd class="num">{{ figure(report.summary.money_weighted) }}</dd></div>
     <div><dt>Reel para ağırlıklı getiri</dt><dd class="num">{{ figure(report.summary.real_money_weighted) }}</dd></div>
     {% if report.inflation and report.inflation.annual_inflation is not none %}
-    <div><dt>Yıllık enflasyon ({{ report.inflation.valuation_period }})</dt><dd class="num">{{ report.inflation.annual_inflation | percent }}</dd></div>
+    <div><dt>Yıllık enflasyon ({{ report.inflation.valuation_period | ay }})</dt><dd class="num">{{ report.inflation.annual_inflation | percent }}</dd></div>
     {% endif %}
   </dl>
   {% if report.summary.real_same_as_nominal %}
   <p class="note">Alımlar ve değerleme aynı TÜFE dönemine düştüğü için reel getiri henüz nominalle aynı.</p>
   {% endif %}
   <p class="note">Para ağırlıklı getiri alım ve satışların tarihini ve tutarını hesaba katar; bir yıldan kısa dönemde yıllığa çevrilmez.</p>
+
+  {{ value_history(chart, "getiri-deger") }}
+  {{ contribution_history(contributions, "getiri-katki") }}
 
   <h2>Fon bazında</h2>
   <table class="cards">

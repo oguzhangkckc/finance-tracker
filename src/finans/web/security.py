@@ -13,7 +13,8 @@ NAME_HEADER: Final = "tailscale-user-name"
 MAX_BODY_BYTES: Final = 16 * 1024
 SECURITY_HEADERS: Final = {
     "Content-Security-Policy": (
-        "default-src 'none'; style-src 'self'; img-src 'self'; form-action 'self'; "
+        "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; "
+        "form-action 'self'; "
         "frame-ancestors 'none'; base-uri 'none'"
     ),
     "X-Content-Type-Options": "nosniff",

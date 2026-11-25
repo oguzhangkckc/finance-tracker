@@ -7,7 +7,7 @@ import pytest
 from finans import bootstrap
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.application.transactions import add_transaction, void_transaction
-from finans.contracts.display import exact, money, percent, points
+from finans.contracts.display import day_label, exact, money, percent, points
 from finans.domain.models import PricePoint, Side, Transaction
 from finans.settings import Settings
 from finans.web.app import create_app
@@ -86,24 +86,31 @@ def test_summary_shows_the_same_numbers_as_the_text_report(
 
     page = _client(migrated_db, tmp_path).get("/gercek/", headers=ME).text
 
-    assert f"Değerleme günü {SUNDAY}" in page
+    assert "Değerleme günü 29 Kasım" in page
     assert money(expected.summary.values.total) in page
     assert money(expected.summary.values.out_of_allocation) in page
     for holding in expected.holdings:
         assert holding.price is not None
-        assert f"{exact(holding.price)}</span> TL ({holding.price_date})" in page
+        assert holding.price_date is not None
+        shown = day_label(holding.price_date, today=SUNDAY)
+        assert f"{exact(holding.price)}</span> TL ({shown})" in page
 
 
 def test_holdings_page_has_lots_and_card_labels(migrated_db: Path, tmp_path: Path) -> None:
     scenario.seed(migrated_db)
     expected = scenario.report(migrated_db, "monthly", SUNDAY)
 
-    page = _client(migrated_db, tmp_path).get("/gercek/varliklar", headers=ME).text
+    client = _client(migrated_db, tmp_path)
+    page = client.get("/gercek/varliklar", headers=ME).text
+    lots = client.get("/gercek/varliklar/lotlar", headers=ME).text
 
     assert expected.lots
-    assert "<h2>Lotlar</h2>" in page
+    assert '<a href="/gercek/varliklar/lotlar">Lotlar</a>' in page
+    assert '<a href="/gercek/varliklar/lotlar?fon=XHT">Lotlar' in page
     for holding in expected.holdings:
         assert f'data-label="Adet" class="num">{exact(holding.units)}</td>' in page
+    for lot in expected.lots:
+        assert f'data-label="Adet" class="num">{exact(lot.units)}</td>' in lots
 
 
 def test_allocation_page_shows_weights_and_open_alerts(migrated_db: Path, tmp_path: Path) -> None:
@@ -150,8 +157,8 @@ def test_a_manual_price_and_a_stale_fund_are_marked(migrated_db: Path, tmp_path:
 
     page = _client(migrated_db, tmp_path, LATER).get("/gercek/", headers=ME).text
 
-    assert '50,6</span> TL (2026-12-15) <span class="tag">elle</span>' in page
-    assert '20,2</span> TL (2026-11-27) <span class="warn">bayat:' in page
+    assert '50,6</span> TL (15 Aralık) <span class="tag">elle</span>' in page
+    assert '20,2</span> TL (27 Kasım) <span class="warn">bayat:' in page
     assert "Fiyatlar bayat:" not in page
 
 
@@ -173,7 +180,7 @@ def test_dates_follow_istanbul_not_the_system_zone(migrated_db: Path, tmp_path: 
 
     page = _client(migrated_db, tmp_path, midnight).get("/gercek/", headers=ME).text
 
-    assert "Değerleme günü 2026-11-30" in page
+    assert "Değerleme günü 30 Kasım" in page
 
 
 def test_visiting_every_page_changes_nothing_in_the_database(
@@ -262,7 +269,7 @@ def test_alerts_page_shows_open_alerts_and_the_quiet_period_end(
     page = _client(migrated_db, tmp_path).get("/gercek/alarmlar", headers=ME).text
 
     assert "Sessiz dönem" in page
-    assert "tarihinde bitti" in page
+    assert "Sessiz dönem 20 Kasım&#39;da bitti" in page
     assert "Açık alarm yok." not in page
 
 
@@ -296,4 +303,4 @@ def test_system_page_shows_checks_and_runs_but_no_secret(migrated_db: Path, tmp_
     assert "Telegram" in page
     assert "Veritabanı şeması" in page
     assert "gizli-bot-anahtari" not in page
-    assert "Son 7 günün işleri" in page
+    assert "<h2>İş geçmişi</h2>" in page

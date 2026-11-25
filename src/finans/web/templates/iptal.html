@@ -8,7 +8,7 @@
   <p><strong>Bu işlem şimdi iptal edilemez.</strong> İptal edilirse sonraki satışlar elde olmayan payı satmış olur. Önce şu satışları iptal et:</p>
   <ul class="plain">
     {% for stored in blocking %}
-    <li><a href="{{ prefix }}/islemler/{{ stored.id }}/iptal">#{{ stored.id }}</a> · {{ stored.transaction.trade_date }} · {{ stored.transaction.instrument }} · {{ stored.transaction.units | entered }} pay</li>
+    <li><a href="{{ prefix }}/islemler/{{ stored.id }}/iptal">#{{ stored.id }}</a> · {{ stored.transaction.trade_date | gun }} · {{ stored.transaction.instrument }} · {{ stored.transaction.units | entered }} pay</li>
     {% endfor %}
   </ul>
 </div></div>
@@ -24,7 +24,7 @@
 <div class="panel">
   <dl class="summary">
     <dt>Fon</dt><dd>{{ tx.instrument }}</dd>
-    <dt>Gün</dt><dd>{{ tx.trade_date }}</dd>
+    <dt>Gün</dt><dd>{{ tx.trade_date | gun }}</dd>
     <dt>Yön</dt><dd>{% if tx.side.value == "BUY" %}alış{% else %}satış{% endif %}</dd>
     <dt>Adet</dt><dd class="num">{{ tx.units | entered }} pay</dd>
     <dt>Birim fiyat</dt><dd class="num">{{ tx.unit_price | entered }} TL</dd>

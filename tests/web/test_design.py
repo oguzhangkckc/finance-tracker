@@ -9,6 +9,7 @@ import pytest
 from finans.settings import Settings
 from finans.web.app import MORE, STATIC, TABS
 from finans.web.svg import allocation_bar
+from tests.support.web_browser import only_app_script
 from tests.support.web_profiles import ME, PAGES, two_profiles, web
 
 CSS = (STATIC / "site.css").read_text(encoding="utf-8")
@@ -102,7 +103,7 @@ def test_pages_have_no_inline_style_or_script_and_exactly_one_h1(base: Settings,
     for path in PAGES:
         page = client.get(f"/{slug}{path}", headers=ME).text
         assert " style=" not in page, path
-        assert "<script" not in page, path
+        assert only_app_script(page), path
         assert page.count("<h1") == 1, path
 
 

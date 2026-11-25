@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "_table.html" import tools, th, pager %}
+{% block title %}Lotlar · finans-takip{% endblock %}
+{% block content %}
+  <h1>Lotlar</h1>
+  <p class="muted">Değerleme günü {{ report.logical_date | gun }} · <a href="{{ prefix }}/varliklar">Varlıklar</a></p>
+  {% set view = table %}
+  {% set action = prefix ~ "/varliklar/lotlar" %}
+  {{ tools(view, action, "") }}
+  {% if view.rows %}
+  <table class="cards">
+    <thead>
+      <tr>{{ th(view, "fon", "Fon") }}{{ th(view, "alis", "Alış günü") }}{{ th(view, "adet", "Adet", num=true) }}{{ th(view, "maliyet", "Maliyet", num=true) }}<th class="num">Değer</th>{{ th(view, "kar", "Kâr/zarar", num=true) }}<th class="num">Reel getiri</th></tr>
+    </thead>
+    <tbody>
+      {% for row in view.rows %}
+      {% set lot = row.line %}
+      <tr>
+        <td data-label="Fon"><strong>{{ lot.instrument }}</strong></td>
+        <td data-label="Alış günü">{{ lot.acquired | gun }}</td>
+        <td data-label="Adet" class="num">{{ lot.units | exact }}</td>
+        <td data-label="Maliyet" class="num">{{ lot.cost | money }}</td>
+        <td data-label="Değer" class="num">{% if lot.value is not none %}{{ lot.value | money }}{% else %}—{% endif %}</td>
+        <td data-label="Kâr/zarar" class="num">{% if row.gain is not none %}{{ row.gain | money }}{% else %}—{% endif %}</td>
+        <td data-label="Reel getiri" class="num">{% if lot.real_return is not none %}{{ lot.real_return | percent }}{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {{ pager(view, action) }}
+  {% elif view.active %}
+  <div class="panel empty">{{ icon("bos") }}<p>Bu filtrelerle lot yok. <a href="{{ action }}">Filtreleri temizle</a></p></div>
+  {% else %}
+  <div class="panel empty">{{ icon("bos") }}<p>Henüz lot yok.</p></div>
+  {% endif %}
+{% endblock %}
