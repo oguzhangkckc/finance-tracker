@@ -917,7 +917,7 @@ Hedef: evdeki, her zaman açık, 64 bit Debian tabanlı bir Linux cihaz (Raspber
 7. **Zamanlayıcılar.** Her timer `finans-job@<iş>.service` şablonunu çağırır; şablon yalnızca `ft job run <iş>` çalıştırır (K-80). Sonuçlar `ft-finans job list` ve journald'da görülür.
 
    ```sh
-   sudo cp /opt/finans/deploy/systemd/finans-* /etc/systemd/system/
+   sudo cp -R /opt/finans/deploy/systemd/finans-* /etc/systemd/system/
    sudo systemctl daemon-reload
    sudo systemctl enable --now finans-sync-prices.timer finans-sync-cpi.timer \
      finans-weekly-report.timer finans-monthly-report.timer finans-payday.timer finans-backup.timer
@@ -962,6 +962,35 @@ Hedef: evdeki, her zaman açık, 64 bit Debian tabanlı bir Linux cihaz (Raspber
    sudo /opt/finans/deploy/ft-sanal sanal al KOD --tutar 5000 --tarih GÜN
    sudo /opt/finans/deploy/ft-sanal sanal maas-gunu-uygula
    ```
+
+11. **Web arayüzü (W1, K-101…K-106, K-122…K-124).** Web servisi ağsızdır; `tailscale serve` HTTPS'i sonlandırır ve isteği `/run/finans-web/web.sock`'a iletir. Profil servisin drop-in dosyasındadır (`finans-web.service.d/profil.conf`, gerçek işlemler başlayana kadar `sanal`); yalnızca o profilin `.path` birimi etkinleştirilir. Profil `real`'e geçince drop-in değişir ve `finans-sanal-refresh.path` yerine `finans-refresh.path` etkinleştirilir.
+
+    1. **Adlar, HTTPS'ten önce.** Sertifika şeffaflık kayıtları cihaz ve tailnet adını herkese açık yapar. Yönetim panelinin DNS sayfasında tailnet adının rastgele olduğu (kişisel ad ya da e-posta parçası içermediği) kontrol edilir; değilse rastgele bir adla değiştirilir. Cihaz adı amacı ele vermez: varsayılan ya da nötr bir ad olur, `finans` gibi bir ad olmaz. İkisi tamamsa MagicDNS ve HTTPS sertifikaları açılır.
+    2. **Telefon.** Telefon aynı hesapla tailnet'e eklenir. Machines sayfasında etiketsiz göründüğü ve anahtar süresinin açık olduğu ("Expiry disabled" yazmadığı) kontrol edilir. Politika değişmez: etiketsiz kullanıcı cihazları Pi'nin 443'üne ulaşır, etiketli cihazlar ulaşamaz.
+    3. **Oturum anahtarı ve ayarlar.** Anahtar ekrana yazılmadan üretilir. `finans.env`'e izin verilen Tailscale girişi ve cihazın kökeni yazılır; kökenin sonunda `/` olmaz.
+
+       ```sh
+       sudo sh -c 'umask 077 && /opt/finans/.venv/bin/python -c "import secrets; print(secrets.token_hex(32))" > /etc/finans/credstore/ft_web_session_key'
+       sudoedit /etc/finans/finans.env   # FT_WEB_ALLOWED_LOGIN=<giriş>, FT_WEB_ORIGIN=https://<cihaz>.<tailnet>.ts.net
+       ```
+
+    4. **Servis ve serve.** Adım 7'deki kopyalama web birimlerini ve drop-in dizinini de getirir.
+
+       ```sh
+       sudo cp -R /opt/finans/deploy/systemd/finans-* /etc/systemd/system/
+       sudo systemctl daemon-reload
+       sudo systemctl enable --now finans-web.service finans-sanal-refresh.path
+       sudo tailscale serve --bg --https=443 unix:/run/finans-web/web.sock
+       ```
+
+    5. **Cihaz testleri.**
+       - `sudo ls -ld /run/finans-web /run/finans-web/web.sock`: dizin `drwx------`, soket `srw-------`, ikisinin sahibi `finans`.
+       - `systemd-analyze security finans-web.service`: son satır SAFE (CI eşiği 2.0, K-124).
+       - `tailscale serve status`: yalnızca `https://<cihaz>.<tailnet>.ts.net` → `unix:/run/finans-web/web.sock`, "(tailnet only)"; Funnel kapalı.
+       - Pi'nin kendisinden `curl -s -o /dev/null -w '%{http_code}\n' https://<cihaz>.<tailnet>.ts.net/` → `403`; etiketli cihazın kimlik başlığı yoktur (K-102).
+       - Mac ve telefondan bütün sayfalar açılır; üst çubukta kullanıcının adı ya da girişi görünür.
+       - Telefonda "Fiyatları güncelle"ye basılır: sayfa "Güncelleme isteği alındı" der ve düğmenin yerine en erken açılış saati gelir; `journalctl -fu finans-sanal-refresh.service` işi gösterir; `sudo ls /var/lib/finans/refresh` yalnızca `sanal.log`'u listeler. İş TEFAS istekleri arasında beklerken ve veritabanına yazarken bütün sayfalar Mac'ten ve telefondan yeniden açılır (WAL, `-shm`; K-123).
+       - Düğme 403 "İstek reddedildi." verirse ya tarayıcı `Sec-Fetch-Site` göndermiyordur ya da `FT_WEB_ORIGIN` adres çubuğundaki kökenle aynı değildir.
 
 ## Gözlemlenebilirlik ve operasyon
 
