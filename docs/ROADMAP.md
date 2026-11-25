@@ -120,7 +120,55 @@ Geliştirme kapısı: migration öncesi ve sonrası bütün rapor türleri aynı
 Takvim: geliştirme 25 Kasım (bitti); Pi'ye toplu kurulumla. Kurulumda iki profilde `ft db migrate` ve `ft config apply`; `doctor` "Ayarlar: başlangıç sürümü (portfolio.toml)" göstermeli.
 
 ## D1 · Otomatik deploy (iptal edildi)
-İptal edildi (2026-11-25, kullanıcı kararı): güvenlik ve deploy sadeleştirildi, zorunlu komut, sürüm dizinleri ve path birimlerinin bakım maliyeti fazla. Kod PR #28 ile merge edilmişti; Pi'ye kurulmadan geri alındı (K-132…K-135 iptal). D1 kurulum günü için planlanan M3/M4 yeniden başlatması da kalkar (kullanıcı kararı). Yerini sadeleştirme milestone'ları alır; ilki D1'in geri alınmasıdır, gerisi (karar satırları, deploy, API, arayüz, geçiş) bir sonraki tasarım değişikliğinde bu dosyaya yazılır.
+İptal edildi (2026-11-25, kullanıcı kararı): güvenlik ve deploy sadeleştirildi, zorunlu komut, sürüm dizinleri ve path birimlerinin bakım maliyeti fazla. Kod PR #28 ile merge edilmişti; Pi'ye kurulmadan geri alındı (K-132…K-135 iptal). D1 kurulum günü için planlanan M3/M4 yeniden başlatması da kalkar (kullanıcı kararı). Yerini aşağıdaki sadeleştirme milestone'ları (G0–G5) alır.
+
+## G · Sadeleştirme (G0–G5)
+Kullanıcı kararı (2026-11-25): güvenlik ve deploy sadeleştirilir, çünkü bakım maliyeti fazla.
+- Erişim Cloudflare Access üzerinden; arayüz React ve JSON API; deploy diğer projelerdeki gibi GitHub Actions ile (K-136…K-141).
+- Sıra G0 → G1 → G5 → G2 → G3 → G4. Deploy önce gelir ki sonraki her PR otomatik kurulsun.
+- M3 ve M4 kabulü yeniden başlatılmaz (K-141).
+
+### G0 · D1'in geri alınması
+PR #28'in merge'ü geri alındı; K-132…K-135 iptal edildi.
+Kapı: `main`'in kodu Pi'deki sürümle aynı; Pi'de `git pull` güvenli.
+
+### G1 · Tasarım
+K-136…K-141 yazıldı; iptal ve değişen K'lar işaretlendi. Web arayüzü bölümü, güvenlik tablosu, Kurulum adım 11 (Cloudflare) ve adım 12 (otomatik deploy) yenilendi.
+Kapı: belge.
+
+### G5 · Otomatik deploy
+`deploy.yml` (`workflow_run` ve `workflow_dispatch`), `deploy/finans-guncelle.py` ve testleri, sudoers satırı, Kurulum adım 12 (K-140). Ön yüz paketi yoksa o adım atlanır.
+Geliştirme kapısı:
+- betik testleri (gerçek git, sahte `systemctl` ve `uv`): SHA doğrulama, geriye dönüş, zaten kurulu, birim değişikliğinde durma, çalışan işi bekleme, migration öncesi yedek, sağlık denetimi;
+- `deploy.yml`'nin yapısı: tetikleyici koşulları, izinler, SHA sabitleri, secret'lar, `ping` yokluğu.
+Kabul kapısı: ilk otomatik deploy (belge commit'i) yeşil; `workflow_dispatch` ile geri dönüş ve yeniden ileri alma denenir.
+
+### G2 · JSON API
+`finans.api` (FastAPI): Access JWT doğrulaması ve anahtar istemcisi, CSRF, bütün okuma ve yazma uçları, OpenAPI şeması ve eşitlik testi (K-136…K-138). Eski web canlıda kalır. Yeni bağımlılıklar: `fastapi`, `pyjwt[crypto]`.
+Geliştirme kapısı:
+- JWT testleri, anahtar sunucusu erişilemezken önbellek boşsa red, doluysa kabul dahil;
+- CSRF testleri;
+- eski web testlerinin davranışları API'de: iki profil, önizleme → onay, nonce, taşıma seçeneği, sıralama ve filtre kuralları;
+- import-linter.
+
+### G3 · Arayüz
+`frontend/` (React, Vite, TypeScript, Mantine): bütün sayfalar, grafikler, tablolar, önizleme → onay. CI'da `frontend` işi (Biome, `tsc`, Vitest, derleme, tiplerin farkı) ve `npm audit` (K-139).
+Geliştirme kapısı: CI yeşil; bileşen testleri: profil bandı ve onay kutusu, önizleme → onay ve 409, hedef toplamı, tablo sıralama ve filtre parametreleri.
+Kabul kapısı: Mac'te yerel API'ye karşı elle tur: iki profil, her yazma akışı, dar ekran.
+
+### G4 · Geçiş
+- Web birimi 127.0.0.1'e geçer.
+- Kalkanlar: eski `finans.web`, Jinja şablonları, `app.js`, `site.css`, sunucu SVG'si, Unix soketi, Tailscale kimliği, şifre kilidi, `ft web sifre` ve doctor satırı; `jinja2` bağımlılığı.
+- Cloudflare Access ve tünel kurulur; Tailscale serve kapanır (K-136, K-137).
+Geliştirme kapısı: `make check` ve CI; `systemd-analyze security` eşiği ölçülüp yeniden konur.
+Kabul kapısı:
+- Mac'ten ve telefondan Google girişiyle bütün sayfalar açılır; başka hesap reddedilir.
+- Pi'de JWT'siz istek 403 alır.
+- İki profilde `doctor` ve `job list` temiz.
+- Ertesi sabah gece yedeği ve 09:30 çekmesi çalışır.
+- ROADMAP'e "kabul süresinde değişiklik (gün, commit)" yazılır (K-141).
+
+Takvim: tahmini toplam 14–19 iş günü; en büyüğü G3. Pi'de elle iş: G5 kurulumu (yaklaşık 30 dakika) ve G4 geçiş günü (yaklaşık 2 saat).
 
 ## M5 · OpenClaw ve güvenlik sertleştirmesi
 JSON anlık görüntüleri ve rrsync ile aktarımı (yalnızca çekirdekten dışarı), ft-agent (boru hattı ve veri tazeliği için iki ayrı bayatlık sinyali), JSON Schema kontratı, SKILL.md, PPK özeti akışı (oranlar kodla çıkarılır), asistan botu; iki makine, ayrı OS kullanıcıları, systemd sertleştirmesinin geri kalanı (LoadCredential K-92 ve beş ayar K-98 ile M4'te geldi), makine bazında egress allowlist.
