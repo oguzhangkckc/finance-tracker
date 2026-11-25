@@ -1,9 +1,10 @@
+#!/usr/bin/python3 -I
 """finans-guncelle: CI'nın tek SSH çağrısıyla çalıştırdığı deploy betiği (K-140).
 
-Pi'deki root sahipli kopyası `/usr/local/sbin/finans-guncelle`'dir; sudoers'ta yalnız o
-`NOPASSWD`'dir. Sistem Python'uyla (3.12) ve yalnız standart kütüphaneyle çalışır.
-`/opt/finans` `finans`'ındır; root oradaki hiçbir dosyayı çalıştırmaz, git ve uv'yi
-`runuser -u finans` ile çağırır.
+Pi'deki root sahipli kopyası /usr/local/sbin/finans-guncelle'dir; sudoers'ta yalnız o
+NOPASSWD'dir. Sistem Python'uyla (3.12) ve yalnız standart kütüphaneyle çalışır.
+/opt/finans finans'ındır; root oradaki hiçbir dosyayı çalıştırmaz, git ve uv'yi
+runuser -u finans ile çağırır.
 """
 
 import fcntl
@@ -57,7 +58,7 @@ BACKUP_AGE: Final = 26 * 3600
 BACKUP_SUFFIX: Final = ".db.age"
 PROFILES: Final = ("gercek", "sanal")
 BACKUP_PREFIX: Final = {"gercek": "finans-", "sanal": "sanal-"}
-# Wrapper'ların `for name in …` satırlarıyla aynı; test ikisini karşılaştırır.
+# Wrapper'ların for name in … satırlarıyla aynı; test ikisini karşılaştırır.
 CREDENTIALS: Final = {
     "gercek": (
         "ft_evds_api_key",
@@ -69,7 +70,7 @@ CREDENTIALS: Final = {
 }
 WEB_PASSWORD: Final = "ft_web_password"  # noqa: S105 - credential adı, değer değil
 REFUSED: Final = (
-    "⛔ Reddedildi: yalnız `<40 haneli küçük harfli sha> [--geri] [--paket -]` kabul edilir."
+    "⛔ Reddedildi: yalnız '<40 haneli küçük harfli sha> [--geri] [--paket -]' kabul edilir."
 )
 
 
@@ -176,7 +177,7 @@ def last_line(data: bytes) -> str:
 
 
 def parse_args(argv: Sequence[str]) -> Istek | None:
-    """Yalnız `<sha> [--geri] [--paket -]`. argparse kendi kodu 2 ile çıkardı; burada 2 elle
+    """Yalnız <sha> [--geri] [--paket -]. argparse kendi kodu 2 ile çıkardı; burada 2 elle
     kurulum demektir."""
     if not argv or not SHA.fullmatch(argv[0]):
         return None
@@ -196,7 +197,7 @@ def parse_args(argv: Sequence[str]) -> Istek | None:
 
 @contextmanager
 def held(paths: Yollar) -> Iterator[None]:
-    """`O_NOFOLLOW`: kilit yolundaki bir sembolik bağlantı root'a başka bir dosya açtırmasın."""
+    """O_NOFOLLOW: kilit yolundaki bir sembolik bağlantı root'a başka bir dosya açtırmasın."""
     try:
         descriptor = os.open(paths.kilit, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
     except OSError as error:
@@ -222,7 +223,7 @@ def git(paths: Yollar, runner: Calistirici, *args: str) -> subprocess.CompletedP
 
 
 def verify(paths: Yollar, istek: Istek, runner: Calistirici = run) -> str:
-    """Kurulu commit'i döndürür. Hedef `main`'in atası olmalı; `--geri` yoksa kurulu commit de
+    """Kurulu commit'i döndürür. Hedef main'in atası olmalı; --geri yoksa kurulu commit de
     hedefin atası olmalı."""
     head = git(paths, runner, "rev-parse", "HEAD")
     if head.returncode:
@@ -231,7 +232,7 @@ def verify(paths: Yollar, istek: Istek, runner: Calistirici = run) -> str:
     current = text(head.stdout).strip()
     if current == istek.sha:
         raise Durdur(Sonuc(Kod.TAMAM, f"{short(istek.sha)} zaten kurulu; bir şey yapılmadı."))
-    # Bütün dallar çekilir: başka daldaki bir commit "bulunamadı" değil "`main`'de yok" diye
+    # Bütün dallar çekilir: başka daldaki bir commit "bulunamadı" değil "main'de yok" diye
     # reddedilsin.
     fetched = git(
         paths,
@@ -251,7 +252,7 @@ def verify(paths: Yollar, istek: Istek, runner: Calistirici = run) -> str:
         paths, runner, "merge-base", "--is-ancestor", istek.sha, "refs/remotes/origin/main"
     )
     if on_main.returncode:
-        raise Durdur(Sonuc(Kod.RET, f"⛔ Reddedildi: {short(istek.sha)} `main`'de yok."))
+        raise Durdur(Sonuc(Kod.RET, f"⛔ Reddedildi: {short(istek.sha)} main'de yok."))
     if (
         not istek.geri
         and git(paths, runner, "merge-base", "--is-ancestor", current, istek.sha).returncode
@@ -285,7 +286,7 @@ def _read(path: Path) -> bytes | None:
 
 
 def _installed_units(systemd: Path) -> set[str]:
-    """Yalnız bu projenin birimleri; `*.wants` bağları ve diğer servisler sayılmaz."""
+    """Yalnız bu projenin birimleri; *.wants bağları ve diğer servisler sayılmaz."""
     if not systemd.is_dir():
         return set()
     names: set[str] = set()
@@ -307,7 +308,7 @@ def manual_reasons(
     paths: Yollar, sha: str, current: str, geri: bool, runner: Calistirici = run
 ) -> list[str]:
     """Kurulu birimler, wrapper kopyaları ve betiğin kendisi hedef commit'tekiyle bayt olarak aynı
-    olmalı: root `finans`'ın yazabildiği dizinden kopyalamaz. Geri dönüş şemayı geri almaz."""
+    olmalı: root finans'ın yazabildiği dizinden kopyalamaz. Geri dönüş şemayı geri almaz."""
     reasons: list[str] = []
     wanted = _tree(paths, runner, sha, UNITS)
     units = sorted(
@@ -382,7 +383,7 @@ def systemctl(paths: Yollar, runner: Calistirici, *args: str) -> subprocess.Comp
 def ft_command(
     paths: Yollar, profile: str, *args: str, credentials: Sequence[str] = ()
 ) -> list[str]:
-    """`ft-finans` ve `ft-sanal`'ın kurduğu `systemd-run` çağrısı: `ft` `finans` olarak çalışır,
+    """ft-finans ve ft-sanal'ın kurduğu systemd-run çağrısı: ft finans olarak çalışır,
     root çalıştırmaz."""
     command = [
         "systemd-run",
@@ -517,7 +518,7 @@ def switch_code(paths: Yollar, sha: str, current: str, runner: Calistirici = run
     if status.returncode or changed:
         message = (
             f"❌ Kurulu depoda elle yapılmış değişiklik var ({len(changed)} dosya). Hiçbir şey "
-            f"değişmedi; Pi'de `git -C {paths.repo} status` ile bak."
+            f"değişmedi; Pi'de 'git -C {paths.repo} status' ile bak."
         )
         raise Durdur(Sonuc(Kod.BASARISIZ, message))
     checked = _checkout(paths, runner, sha)
@@ -530,7 +531,7 @@ def switch_code(paths: Yollar, sha: str, current: str, runner: Calistirici = run
 
 
 def unpack_main() -> None:
-    """Ön yüz paketini `finans` olarak açar ve `dist` ile değiştirir. Kaynağı `python3 -c`'ye
+    """Ön yüz paketini finans olarak açar ve dist ile değiştirir. Kaynağı python3 -c'ye
     olduğu gibi verilir; bu yüzden kendi içinde bağımsızdır."""
     import io
     import os
@@ -572,7 +573,7 @@ def unpack_main() -> None:
 
 
 def unpack(paths: Yollar, package: bytes, runner: Calistirici = run) -> str | None:
-    """Paketi root değil `finans` açar: root'un açtığı bir arşiv sisteme yazabilirdi."""
+    """Paketi root değil finans açar: root'un açtığı bir arşiv sisteme yazabilirdi."""
     code = f"{textwrap.dedent(inspect.getsource(unpack_main))}\nunpack_main()\n"
     done = runner(
         as_user(
@@ -611,7 +612,7 @@ def _web_state(paths: Yollar, runner: Calistirici) -> dict[str, str]:
 
 
 def restart_web(paths: Yollar, env: Ortam) -> str | None:
-    """`FT_WEB_PORT` varsa (G4'ten sonra) sağlık ucu, yoksa yeni bir ana süreç beklenir."""
+    """FT_WEB_PORT varsa (G4'ten sonra) sağlık ucu, yoksa yeni bir ana süreç beklenir."""
     before = _web_state(paths, env.runner).get("MainPID", "")
     restarted = systemctl(paths, env.runner, "restart", WEB_UNIT)
     if restarted.returncode:
