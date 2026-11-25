@@ -137,11 +137,16 @@ K-136…K-141 yazıldı; iptal ve değişen K'lar işaretlendi. Web arayüzü b�
 Kapı: belge.
 
 ### G5 · Otomatik deploy
-`deploy.yml` (`workflow_run` ve `workflow_dispatch`), `deploy/finans-guncelle.py` ve testleri, sudoers satırı, Kurulum adım 12 (K-140). Ön yüz paketi yoksa o adım atlanır.
+`deploy.yml` (`workflow_run` ve `workflow_dispatch`), `deploy/guncelle.py` ve testleri, sudoers satırı, Kurulum adım 12 (K-140). Ön yüz paketi yoksa o adım atlanır.
 Geliştirme kapısı:
 - betik testleri (gerçek git, sahte `systemctl` ve `uv`): SHA doğrulama, geriye dönüş, zaten kurulu, birim değişikliğinde durma, çalışan işi bekleme, migration öncesi yedek, sağlık denetimi;
 - `deploy.yml`'nin yapısı: tetikleyici koşulları, izinler, SHA sabitleri, secret'lar, `ping` yokluğu.
 Kabul kapısı: ilk otomatik deploy (belge commit'i) yeşil; `workflow_dispatch` ile geri dönüş ve yeniden ileri alma denenir.
+Kurulum (2026-11-25):
+- Pi'de Kurulum adım 12 yapıldı: betik ve wrapper kopyaları, sudoers, ayrı deploy anahtarı (`from="100.64.0.0/10",restrict`), host anahtarı, ayrı Tailscale OAuth istemcisi, `production` environment'ında altı secret.
+- İlk `workflow_dispatch` denemesi kurulu commit'le yeşil bitti ("zaten kurulu"); günlükte cihaz bilgisi yok.
+- Olay: betiğin ilk kopyasında shebang yoktu. sudo onu `/bin/sh` ile çalıştırdı ve betik kendini sonsuz kez çağırdı; süreçler durduruldu, veriye dokunulmadı. Düzeltme PR #33: shebang, ters tırnaksız betik ve doğrudan çalıştırma testi.
+- Kabul kapısı: bu belge değişikliğinin otomatik deploy'u ve ardından geri dönüş denemesi.
 
 ### G2 · JSON API
 `finans.api` (FastAPI): Access JWT doğrulaması ve anahtar istemcisi, CSRF, bütün okuma ve yazma uçları, OpenAPI şeması ve eşitlik testi (K-136…K-138). Eski web canlıda kalır. Yeni bağımlılıklar: `fastapi`, `pyjwt[crypto]`.
