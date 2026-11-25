@@ -101,7 +101,9 @@ jobs:
             package="$RUNNER_TEMP/on-yuz.tar.gz"
           fi
           code=0
+          # AddressFamily=inet: authorized_keys'teki from="100.64.0.0/10" yalnız tailnet'in IPv4'ünü kapsar.
           ssh -T -i "$dir/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o AddressFamily=inet \
             -o UserKnownHostsFile="$dir/known_hosts" -o GlobalKnownHostsFile=/dev/null \
             -o ConnectTimeout=30 -o ConnectionAttempts=3 -o ServerAliveInterval=30 -o LogLevel=ERROR \
             "$RPI_USER@$RPI_HOST" "$command" < "$package" || code=$?

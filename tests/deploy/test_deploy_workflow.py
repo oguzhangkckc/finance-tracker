@@ -206,6 +206,7 @@ def test_the_pi_gets_only_the_update_command_over_a_pinned_host_key() -> None:
         "StrictHostKeyChecking=yes",
         "GlobalKnownHostsFile=/dev/null",
         "IdentitiesOnly=yes",
+        "AddressFamily=inet",
     } <= options
     assert arguments[-4:] == ["$RPI_USER@$RPI_HOST", "$command", "<", "$package"]
 
