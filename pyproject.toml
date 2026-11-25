@@ -32,12 +32,7 @@ module-name = "finans"
 [tool.ruff]
 target-version = "py313"
 line-length = 100
-src = ["src", "tests", "deploy/ci"]
-
-# Deploy betikleri Pi'nin sistem Python'uyla (3.12) çalışır (K-133).
-[tool.ruff.per-file-target-version]
-"deploy/ci/*.py" = "py312"
-"tests/deploy_ci/*.py" = "py312"
+src = ["src", "tests"]
 
 [tool.ruff.format]
 exclude = ["*.md"]
@@ -63,12 +58,12 @@ ban-relative-imports = "all"
 strict = true
 warn_unreachable = true
 plugins = ["pydantic.mypy"]
-files = ["src", "tests", "deploy/ci"]
-mypy_path = "src:deploy/ci"
+files = ["src", "tests"]
+mypy_path = "src"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = [".", "deploy/ci"]
+pythonpath = ["."]
 addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib", "-m", "not live"]
 markers = ["live: gerçek ağa çıkar; CI'da çalışmaz"]
 xfail_strict = true
@@ -76,12 +71,11 @@ filterwarnings = ["error"]
 
 [tool.coverage.run]
 branch = true
-source = ["finans", "istek", "kur"]
+source = ["finans"]
 
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
-exclude_also = ['if __name__ == "__main__":']
 
 [tool.importlinter]
 root_packages = ["finans"]
@@ -162,7 +156,6 @@ dev = [
     "pre-commit>=4.7.0",
     "pytest>=9.2.0",
     "pytest-cov>=7.1.0",
-    "pyyaml>=6.0.4",
     "respx>=0.23.1",
     "ruff>=0.17.6",
     "syrupy>=7.0.3",

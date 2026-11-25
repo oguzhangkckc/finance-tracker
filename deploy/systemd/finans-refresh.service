@@ -1,6 +1,6 @@
 [Unit]
 Description=finans-takip elle fiyat güncellemesi
-Documentation=file:/opt/finans/current/docs/DESIGN.md
+Documentation=file:/opt/finans/docs/DESIGN.md
 After=network-online.target time-sync.target
 Wants=network-online.target
 
@@ -21,4 +21,4 @@ ReadWritePaths=/var/lib/finans
 ProtectHome=yes
 # K-123: istek önce silinir; iş sürerken gelen yeni istek iş bitince .path birimini yeniden tetikler.
 ExecStartPre=/usr/bin/rm -f /var/lib/finans/refresh/real.request
-ExecStart=/opt/finans/current/.venv/bin/ft job run sync-prices --bugun
+ExecStart=/opt/finans/.venv/bin/ft job run sync-prices --bugun
