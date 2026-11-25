@@ -4,6 +4,7 @@ from datetime import date
 from typing import Literal
 
 from finans.application.data_check import price_series, tracked_instruments
+from finans.application.password import well_formed
 from finans.domain.models import YearMonth
 from finans.domain.numeric import canonical_text
 from finans.domain.portfolio import PortfolioConfig
@@ -92,3 +93,21 @@ def price_check(uow: UnitOfWork, *, today: date) -> Check:
         return Check("Fiyatlar", "ok", "; ".join(details))
     details.append(f"{len(issues)} bayatlık uyarısı, ayrıntı için `ft data check`")
     return Check("Fiyatlar", "warn", "; ".join(details))
+
+
+def web_password_check(stored: str | None) -> Check:
+    """`stored` credstore'daki dosyanın içeriğidir, dosya yoksa None; değer gösterilmez (K-126)."""
+    name = "Web yazma şifresi"
+    if stored is None:
+        return Check(
+            name, "fail", "credstore'da yok; finans-web başlamaz. Kurulum 11.3: `ft web sifre`"
+        )
+    if not stored.strip():
+        return Check(name, "warn", "dosya boş; web'de yazma kapalı")
+    if well_formed(stored):
+        return Check(name, "ok", "geçerli scrypt özeti")
+    return Check(
+        name,
+        "fail",
+        "scrypt özeti değil; finans-web başlamaz. `ft web sifre` ile yeniden üret",
+    )

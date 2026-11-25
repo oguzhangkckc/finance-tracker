@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% from "_ui.html" import field, target_profile %}
+{% block title %}Maaş günü planı · finans-takip{% endblock %}
+{% block content %}
+<h1>Maaş günü planı</h1>
+<p class="muted">Katkı, maaş günündeki değerlemeyle sınıflara ve fonlara dağıtılır. Fiyat günü maaş gününden sonraki ilk fiyatlı gündür; adet aşağı yuvarlanır, artan tutar fona girmez.</p>
+<form class="form" method="post" action="{{ prefix }}/maas-gunu">
+  <input type="hidden" name="belirtec" value="{{ csrf }}">
+  {{ field("maas_gunu", "Maaş günü", values, errors, type="date", hint="Varsayılan son maaş günü.") }}
+  <div class="field">
+    <label class="check"><input type="checkbox" name="iptaller" value="1"{% if values.get("iptaller") == "1" %} checked{% endif %}><span>İptal ettiğim maaş günü alımlarını da yeniden öner</span></label>
+  </div>
+  <div class="actions"><button class="btn btn-secondary" type="submit">Planı göster</button></div>
+</form>
+{% if plan %}
+{% if changed %}
+<div class="notice warn" role="alert">{{ icon("uyari") }}<p><strong>Önizlemeden sonra veriler değişti; kayıt yapılmadı.</strong> Yeni planı kontrol et.</p></div>
+{% endif %}
+<h2>{{ plan.payday }} planı</h2>
+{% if plan.missing_prices %}
+<div class="notice error" role="alert">{{ icon("hata") }}<p>Plan hesaplanmadı: {{ plan.missing_prices | join(", ") }} için maaş gününde fiyat yok. Hiçbir işlem yapılmadı.</p></div>
+{% else %}
+<p class="note">Fiyat penceresi {{ plan.window_end }} tarihinde biter.</p>
+<ul class="panel payday">
+  {% for line in plan.lines %}
+  <li>
+    <div class="payday-head"><strong>{{ line.instrument }}</strong> <span class="muted">{{ cls(line.asset_class) }}</span><span class="num">{{ line.amount | money }}</span></div>
+    <p>
+      {%- if line.status == "ready" -%}
+      {{ line.price_day }} fiyatıyla {{ line.units | entered }} pay × {{ line.price | entered }} TL = {{ line.spent | money }}; artan {{ line.leftover | money }}.
+      {%- elif line.status == "nothing" -%}
+      Bu ay alım yok; katkı hedefin altında kalan sınıflara gitti.
+      {%- elif line.status == "pending" -%}
+      Fiyat henüz açıklanmadı; {{ plan.retry_after }} tarihinden sonra tekrar bak.
+      {%- elif line.status == "expired" -%}
+      Pencerede fiyat yok; işlem yapılmadı, tutar başka fona aktarılmaz.
+      {%- elif line.status == "applied" -%}
+      Zaten uygulandı.
+      {%- elif line.status == "voided" -%}
+      İptal edilmiş bir alımı var, uygulanmış sayılır; yeniden önermek için yukarıdaki kutuyu işaretle.
+      {%- else -%}
+      İşlem yapılmadı: {{ line.reason }}
+      {%- endif -%}
+    </p>
+  </li>
+  {% endfor %}
+</ul>
+{% if signed %}
+{{ target_profile(profile) }}
+<form class="actions" method="post" action="{{ prefix }}/islemler/kaydet">
+  <input type="hidden" name="belirtec" value="{{ csrf }}">
+  {% for name, value in signed.items() %}
+  <input type="hidden" name="{{ name }}" value="{{ value }}">
+  {% endfor %}
+  <button class="btn btn-primary" type="submit">Planı uygula ({{ ready }} alım)</button>
+</form>
+{% else %}
+<p class="note">Uygulanacak alım yok.</p>
+{% endif %}
+{% endif %}
+{% endif %}
+{% endblock %}

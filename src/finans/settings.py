@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     web_allowed_login: str | None = None
     web_origin: str | None = None
     web_session_key: SecretStr | None = None
+    # K-126: şifrenin scrypt özeti (`ft web sifre`); boşsa web'de yazma kapalıdır.
+    web_password: SecretStr | None = None
     web_socket: Path = Path("/run/finans-web/web.sock")
 
     @field_validator(
@@ -64,6 +66,7 @@ class Settings(BaseSettings):
         "web_allowed_login",
         "web_origin",
         "web_session_key",
+        "web_password",
         mode="before",
     )
     @classmethod

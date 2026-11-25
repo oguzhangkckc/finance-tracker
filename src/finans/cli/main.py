@@ -22,6 +22,7 @@ from finans.application.paper import (
     plan_payday_purchases,
     record_payday_purchases,
 )
+from finans.application.password import PasswordError, check_password, hash_password
 from finans.application.portfolio_config import ApplyReport, apply_portfolio
 from finans.application.portfolio_view import portfolio_as_of
 from finans.application.price_sync import PriceSyncReport, sync_prices
@@ -77,6 +78,8 @@ sanal_app = typer.Typer(
 )
 app.add_typer(sanal_app, name="sanal")
 app.add_typer(backup_app, name="backup")
+web_app = typer.Typer(no_args_is_help=True, help="Web arayüzü (K-123, K-126).")
+app.add_typer(web_app, name="web")
 
 
 class SideChoice(StrEnum):
@@ -623,6 +626,24 @@ def notify_test() -> None:
     with _user_errors(), bootstrap.notifier(settings, bootstrap.system_clock()) as channel:
         channel.send("finans-takip: Telegram bağlantısı çalışıyor.", silent=False)
     typer.echo("Test mesajı gönderildi.")
+
+
+@web_app.command("sifre")
+def web_password_command() -> None:
+    """Yazma şifresinin scrypt özetini üretir; stdout'a yalnız özet gider (K-126).
+
+    Şifre ekrana, log'a ve dosyaya yazılmaz; ayar ve veritabanı gerekmez.
+    """
+    password = typer.prompt("Yazma şifresi", hide_input=True, err=True)
+    try:
+        check_password(password)
+    except PasswordError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from None
+    if typer.prompt("Tekrar", hide_input=True, err=True) != password:
+        typer.echo("Şifreler eşleşmedi; hiçbir şey yazılmadı.", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(hash_password(password))
 
 
 @app.command("alerts")

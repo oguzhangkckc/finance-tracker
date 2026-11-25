@@ -4,6 +4,8 @@ from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Final
 
+from finans.ports.unit_of_work import StorageBusyError
+
 MIN_SQLITE_VERSION = (3, 37, 0)  # STRICT tablolar
 BUSY_TIMEOUT_MS = 5000
 # K-107: sanal portföy veritabanı SQLite başlığındaki application_id ile işaretlidir ("FTSN").
@@ -75,15 +77,32 @@ def is_sanal(path: Path) -> bool:
     return bool(mark == SANAL_MARK)
 
 
+def _busy(exc: sqlite3.OperationalError) -> StorageBusyError | None:
+    # Genişletilmiş kodlar (ör. SQLITE_BUSY_SNAPSHOT) alt baytta temel kodu taşır.
+    if exc.sqlite_errorcode & 0xFF in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
+        return StorageBusyError(
+            f"Veritabanı {BUSY_TIMEOUT_MS // 1000} saniyeden uzun süre başka bir yazma "
+            "işlemiyle meşgul kaldı; hiçbir şey yazılmadı."
+        )
+    return None
+
+
 @contextmanager
 def transaction(conn: sqlite3.Connection, *, immediate: bool = True) -> Iterator[None]:
     # autocommit=True iken commit()/rollback() hiçbir şey yapmaz; transaction SQL ile yönetilir.
     # Salt okunur bağlantıda BEGIN IMMEDIATE yazma kilidi istediği için hata verir.
-    conn.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
+    try:
+        conn.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
+    except sqlite3.OperationalError as exc:
+        raise (_busy(exc) or exc) from exc
     try:
         yield
         # Başarısız COMMIT (SQLITE_BUSY, ertelenmiş FK ihlali) transaction'ı açık bırakır.
         conn.execute("COMMIT")
+    except sqlite3.OperationalError as exc:
+        if conn.in_transaction:
+            conn.execute("ROLLBACK")
+        raise (_busy(exc) or exc) from exc
     except BaseException:
         if conn.in_transaction:
             conn.execute("ROLLBACK")

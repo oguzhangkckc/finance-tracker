@@ -99,6 +99,7 @@ Kabul kapısı: web'den girilen ilk gerçek işlemler aracı kurum ekstresiyle �
 
 ### W2c · Tablolar ve grafikler
 Sunucuda sıralama, filtre ve sayfalama (adres parametreleri); `app.js` yalnız kolaylık; `value_history` ve üç SVG grafik (K-129).
+K-64 uyarısı yapısal olur: girilen fiyat, yayımlanmış fiyat ve önerilen gün ayrı alanlarda taşınır. Böylece önizlemede "işlem gününü düzelt" düğmesi olur; web virgülle, CLI noktayla biçimlendirir. CLI çıktısı değişmez (testle).
 Geliştirme kapısı: sıralama, filtre ve sayfalama birim testleri (Decimal, sınırlar, bilinmeyen parametre); SVG snapshot'ları; JavaScript kapalıyken bütün akışlar.
 Takvim: geliştirme 10–18 Aralık; Pi'ye 15 Aralık'tan sonra.
 

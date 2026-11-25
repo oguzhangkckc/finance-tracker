@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Şu an kaydedilemedi · finans-takip{% endblock %}
+{% block content %}
+<h1>Şu an kaydedilemedi</h1>
+<div class="notice warn" role="alert">{{ icon("uyari") }}<p>Şu an zamanlanmış bir iş çalışıyor; hiçbir şey kaydedilmedi. Birkaç saniye sonra tekrar dene.</p></div>
+<form class="actions" method="post" action="{{ action }}">
+  <input type="hidden" name="belirtec" value="{{ csrf }}">
+  {% for name, value in fields.items() %}
+  <input type="hidden" name="{{ name }}" value="{{ value }}">
+  {% endfor %}
+  <button class="btn btn-primary" type="submit">Tekrar dene</button>
+  <a class="btn btn-secondary" href="{{ prefix }}/islemler">İşlemlere dön</a>
+</form>
+{% endblock %}

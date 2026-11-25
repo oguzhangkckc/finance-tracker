@@ -11,6 +11,7 @@ from finans.application.transactions import add_transaction
 from finans.domain.models import DomainError, PricePoint, Side, Transaction
 from finans.domain.orders import payday_price_day, payday_window_end, units_for_amount
 from finans.domain.portfolio import PortfolioConfig
+from finans.domain.positions import build_positions
 from finans.ports.unit_of_work import UnitOfWork
 
 
@@ -29,6 +30,52 @@ class PaperTrade:
     leftover: Decimal | None
 
 
+@dataclass(frozen=True, slots=True)
+class PaperPlan:
+    """Sanal işlemin yazılmadan önceki hali; web önizlemesi ve kayıt aynı planı kullanır."""
+
+    code: str
+    day: date
+    side: Side
+    units: Decimal
+    price: Decimal
+    spent: Decimal
+    leftover: Decimal | None
+    fee: Decimal
+
+    @property
+    def transaction(self) -> Transaction:
+        return Transaction(self.code, self.day, self.side, self.units, self.price, self.fee)
+
+
+def plan_paper_buy(
+    uow: UnitOfWork, *, code: str, amount: Decimal, day: date, fee: Decimal
+) -> PaperPlan:
+    stored = uow.instruments.get(code)
+    if stored is None:
+        raise DomainError(unknown_code_message(uow, code))
+    point = _price_on(uow, code, day)
+    split = units_for_amount(amount, point.price, stored.instrument.kind)
+    return PaperPlan(
+        code, day, Side.BUY, split.units, point.price, split.spent, split.leftover, fee
+    )
+
+
+def plan_paper_sell(uow: UnitOfWork, *, code: str, units: Decimal | None, day: date) -> PaperPlan:
+    """`units` verilmezse o gün eldeki payın tamamı satılır."""
+    point = _price_on(uow, code, day)
+    if units is None:
+        book = build_positions([s.transaction for s in uow.transactions.list()], as_of=day)
+        units = book.units_of(code)
+        if units <= 0:
+            raise DomainError(
+                f"{code} için {day.isoformat()} günü elde pay yok; satılacak bir şey yok."
+            )
+    return PaperPlan(
+        code, day, Side.SELL, units, point.price, units * point.price, None, Decimal(0)
+    )
+
+
 def paper_buy(
     uow: UnitOfWork,
     *,
@@ -39,23 +86,17 @@ def paper_buy(
     now: datetime,
     ref: str | None = None,
 ) -> PaperTrade:
-    stored = uow.instruments.get(code)
-    if stored is None:
-        raise DomainError(unknown_code_message(uow, code))
-    point = _price_on(uow, code, day)
-    split = units_for_amount(amount, point.price, stored.instrument.kind)
-    tx = Transaction(code, day, Side.BUY, split.units, point.price, fee)
-    txn_id = add_transaction(uow, tx, ref=ref, note=None, now=now)
-    return PaperTrade(txn_id, code, day, split.units, point.price, split.spent, split.leftover)
+    plan = plan_paper_buy(uow, code=code, amount=amount, day=day, fee=fee)
+    txn_id = add_transaction(uow, plan.transaction, ref=ref, note=None, now=now)
+    return PaperTrade(txn_id, code, day, plan.units, plan.price, plan.spent, plan.leftover)
 
 
 def paper_sell(
     uow: UnitOfWork, *, code: str, units: Decimal, day: date, now: datetime
 ) -> PaperTrade:
-    point = _price_on(uow, code, day)
-    tx = Transaction(code, day, Side.SELL, units, point.price, Decimal(0))
-    txn_id = add_transaction(uow, tx, ref=None, note=None, now=now)
-    return PaperTrade(txn_id, code, day, units, point.price, units * point.price, None)
+    plan = plan_paper_sell(uow, code=code, units=units, day=day)
+    txn_id = add_transaction(uow, plan.transaction, ref=None, note=None, now=now)
+    return PaperTrade(txn_id, code, day, plan.units, plan.price, plan.spent, None)
 
 
 def _price_on(uow: UnitOfWork, code: str, day: date) -> PricePoint:

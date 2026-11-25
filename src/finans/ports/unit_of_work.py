@@ -9,8 +9,13 @@ from finans.ports.repositories import (
     PriceRepo,
     RawPayloadRepo,
     RunRepo,
+    SubmissionRepo,
     TransactionRepo,
 )
+
+
+class StorageBusyError(Exception):
+    """Başka bir yazma işlemi veritabanını bekleme süresinden uzun tuttu; hiçbir şey yazılmadı."""
 
 
 class UnitOfWork(Protocol):
@@ -24,6 +29,7 @@ class UnitOfWork(Protocol):
     runs: RunRepo
     alerts: AlertRepo
     allocation_state: AllocationStateRepo
+    submissions: SubmissionRepo
 
     def __enter__(self) -> Self: ...
 

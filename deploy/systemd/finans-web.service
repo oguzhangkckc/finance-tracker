@@ -10,6 +10,8 @@ WorkingDirectory=/var/lib/finans
 EnvironmentFile=/etc/finans/finans.env
 # K-106: işlerin sırları yüklenmez; profil drop-in'de seçilir (K-123).
 LoadCredential=ft_web_session_key:/etc/finans/credstore/ft_web_session_key
+# K-126: yazma şifresinin scrypt özeti; dosya boşsa yazma kapalı, hiç yoksa servis başlamaz.
+LoadCredential=ft_web_password:/etc/finans/credstore/ft_web_password
 # K-123: soket /run/finans-web/web.sock; uvicorn'un 0666'sı yerine adapter 0600 verir.
 RuntimeDirectory=finans-web
 RuntimeDirectoryMode=0700

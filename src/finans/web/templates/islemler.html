@@ -2,9 +2,19 @@
 {% block title %}İşlemler · finans-takip{% endblock %}
 {% block content %}
   <h1>İşlemler</h1>
+  {% set writable = lock.status != "disabled" %}
+  {% if writable %}
+  <div class="actions page-actions">
+    <a class="btn btn-primary" href="{{ prefix }}/islemler/yeni/alis">{% if profile == "sanal" %}Sanal alım{% else %}Alım ekle{% endif %}</a>
+    <a class="btn btn-secondary" href="{{ prefix }}/islemler/yeni/satis">{% if profile == "sanal" %}Sanal satış{% else %}Satış ekle{% endif %}</a>
+    {% if profile == "sanal" %}<a class="btn btn-secondary" href="{{ prefix }}/maas-gunu">Maaş günü planı</a>{% endif %}
+  </div>
+  {% else %}
+  <p class="note">Yazma bu cihazda kurulmadı.</p>
+  {% endif %}
   <table class="cards">
     <thead>
-      <tr><th>#</th><th>Tarih</th><th>Fon</th><th>Yön</th><th class="num">Adet</th><th class="num">Fiyat</th><th class="num">Komisyon</th><th>Not</th></tr>
+      <tr><th>#</th><th>Tarih</th><th>Fon</th><th>Yön</th><th class="num">Adet</th><th class="num">Fiyat</th><th class="num">Komisyon</th><th>Not</th>{% if writable %}<th><span class="sr">İşlem</span></th>{% endif %}</tr>
     </thead>
     <tbody>
       {% for stored in transactions %}
@@ -18,6 +28,7 @@
         <td data-label="Fiyat" class="num">{{ tx.unit_price | exact }}</td>
         <td data-label="Komisyon" class="num">{{ tx.fee | exact }}</td>
         <td data-label="Not">{% if stored.voided_at %}<span class="warn">İptal: {{ stored.void_reason }}</span> {% endif %}{{ stored.note or "" }}{% if stored.external_ref %} <span class="muted">{{ stored.external_ref }}</span>{% endif %}</td>
+        {% if writable %}<td data-label="">{% if not stored.voided_at %}<a href="{{ prefix }}/islemler/{{ stored.id }}/iptal">İptal et<span class="sr"> (#{{ stored.id }})</span></a>{% endif %}</td>{% endif %}
       </tr>
       {% else %}
       <tr><td>Kayıtlı işlem yok.</td></tr>

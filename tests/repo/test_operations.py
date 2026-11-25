@@ -94,3 +94,22 @@ def test_last_fetch_times_come_from_the_data(migrated_db: Path) -> None:
         assert uow.prices.last_fetched_at() == T3
         assert uow.cpi.last_fetched_at("TP.TUKFIY2025.GENEL") == T2
         assert uow.cpi.last_fetched_at("TP.FG.J0") is None
+
+
+def test_a_submission_nonce_is_recorded_once_and_rolls_back_with_its_write(
+    migrated_db: Path,
+) -> None:
+    kept, lost = "a" * 22, "b" * 22
+    with SqliteUnitOfWork(migrated_db) as uow:
+        assert uow.submissions.used(kept) is None
+        uow.submissions.record(kept, ref="#7", at=T1)
+    try:
+        with SqliteUnitOfWork(migrated_db) as uow:
+            uow.submissions.record(lost, ref="#8", at=T2)
+            raise RuntimeError("yazma başarısız")
+    except RuntimeError:
+        pass
+
+    with SqliteUnitOfWork(migrated_db, readonly=True) as uow:
+        assert uow.submissions.used(kept) == "#7"
+        assert uow.submissions.used(lost) is None

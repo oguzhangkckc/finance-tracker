@@ -207,3 +207,20 @@ class SqliteAllocationStateRepo:
             " WHERE allocation_state.quiet_ended_on IS NULL",
             (encode_date(day),),
         )
+
+
+class SqliteSubmissionRepo:
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+
+    def used(self, nonce: str) -> str | None:
+        row = self._conn.execute(
+            "SELECT ref FROM web_submission WHERE nonce = ?", (nonce,)
+        ).fetchone()
+        return None if row is None else str(row[0])
+
+    def record(self, nonce: str, *, ref: str, at: datetime) -> None:
+        self._conn.execute(
+            "INSERT INTO web_submission (nonce, ref, used_at) VALUES (?, ?, ?)",
+            (nonce, ref, encode_timestamp(at)),
+        )

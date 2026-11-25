@@ -1,37 +1,36 @@
-"""finans-web uygulaması; iki profil tek serviste, tek yazma fiyat güncelleme isteğidir
-(K-101…K-106, K-122, K-125)."""
+"""finans-web uygulaması; iki profil tek serviste (K-101…K-106, K-122, K-125, K-126)."""
 
-from collections.abc import Callable
+import re
+from collections.abc import Callable, Mapping
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Final
-from urllib.parse import parse_qs
 
 from jinja2 import Environment, PackageLoader, StrictUndefined
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware import Middleware
 from starlette.requests import Request
-from starlette.responses import PlainTextResponse, RedirectResponse, Response
+from starlette.responses import RedirectResponse, Response
 from starlette.routing import BaseRoute, Route
 from starlette.templating import Jinja2Templates
 
 from finans import bootstrap
+from finans.application.password import well_formed
 from finans.application.report import ReportKind
 from finans.contracts.display import class_label, exact, money, percent, points
 from finans.contracts.report import SANAL_NOTICE
 from finans.ports.clock import BUSINESS_TZ, Clock
 from finans.settings import PROFILES, Profile, Settings, profile_settings
 from finans.web.assets import Assets
+from finans.web.forms import read_form
 from finans.web.icons import icon
-from finans.web.security import (
-    BodyLimitMiddleware,
-    IdentityMiddleware,
-    SecurityHeadersMiddleware,
-    same_origin,
-)
-from finans.web.session import CSRF_FIELD, SessionMiddleware, csrf_token, valid_csrf
+from finans.web.lock import Attempt, WriteLock
+from finans.web.security import BodyLimitMiddleware, IdentityMiddleware, SecurityHeadersMiddleware
+from finans.web.session import SessionMiddleware, csrf_token
 from finans.web.svg import allocation_bar
+from finans.web.trade_routes import WriteContext, write_routes
 from finans.web.views import (
     PAGE_ERRORS,
     PageError,
@@ -65,7 +64,9 @@ STATIC: Final = Path(__file__).parent / "static"
 SLUGS: Final[dict[Profile, str]] = {"real": "gercek", "sanal": "sanal"}
 PROFILE_LABELS: Final[dict[Profile, str]] = {"real": "Gerçek", "sanal": "Sanal"}
 MIN_SESSION_KEY: Final = 32
-REFUSED: Final = "İstek reddedildi."
+# Kilitten sonra yalnız bu uygulamanın bir sayfasına dönülür; sorgu ve `..` taşınmaz.
+NEXT_PAGE: Final = re.compile(rf"/(?:{'|'.join(SLUGS.values())})(?:/[a-z0-9-]+)*/?")
+ATTEMPT_STATUS: Final = {"wrong": 403, "locked": 429, "disabled": 403}
 # Yönlendirmede yalnız sabit bir anahtar taşınır; metin sayfaya istekten yansımaz.
 NOTICES: Final = {
     "alindi": (
@@ -73,10 +74,32 @@ NOTICES: Final = {
         "Bugünün fiyatları zaten tamamsa TEFAS'a istek atılmaz."
     ),
 }
+SAVED: Final = {
+    "alis": "Alım #{no} kaydedildi.",
+    "satis": "Satış #{no} kaydedildi.",
+    "iptal": "#{no} numaralı işlem iptal edildi.",
+    "maas-gunu": "Maaş günü planı uygulandı: {no} sanal alım.",
+}
 
 
 class WebSetupError(Exception):
     pass
+
+
+def _notice(params: Mapping[str, str]) -> str | None:
+    """Kayıttan sonra işlem numarası yalnız rakamsa gösterilir; başka metin sayfaya yansımaz."""
+    if (text := NOTICES.get(params.get("istek", ""))) is not None:
+        return text
+    number = params.get("no", "")
+    template = SAVED.get(params.get("islem", ""))
+    if template is None or not (number.isascii() and number.isdigit() and len(number) <= 9):
+        return None
+    return template.format(no=int(number))
+
+
+def _entered(value: Decimal) -> str:
+    """Girilen basamaklarla; dekonttaki fiyat önizlemede aynen görünsün (K-64)."""
+    return f"{value:f}".replace(".", ",")
 
 
 def _local(moment: datetime) -> str:
@@ -101,7 +124,9 @@ def _environment() -> Environment:
         autoescape=True,
         undefined=StrictUndefined,
     )
-    env.filters.update(money=money, percent=percent, points=points, exact=exact, local=_local)
+    env.filters.update(
+        money=money, percent=percent, points=points, exact=exact, local=_local, entered=_entered
+    )
     env.globals.update(
         icon=icon,
         allocation_bar=allocation_bar,
@@ -129,6 +154,14 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
     origin = settings.web_origin.rstrip("/")
     viewer_login = settings.web_allowed_login
     time = clock or bootstrap.system_clock()
+    password = settings.web_password
+    stored = password.get_secret_value().strip() if password is not None else None
+    if stored is not None and not well_formed(stored):
+        raise WebSetupError(
+            "ft_web_password bir şifre özeti değil; `ft web sifre` ile üretin. "
+            "Yazmayı kapatmak için dosya boş bırakılır (K-126)."
+        )
+    lock = WriteLock(stored, time)
     assets = Assets(STATIC)
     templates = Jinja2Templates(env=_environment())
     templates.env.globals["asset"] = assets.url
@@ -140,6 +173,7 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
             request: Request, name: str, context: dict[str, object], *, status: int = 200
         ) -> Response:
             subpath = request.url.path.removeprefix(prefix) or "/"
+            here = request.url.path if NEXT_PAGE.fullmatch(request.url.path) else f"{prefix}/"
             switch = [
                 (PROFILE_LABELS[other], f"/{SLUGS[other]}{subpath}", other == profile)
                 for other in PROFILES
@@ -157,7 +191,9 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
                     "viewer": request.state.display_name or viewer_login,
                     "nav": NAV,
                     "csrf": csrf_token(key, request.state.session),
-                    "notice": NOTICES.get(request.query_params.get("istek", "")),
+                    "lock": lock.state(request.state.session),
+                    "lock_href": f"{prefix}/kilit?sonra={here}",
+                    "notice": _notice(request.query_params),
                     **context,
                 },
                 status_code=status,
@@ -224,15 +260,9 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
         ]
 
         async def refresh(request: Request) -> Response:
-            if not same_origin(request.headers, origin):
-                return PlainTextResponse(REFUSED, status_code=403)
-            try:
-                form = parse_qs((await request.body()).decode("ascii"), max_num_fields=4)
-            except ValueError:
-                return PlainTextResponse("Form okunamadı.", status_code=400)
-            tokens = form.get(CSRF_FIELD, [])
-            if len(tokens) != 1 or not valid_csrf(key, request.state.session, tokens[0]):
-                return PlainTextResponse(REFUSED, status_code=403)
+            form = await read_form(request, origin=origin, key=key, max_fields=4)
+            if isinstance(form, Response):
+                return form
             try:
                 status = await run_in_threadpool(ask_for_refresh, conf, time)
             except (PageError, *PAGE_ERRORS) as exc:
@@ -243,12 +273,42 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
             target = f"{prefix}/?istek=alindi" if status.decision.allowed else f"{prefix}/"
             return RedirectResponse(target, status_code=303)
 
+        def next_page(raw: str | None) -> str:
+            return raw if raw and NEXT_PAGE.fullmatch(raw) else f"{prefix}/"
+
+        def unlock_page(
+            request: Request, back: str, attempt: Attempt | None = None, *, status: int = 200
+        ) -> Response:
+            lockout = attempt.until if attempt is not None else lock.lockout_until()
+            context: dict[str, object] = {"next": back, "attempt": attempt, "lockout": lockout}
+            return page(request, "kilit.html", context, status=status)
+
+        def unlock_form(request: Request) -> Response:
+            return unlock_page(request, next_page(request.query_params.get("sonra")))
+
+        async def unlock(request: Request) -> Response:
+            form = await read_form(request, origin=origin, key=key, max_fields=4)
+            if isinstance(form, Response):
+                return form
+            back = next_page(form.get("sonra"))
+            # scrypt yavaş; olay döngüsünü bekletmesin.
+            password = form.get("sifre", "")
+            attempt = await run_in_threadpool(lock.try_unlock, request.state.session, password)
+            if attempt.status == "ok":
+                return RedirectResponse(back, status_code=303)
+            return unlock_page(request, back, attempt, status=ATTEMPT_STATUS[attempt.status])
+
         return [
             *(
                 Route(f"{prefix}{path}", view(name, load), methods=["GET"])
                 for path, name, load in pages
             ),
             Route(f"{prefix}/fiyat-guncelle", refresh, methods=["POST"]),
+            Route(f"{prefix}/kilit", unlock_form, methods=["GET"]),
+            Route(f"{prefix}/kilit", unlock, methods=["POST"]),
+            *write_routes(
+                WriteContext(profile, prefix, conf, key, origin, lock, time, page, unlock_page)
+            ),
         ]
 
     def home(_request: Request) -> Response:
