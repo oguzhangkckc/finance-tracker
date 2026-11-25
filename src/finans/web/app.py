@@ -1,6 +1,6 @@
-"""finans-web uygulaması; iki profil tek serviste, tek yazma fiyat güncelleme isteğidir
-(K-101…K-106, K-122, K-125)."""
+"""finans-web uygulaması; iki profil tek serviste (K-101…K-106, K-122, K-125, K-126)."""
 
+import re
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -17,6 +17,7 @@ from starlette.routing import BaseRoute, Route
 from starlette.templating import Jinja2Templates
 
 from finans import bootstrap
+from finans.application.password import well_formed
 from finans.application.report import ReportKind
 from finans.contracts.display import class_label, exact, money, percent, points
 from finans.contracts.report import SANAL_NOTICE
@@ -24,6 +25,7 @@ from finans.ports.clock import BUSINESS_TZ, Clock
 from finans.settings import PROFILES, Profile, Settings, profile_settings
 from finans.web.assets import Assets
 from finans.web.icons import icon
+from finans.web.lock import Attempt, WriteLock
 from finans.web.security import (
     BodyLimitMiddleware,
     IdentityMiddleware,
@@ -66,6 +68,9 @@ SLUGS: Final[dict[Profile, str]] = {"real": "gercek", "sanal": "sanal"}
 PROFILE_LABELS: Final[dict[Profile, str]] = {"real": "Gerçek", "sanal": "Sanal"}
 MIN_SESSION_KEY: Final = 32
 REFUSED: Final = "İstek reddedildi."
+# Kilitten sonra yalnız bu uygulamanın bir sayfasına dönülür; sorgu ve `..` taşınmaz.
+NEXT_PAGE: Final = re.compile(rf"/(?:{'|'.join(SLUGS.values())})(?:/[a-z0-9-]+)*/?")
+ATTEMPT_STATUS: Final = {"wrong": 403, "locked": 429, "disabled": 403}
 # Yönlendirmede yalnız sabit bir anahtar taşınır; metin sayfaya istekten yansımaz.
 NOTICES: Final = {
     "alindi": (
@@ -129,6 +134,14 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
     origin = settings.web_origin.rstrip("/")
     viewer_login = settings.web_allowed_login
     time = clock or bootstrap.system_clock()
+    password = settings.web_password
+    stored = password.get_secret_value().strip() if password is not None else None
+    if stored is not None and not well_formed(stored):
+        raise WebSetupError(
+            "ft_web_password bir şifre özeti değil; `ft web sifre` ile üretin. "
+            "Yazmayı kapatmak için dosya boş bırakılır (K-126)."
+        )
+    lock = WriteLock(stored, time)
     assets = Assets(STATIC)
     templates = Jinja2Templates(env=_environment())
     templates.env.globals["asset"] = assets.url
@@ -140,6 +153,7 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
             request: Request, name: str, context: dict[str, object], *, status: int = 200
         ) -> Response:
             subpath = request.url.path.removeprefix(prefix) or "/"
+            here = request.url.path if NEXT_PAGE.fullmatch(request.url.path) else f"{prefix}/"
             switch = [
                 (PROFILE_LABELS[other], f"/{SLUGS[other]}{subpath}", other == profile)
                 for other in PROFILES
@@ -157,6 +171,8 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
                     "viewer": request.state.display_name or viewer_login,
                     "nav": NAV,
                     "csrf": csrf_token(key, request.state.session),
+                    "lock": lock.state(request.state.session),
+                    "lock_href": f"{prefix}/kilit?sonra={here}",
                     "notice": NOTICES.get(request.query_params.get("istek", "")),
                     **context,
                 },
@@ -243,12 +259,46 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
             target = f"{prefix}/?istek=alindi" if status.decision.allowed else f"{prefix}/"
             return RedirectResponse(target, status_code=303)
 
+        def next_page(raw: str | None) -> str:
+            return raw if raw and NEXT_PAGE.fullmatch(raw) else f"{prefix}/"
+
+        def unlock_page(
+            request: Request, back: str, attempt: Attempt | None = None, *, status: int = 200
+        ) -> Response:
+            lockout = attempt.until if attempt is not None else lock.lockout_until()
+            context: dict[str, object] = {"next": back, "attempt": attempt, "lockout": lockout}
+            return page(request, "kilit.html", context, status=status)
+
+        def unlock_form(request: Request) -> Response:
+            return unlock_page(request, next_page(request.query_params.get("sonra")))
+
+        async def unlock(request: Request) -> Response:
+            if not same_origin(request.headers, origin):
+                return PlainTextResponse(REFUSED, status_code=403)
+            try:
+                form = parse_qs((await request.body()).decode("ascii"), max_num_fields=4)
+            except ValueError:
+                return PlainTextResponse("Form okunamadı.", status_code=400)
+            tokens, passwords = form.get(CSRF_FIELD, []), form.get("sifre", [])
+            if len(tokens) != 1 or not valid_csrf(key, request.state.session, tokens[0]):
+                return PlainTextResponse(REFUSED, status_code=403)
+            if len(passwords) != 1:
+                return PlainTextResponse("Form okunamadı.", status_code=400)
+            back = next_page(form.get("sonra", [""])[0])
+            # scrypt yavaş; olay döngüsünü bekletmesin.
+            attempt = await run_in_threadpool(lock.try_unlock, request.state.session, passwords[0])
+            if attempt.status == "ok":
+                return RedirectResponse(back, status_code=303)
+            return unlock_page(request, back, attempt, status=ATTEMPT_STATUS[attempt.status])
+
         return [
             *(
                 Route(f"{prefix}{path}", view(name, load), methods=["GET"])
                 for path, name, load in pages
             ),
             Route(f"{prefix}/fiyat-guncelle", refresh, methods=["POST"]),
+            Route(f"{prefix}/kilit", unlock_form, methods=["GET"]),
+            Route(f"{prefix}/kilit", unlock, methods=["POST"]),
         ]
 
     def home(_request: Request) -> Response:

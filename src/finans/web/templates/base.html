@@ -26,7 +26,16 @@
           <a href="{{ href }}"{% if current %} aria-current="page"{% endif %}>{{ label }}</a>
           {% endfor %}
         </nav>
-        <span class="viewer">{{ viewer }}</span>
+        <div class="topbar-end">
+          <span class="viewer">{{ viewer }}</span>
+          {% if lock.status == "open" %}
+          <a class="lock open" href="{{ lock_href }}">{{ icon("kilit_acik") }}Yazma açık · {{ lock.minutes_left }} dk</a>
+          {% elif lock.status == "locked" %}
+          <a class="lock" href="{{ lock_href }}">{{ icon("kilit") }}Yazma kilitli</a>
+          {% else %}
+          <a class="lock" href="{{ lock_href }}">{{ icon("kilit") }}Yazma kapalı</a>
+          {% endif %}
+        </div>
       </header>
       <main id="icerik">
         {% if notice %}
