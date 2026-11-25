@@ -891,7 +891,7 @@ Hedef: evdeki, her zaman açık, 64 bit Debian tabanlı bir Linux cihaz (Raspber
    sudo install -d -o root -g root -m 700 /etc/finans/credstore
    ```
 
-4. **Kod ve Python 3.13.** Python uv'nin kurduğu sürümdür (K-01); servis kullanıcısı erişebilsin diye `/opt/finans` altında tutulur. Güncelleme aynı iki komutla yapılır (`git pull`, `uv sync`).
+4. **Kod ve Python 3.13.** Python uv'nin kurduğu sürümdür (K-01); servis kullanıcısı erişebilsin diye `/opt/finans` altında tutulur. Güncelleme aynı iki komutla yapılır (`git pull`, `uv sync`). Birimler değiştiyse ardından adım 7'deki kopyalama ve `daemon-reload` gelir. Web kuruluysa (adım 11) en son `sudo systemctl restart finans-web.service` çalıştırılır: işler her çalışmada yeni kodu yükler, sürekli çalışan web süreci ise yeniden başlatılana kadar eski kodla devam eder.
 
    ```sh
    sudo -u finans git clone https://github.com/<github-kullanıcı>/finance-tracker.git /opt/finans
