@@ -1,0 +1,67 @@
+name: Deploy
+
+# K-132: CI main'de yeşil bitince, production onayıyla Pi'ye kurar. Depodan dosya okunmaz; commit
+# Pi'ye yalnız SHA olarak gider ve Pi kendi kopyasında doğrular (K-134).
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Fork'tan gelen ve dalı main adını taşıyan bir PR çalışması da workflow_run'ı tetikler.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4.4.0
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          version: "1.104.4"
+          # Önbelleğe main'deki CI işleri de yazabilir; SSH anahtarını gören işe oradan ikili gelmesin.
+          use-cache: "false"
+          log-mode: quiet
+      - name: Deploy isteği
+        shell: bash
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Beklenmeyen commit kimliği."; exit 3; }
+          dir="$(mktemp -d)"
+          trap 'rm -rf "$dir"' EXIT
+          (umask 077 && printf '%s\n' "$DEPLOY_SSH_KEY" > "$dir/key" \
+            && printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$dir/known_hosts")
+          code=0
+          ssh -T -i "$dir/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$dir/known_hosts" -o GlobalKnownHostsFile=/dev/null \
+            -o ConnectTimeout=30 -o ConnectionAttempts=3 -o ServerAliveInterval=30 -o LogLevel=ERROR \
+            "finans-deploy@$DEPLOY_HOST" "deploy $SHA" || code=$?
+          case "$code" in
+            0) ;;
+            1) echo "::error::Kurulum başarısız; önceki sürüme geri dönüldü." ;;
+            2) echo "::error::Elle kurulum gerekiyor (birim, deploy betiği ya da migration değişti)." ;;
+            3) echo "::error::Pi isteği reddetti." ;;
+            4) echo "::warning::Meşgul ya da zamanlayıcı penceresi; sonra yeniden çalıştır." ;;
+            *) echo "::error::Pi'ye bağlanılamadı (ssh çıkış kodu $code)." ;;
+          esac
+          exit "$code"
