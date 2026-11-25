@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -98,8 +99,17 @@ def test_payday_plan_with_and_without_amounts() -> None:
     assert "TL" not in hidden.output
 
 
-def test_payday_needs_a_contribution(portfolio: Path) -> None:
+def test_payday_needs_a_contribution(portfolio: Path, tmp_path: Path) -> None:
     portfolio.write_text(PORTFOLIO.replace("monthly = 1000\npayday = 15\n", ""), encoding="utf-8")
+    # İlk `config apply`'dan sonra TOML'daki katkı kullanılmaz; katkı ayar sürümünden gelir (K-127).
+    from_settings = runner.invoke(app, ["report", "payday", "--on", "2026-11-29"])
+    assert from_settings.exit_code == 0, from_settings.output
+    with SqliteUnitOfWork(tmp_path / "finans.db") as uow:
+        start = uow.settings.list()[0].version
+        stopped = replace(start, effective_from=date(2026, 11, 20), monthly_contribution=None)
+        uow.settings.add(stopped, source="cli", at=NOW)
+
     result = runner.invoke(app, ["report", "payday", "--on", "2026-11-29"])
+
     assert result.exit_code == 1
     assert "Katkı tanımlı değil" in result.output

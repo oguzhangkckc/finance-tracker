@@ -2,13 +2,13 @@
 güne kadar yürürlüğe girmiş son sürümdür; her sürüm üç ayarı birden taşır."""
 
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal
 
-from finans.domain.models import ZERO, YearMonth
+from finans.domain.models import ZERO, DomainError, YearMonth
 from finans.domain.numeric import canonical_text, in_domain_context
-from finans.domain.portfolio import ONE, ConfigIssue
+from finans.domain.portfolio import ONE, ConfigIssue, PortfolioConfig
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,6 +17,25 @@ class SettingVersion:
     payday: int | None
     monthly_contribution: Decimal | None
     targets: Mapping[str, Decimal]
+
+
+@dataclass(frozen=True, slots=True)
+class ClassChanges:
+    """portfolio.toml'un sınıfları ile bugünkü ve planlanan sürümlerinkinin farkı. `blocked`:
+    silinmiş ama bir sürümde ağırlığı 0 olmayan sınıflar; `issues` bunların gerekçesidir."""
+
+    added: tuple[str, ...]
+    removed: tuple[str, ...]
+    blocked: tuple[str, ...]
+    issues: tuple[ConfigIssue, ...]
+
+
+@in_domain_context
+def start_version(config: PortfolioConfig) -> SettingVersion:
+    """İlk `config apply`: portfolio.toml'daki değerler `0001-01-01`'den geçerli."""
+    return SettingVersion(
+        date.min, config.payday, config.monthly_contribution, dict(config.targets)
+    )
 
 
 @in_domain_context
@@ -94,3 +113,77 @@ def payday_schedule(
         return fallback if version is None else version.payday
 
     return payday
+
+
+@in_domain_context
+def class_changes(
+    versions: Sequence[SettingVersion], classes: Collection[str], *, today: date
+) -> ClassChanges:
+    wanted = set(classes)
+    relevant = _in_force_and_planned(versions, today)
+    added = {name for version in relevant for name in wanted - set(version.targets)}
+    removed = {name for version in relevant for name in set(version.targets) - wanted}
+    issues = [issue for version in relevant for issue in _removal_issues(version, wanted, today)]
+    blocked = {
+        name
+        for version in relevant
+        for name, weight in version.targets.items()
+        if name not in wanted and weight != ZERO
+    }
+    return ClassChanges(
+        tuple(sorted(added)), tuple(sorted(removed)), tuple(sorted(blocked)), tuple(issues)
+    )
+
+
+def _in_force_and_planned(versions: Sequence[SettingVersion], today: date) -> list[SettingVersion]:
+    """Yerini başka sürüme bırakmış eski sürümler geçmiştir; yalnız eski raporları üretir."""
+    current = effective_version(versions, today)
+    planned = [version for version in versions if version.effective_from > today]
+    return ([] if current is None else [current]) + planned
+
+
+def _removal_issues(version: SettingVersion, wanted: set[str], today: date) -> list[ConfigIssue]:
+    if version.effective_from <= today:
+        where = "geçerli ayardaki"
+        advice = (
+            "Önce ağırlığını 0 yap: sınıfı portfolio.toml'a geri ekle, `ft ayar hedef` ile 0 yap,"
+            " sonra sil."
+        )
+    else:
+        where = f"yürürlüğü {version.effective_from.isoformat()} olan planlanan sürümdeki"
+        advice = "Önce ağırlığını 0 yap ya da o sürümden `ft ayar vazgec` ile vazgeç."
+    return [
+        ConfigIssue(
+            f"targets.{name}",
+            f"portfolio.toml'dan silinmiş ama {where} ağırlığı {canonical_text(weight)}. {advice}",
+        )
+        for name, weight in version.targets.items()
+        if name not in wanted and weight != ZERO
+    ]
+
+
+@in_domain_context
+def with_classes(
+    version: SettingVersion, classes: Collection[str], *, effective_from: date
+) -> SettingVersion:
+    """Yeni sınıf 0 ağırlıkla girer, listede olmayan çıkar; ağırlığı olan sınıf çıkarılmaz."""
+    wanted = set(classes)
+    weighted = sorted(
+        name for name, weight in version.targets.items() if name not in wanted and weight != ZERO
+    )
+    if weighted:
+        raise DomainError(f"ağırlığı 0 olmayan sınıf çıkarılamaz: {', '.join(weighted)}")
+    kept = {name: weight for name, weight in version.targets.items() if name in wanted}
+    added = dict.fromkeys(sorted(wanted - kept.keys()), ZERO)
+    return replace(version, effective_from=effective_from, targets={**kept, **added})
+
+
+@in_domain_context
+def toml_differences(version: SettingVersion, config: PortfolioConfig) -> list[str]:
+    """Başlangıçtan sonra TOML'daki değer kullanılmaz; farklı olan ayarın yalnız adı verilir."""
+    same = (
+        ("maaş günü", version.payday == config.payday),
+        ("aylık katkı", version.monthly_contribution == config.monthly_contribution),
+        ("hedefler", dict(version.targets) == dict(config.targets)),
+    )
+    return [name for name, equal in same if not equal]

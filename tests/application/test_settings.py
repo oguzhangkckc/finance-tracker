@@ -7,14 +7,17 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 from finans.adapters.sqlite.connection import connect
 from finans.adapters.sqlite.migrate import apply, bundled
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.application.alerts import AlertEvaluation, evaluate_alerts
 from finans.application.report import ReportKind, build_report, payday_plan
-from finans.application.settings import payday_for
+from finans.application.settings import add_version, cancel_version, payday_for
 from finans.contracts.report import PaydayPlan, Report
-from finans.domain.models import CpiPoint, YearMonth
+from finans.domain.models import CpiPoint, DomainError, YearMonth
+from finans.domain.portfolio import ConfigError
 from finans.domain.settings import SettingVersion
 from tests.fakes.clock import FixedClock
 from tests.support import report_scenario as scenario
@@ -24,6 +27,7 @@ CONFIG = scenario.CONFIG
 START = SettingVersion(date.min, CONFIG.payday, CONFIG.monthly_contribution, CONFIG.targets)
 JANUARY = replace(START, effective_from=date(2027, 1, 1), monthly_contribution=D(1200))
 RECORDED = datetime(2026, 11, 25, 11, 0, tzinfo=UTC)
+TODAY = date(2026, 11, 25)
 
 
 def _database(tmp_path: Path, name: str) -> Path:
@@ -133,3 +137,81 @@ def test_each_month_takes_its_payday_from_the_database(tmp_path: Path) -> None:
         schedule = payday_for(uow, CONFIG)
 
     assert (schedule(YearMonth(2026, 12)), schedule(YearMonth(2027, 1))) == (15, 20)
+
+
+def test_a_valid_version_is_added_and_a_broken_one_is_refused(migrated_db: Path) -> None:
+    raised = replace(START, effective_from=TODAY, monthly_contribution=D(1200))
+    with SqliteUnitOfWork(migrated_db) as uow:
+        uow.settings.add(START, source="toml", at=RECORDED)
+        added = add_version(uow, CONFIG, raised, source="cli", today=TODAY, at=RECORDED)
+        past = replace(raised, effective_from=date(2026, 11, 24))
+        with pytest.raises(ConfigError) as refused:
+            add_version(uow, CONFIG, past, source="cli", today=TODAY, at=RECORDED)
+        rows = uow.settings.list()
+
+    assert [(row.id, row.source, row.version) for row in rows] == [
+        (1, "toml", START),
+        (added, "cli", raised),
+    ]
+    assert [str(issue) for issue in refused.value.issues] == [
+        "effective_from: yürürlük günü en erken bugün (2026-11-25) olabilir."
+    ]
+
+
+def _cancel_setup(db: Path) -> None:
+    with SqliteUnitOfWork(db) as uow:
+        for version in (
+            START,
+            JANUARY,
+            replace(JANUARY, effective_from=date(2027, 2, 1)),
+            replace(START, effective_from=TODAY, monthly_contribution=D(1100)),
+        ):
+            uow.settings.add(version, source="web", at=RECORDED)
+        uow.settings.cancel(3, reason="yanlış ay", at=RECORDED)
+
+
+def test_a_planned_version_is_cancelled_with_its_reason_and_keeps_its_row(
+    migrated_db: Path,
+) -> None:
+    _cancel_setup(migrated_db)
+    with SqliteUnitOfWork(migrated_db) as uow:
+        cancelled = cancel_version(uow, 2, reason=" yanlış tutar ", today=TODAY, at=RECORDED)
+
+    with SqliteUnitOfWork(migrated_db, readonly=True) as uow:
+        rows = uow.settings.list()
+    assert cancelled == JANUARY
+    assert (len(rows), rows[1].cancel_reason, rows[1].cancelled_at) == (
+        4,
+        "yanlış tutar",
+        RECORDED,
+    )
+
+
+@pytest.mark.parametrize(
+    ("setting_id", "reason", "message"),
+    [
+        (2, "  ", "Vazgeçme gerekçesi boş olamaz."),
+        (99, "yanlış", "99 numaralı ayar sürümü yok."),
+        (3, "yanlış", "3 numaralı ayar sürümünden zaten vazgeçilmiş."),
+        (
+            1,
+            "yanlış",
+            "1 numaralı ayar sürümü yürürlüğe girmiş; vazgeçilemez. Değiştirmek için yeni bir"
+            " sürüm ekle.",
+        ),
+        (
+            4,
+            "yanlış",
+            "4 numaralı ayar sürümü yürürlüğe girmiş; vazgeçilemez. Değiştirmek için yeni bir"
+            " sürüm ekle.",
+        ),
+    ],
+)
+def test_only_a_planned_version_can_be_cancelled(
+    migrated_db: Path, setting_id: int, reason: str, message: str
+) -> None:
+    _cancel_setup(migrated_db)
+    with pytest.raises(DomainError) as refused, SqliteUnitOfWork(migrated_db) as uow:
+        cancel_version(uow, setting_id, reason=reason, today=TODAY, at=RECORDED)
+
+    assert str(refused.value) == message

@@ -6,12 +6,18 @@ from decimal import Decimal
 
 import pytest
 
-from finans.domain.models import YearMonth
+from finans.domain.models import DomainError, YearMonth
+from finans.domain.portfolio import AlertThresholds, PortfolioConfig
 from finans.domain.settings import (
+    ClassChanges,
     SettingVersion,
     check_version,
+    class_changes,
     effective_version,
     payday_schedule,
+    start_version,
+    toml_differences,
+    with_classes,
 )
 
 D = Decimal
@@ -19,6 +25,8 @@ TARGETS = {"hisse": D("0.6"), "dusuk_risk": D("0.4")}
 CLASSES = frozenset(TARGETS)
 START = SettingVersion(date.min, 15, D(1000), TARGETS)
 TODAY = date(2026, 11, 25)
+JANUARY = replace(START, effective_from=date(2027, 1, 1), monthly_contribution=D(1200))
+TOML = PortfolioConfig((), TARGETS, D(1000), AlertThresholds(), payday=15)
 
 
 def _issues(new: SettingVersion, versions: list[SettingVersion] | None = None) -> list[str]:
@@ -98,3 +106,77 @@ def test_each_month_takes_its_payday_from_the_version_on_its_first_day() -> None
     assert schedule(YearMonth(2026, 12)) == 15
     assert schedule(YearMonth(2027, 1)) == 20
     assert payday_schedule([], fallback=10)(YearMonth(2027, 1)) == 10
+
+
+def test_the_starting_version_takes_the_toml_values_from_the_first_day() -> None:
+    assert start_version(TOML) == SettingVersion(date(1, 1, 1), 15, D(1000), TARGETS)
+
+
+def test_a_new_class_joins_with_zero_weight_and_a_zero_weight_class_leaves() -> None:
+    with_cash = replace(START, targets={**TARGETS, "nakit": D(0)})
+
+    moved = with_classes(with_cash, {"hisse", "dusuk_risk", "altin"}, effective_from=TODAY)
+
+    assert moved == replace(
+        START,
+        effective_from=TODAY,
+        targets={"hisse": D("0.6"), "dusuk_risk": D("0.4"), "altin": D(0)},
+    )
+
+
+def test_a_class_with_weight_is_never_dropped_silently() -> None:
+    with pytest.raises(DomainError, match="dusuk_risk"):
+        with_classes(START, {"hisse"}, effective_from=TODAY)
+
+
+def test_class_changes_cover_the_version_in_force_and_the_planned_ones() -> None:
+    assert class_changes([START, JANUARY], CLASSES, today=TODAY) == ClassChanges((), (), (), ())
+
+    changes = class_changes([START, JANUARY], {"hisse", "dusuk_risk", "altin"}, today=TODAY)
+
+    assert changes == ClassChanges(("altin",), (), (), ())
+
+
+def test_removing_a_class_with_weight_says_to_zero_it_first() -> None:
+    zeroed = replace(START, effective_from=TODAY, targets={"hisse": D(1), "dusuk_risk": D(0)})
+    planned = replace(JANUARY, targets=TARGETS)
+
+    in_force = class_changes([START], {"hisse"}, today=TODAY)
+    only_planned = class_changes([START, zeroed, planned], {"hisse"}, today=TODAY)
+    free = class_changes([START, zeroed], {"hisse"}, today=TODAY)
+
+    assert (in_force.removed, in_force.blocked) == (("dusuk_risk",), ("dusuk_risk",))
+    assert [str(issue) for issue in in_force.issues] == [
+        "targets.dusuk_risk: portfolio.toml'dan silinmiş ama geçerli ayardaki ağırlığı 0.4."
+        " Önce ağırlığını 0 yap: sınıfı portfolio.toml'a geri ekle, `ft ayar hedef` ile 0 yap,"
+        " sonra sil."
+    ]
+    assert [str(issue) for issue in only_planned.issues] == [
+        "targets.dusuk_risk: portfolio.toml'dan silinmiş ama yürürlüğü 2027-01-01 olan planlanan"
+        " sürümdeki ağırlığı 0.4. Önce ağırlığını 0 yap ya da o sürümden `ft ayar vazgec` ile"
+        " vazgeç."
+    ]
+    assert free == ClassChanges((), ("dusuk_risk",), (), ())
+
+
+def test_a_superseded_version_is_not_compared_with_the_toml() -> None:
+    zeroed = replace(START, effective_from=TODAY, targets={"hisse": D(1), "dusuk_risk": D(0)})
+
+    assert class_changes([START, zeroed], {"hisse"}, today=TODAY).issues == ()
+
+
+def test_toml_values_that_differ_from_the_setting_are_named_without_values() -> None:
+    other = PortfolioConfig(
+        (), {"hisse": D("0.5"), "dusuk_risk": D("0.5")}, D(1200), AlertThresholds(), payday=20
+    )
+    same_amount = PortfolioConfig(
+        (),
+        {"hisse": D("0.60"), "dusuk_risk": D("0.40")},
+        D("1000.00"),
+        AlertThresholds(),
+        payday=15,
+    )
+
+    assert toml_differences(START, TOML) == []
+    assert toml_differences(START, same_amount) == []
+    assert toml_differences(START, other) == ["maaş günü", "aylık katkı", "hedefler"]

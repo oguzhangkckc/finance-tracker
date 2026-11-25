@@ -90,7 +90,7 @@ Toplu kurulum (2026-11-25 kararı): kurulumlar kabul sürelerine göre bölünme
 - Her aşamadan sonra iki profilde `doctor` ve `job list`, arayüzde sayfalar kontrol edilir.
 - Geri dönüş: kod önceki commit'e döndürülür ve kurulum öncesi yedek geri yüklenir; migration'lar geri alınamaz.
 - `ft_web_password`, `finans-web` yeniden başlatılmadan önce oluşturulur.
-- İki profilde `ft db migrate` (0005, 0006) ve ardından `ft config apply`: ayarların başlangıç sürümü `portfolio.toml`'dan yazılır (K-127).
+- İki profilde `ft db migrate` (0005, 0006) ve ardından `ft config apply`: ayarların başlangıç sürümü `portfolio.toml`'dan yazılır (K-127); `doctor` "Ayarlar: başlangıç sürümü (portfolio.toml)" gösterir.
 Kabul süreleri: M3 ve M4 kurulumun bittiği gün yeniden başlar. Mevcut sürelerin "toplu kurulum nedeniyle yeniden başlatıldı" notuyla kapatılması ve yeni tarihler kurulumdan sonra ayrı, küçük bir PR'dır.
 
 ### W2a · Tasarım sistemi ve iskelet

@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -5,7 +6,13 @@ from pathlib import Path
 import pytest
 
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
-from finans.application.doctor import Check, cpi_check, portfolio_checks, price_check
+from finans.application.doctor import (
+    Check,
+    cpi_check,
+    portfolio_checks,
+    price_check,
+    settings_check,
+)
 from finans.domain.models import (
     CpiPoint,
     Instrument,
@@ -16,6 +23,7 @@ from finans.domain.models import (
     YearMonth,
 )
 from finans.domain.portfolio import AlertThresholds, PortfolioConfig
+from finans.domain.settings import start_version
 
 D = Decimal
 TTE = Instrument("TTE", InstrumentKind.TEFAS_YAT, "hisse")
@@ -119,3 +127,61 @@ def test_stale_or_missing_prices_are_a_warning(migrated_db: Path) -> None:
             "son fiyat 2026-11-24: TTE; 2026-11-16: XHT; fiyatı yok: ALTIN_GR; "
             "2 bayatlık uyarısı, ayrıntı için `ft data check`",
         )
+
+
+def test_settings_check_follows_the_versions_and_the_toml(migrated_db: Path) -> None:
+    config = _config(TTE)
+    start = start_version(config)
+    planned = replace(start, effective_from=date(2027, 1, 1), monthly_contribution=D(100))
+    split = PortfolioConfig(
+        (TTE, ALTIN), {"hisse": D("0.5"), "altin": D("0.5")}, D(0), AlertThresholds()
+    )
+    gold_only = PortfolioConfig((ALTIN,), {"altin": D(1)}, D(0), AlertThresholds())
+    stamp = datetime(2026, 11, 24, 9, tzinfo=UTC)
+
+    with SqliteUnitOfWork(migrated_db) as uow:
+        empty = settings_check(uow, config, today=TODAY)
+        uow.settings.add(start, source="toml", at=stamp)
+        started = settings_check(uow, config, today=TODAY)
+        uow.settings.add(planned, source="web", at=stamp)
+        with_plan = settings_check(uow, config, today=TODAY)
+        changed = settings_check(uow, replace(config, monthly_contribution=D(500)), today=TODAY)
+        added = settings_check(uow, split, today=TODAY)
+        refused = settings_check(uow, gold_only, today=TODAY)
+
+    unused = "TOML'daki değer artık kullanılmıyor; geçerli ayar panelde ya da `ft ayar` ile."
+    assert empty == Check(
+        "Ayarlar", "warn", "sürüm yok, portfolio.toml kullanılıyor; `ft config apply` çalıştır"
+    )
+    assert started == Check("Ayarlar", "ok", "başlangıç sürümü (portfolio.toml)")
+    assert with_plan == Check(
+        "Ayarlar", "ok", "başlangıç sürümü (portfolio.toml); planlanan: 2027-01-01"
+    )
+    assert changed == Check(
+        "Ayarlar", "warn", f"portfolio.toml'daki aylık katkı geçerli ayardan farklı. {unused}"
+    )
+    assert added == Check(
+        "Ayarlar",
+        "warn",
+        "`ft config apply` gerekli; eklenecek sınıf: altin."
+        f" portfolio.toml'daki hedefler geçerli ayardan farklı. {unused}",
+    )
+    assert refused == Check(
+        "Ayarlar",
+        "warn",
+        "`ft config apply` reddeder: ağırlığı 0 olmayan sınıf silinmiş (hisse); önce ağırlığını"
+        " 0 yap.",
+    )
+
+
+def test_settings_check_names_the_version_in_force(migrated_db: Path) -> None:
+    config = _config(TTE)
+    stamp = datetime(2026, 11, 24, 9, tzinfo=UTC)
+    with SqliteUnitOfWork(migrated_db) as uow:
+        uow.settings.add(start_version(config), source="toml", at=stamp)
+        uow.settings.add(
+            replace(start_version(config), effective_from=TODAY), source="cli", at=stamp
+        )
+        check = settings_check(uow, config, today=TODAY)
+
+    assert check == Check("Ayarlar", "ok", "yürürlükteki sürüm: 2026-11-24")

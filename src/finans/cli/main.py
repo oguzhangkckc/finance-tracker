@@ -132,12 +132,13 @@ def config_check(file: FileOption = None) -> None:
 
 @config_app.command("apply")
 def config_apply(file: FileOption = None) -> None:
-    """portfolio.toml'u doğrular ve varlık tanımlarını veritabanına yazar."""
+    """portfolio.toml'u doğrular; varlık tanımlarını ve ayarların başlangıç sürümünü yazar."""
     settings = _load_settings_or_exit()
+    clock = bootstrap.system_clock()
     with _user_errors():
         config = bootstrap.portfolio_source().load(_portfolio_path(settings, file))
         with bootstrap.open_unit_of_work(settings) as uow:
-            report = apply_portfolio(uow, config)
+            report = apply_portfolio(uow, config, today=clock.today(), at=clock.now())
     _print_apply(report)
 
 
@@ -782,8 +783,9 @@ def sanal_init_command() -> None:
         bootstrap.require_sanal(settings)
         config = bootstrap.portfolio_source().load(_portfolio_path(settings, None))
         bootstrap.sanal_init(settings)
+        clock = bootstrap.system_clock()
         with bootstrap.open_unit_of_work(settings) as uow:
-            report = apply_portfolio(uow, config)
+            report = apply_portfolio(uow, config, today=clock.today(), at=clock.now())
     typer.echo(f"Sanal veritabanı kuruldu: {settings.db_path}")
     _print_apply(report)
 
@@ -1021,10 +1023,12 @@ def _print_apply(report: ApplyReport) -> None:
         )
         if codes
     ]
-    if not changes:
+    if not changes and not report.settings:
         typer.echo("Değişiklik yok.")
     for label, codes in changes:
         typer.echo(f"{label}: {', '.join(codes)}")
+    for note in report.settings:
+        typer.echo(f"Ayarlar: {note}")
     for warning in report.warnings:
         typer.echo(f"Uyarı: {warning}")
 
