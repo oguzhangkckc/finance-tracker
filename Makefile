@@ -1,6 +1,6 @@
 RUN := uv run --frozen
 
-.PHONY: sync fmt lint typecheck imports test live audit check
+.PHONY: sync fmt lint typecheck imports test live audit check deploy-py312
 
 sync:
 	uv sync --locked
@@ -32,3 +32,8 @@ audit:
 	$(RUN) pip-audit --strict --disable-pip --require-hashes --requirement "$$tmp"
 
 check: lint typecheck imports test
+
+# Pi'nin sistem Python'u 3.12; finans-guncelle ve testleri onunla da çalışmalı (K-140).
+deploy-py312:
+	uv run --python 3.12 --no-project python -I -m py_compile deploy/guncelle.py
+	uv run --python 3.12 --no-project --with pytest==9.2.0 pytest --confcutdir=tests/deploy_guncelle tests/deploy_guncelle
