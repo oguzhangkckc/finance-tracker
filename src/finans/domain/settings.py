@@ -208,19 +208,65 @@ def changed_fields(old: SettingValues, new: SettingValues) -> tuple[SettingField
     return tuple(field for field in FIELDS if not same[field])
 
 
+@dataclass(frozen=True, slots=True)
+class Revert:
+    """İleri tarihli bir sürüm değişen ayarı hâlâ eski değeriyle taşıyor; o günden itibaren
+    değişiklik geri alınmış olur. `index` sürüm listesindeki sırası, `carried` yalnız `fields`
+    güncellenmiş hâlidir."""
+
+    index: int
+    fields: tuple[SettingField, ...]
+    carried: SettingVersion
+
+
 @in_domain_context
-def overridden_on(
-    new: SettingVersion, versions: Iterable[SettingVersion], fields: Collection[SettingField]
-) -> tuple[date, ...]:
-    """Her sürüm üç ayarı birden taşır: değiştirilen ayarı başka değerle taşıyan sonraki bir
-    sürümün yürürlük gününden itibaren bu değişiklik geçerli olmaz."""
-    days = {
-        version.effective_from
-        for version in versions
-        if version.effective_from > new.effective_from
-        and set(changed_fields(version, new)) & set(fields)
-    }
-    return tuple(sorted(days))
+def reverting_versions(
+    new: SettingVersion,
+    base: SettingVersion,
+    versions: Sequence[SettingVersion],
+    fields: Collection[SettingField],
+) -> list[Revert]:
+    """`base`: yeni sürümün yerine geçtiği, o gün geçerli sürüm. Her ayar için ileri tarihli
+    sürümlere tarih sırasıyla bakılır; ayarı bilerek başka değere çekmiş ilk sürümde durulur,
+    onun ve sonrakilerin değeri korunur. Aynı gün sonra kaydedilenle değişmiş sürüm sayılmaz."""
+    later = sorted(
+        (
+            index
+            for index, version in enumerate(versions)
+            if version.effective_from > new.effective_from
+            and not any(v.effective_from == version.effective_from for v in versions[index + 1 :])
+        ),
+        key=lambda index: versions[index].effective_from,
+    )
+    stale: dict[int, set[SettingField]] = {}
+    for field in fields:
+        for index in later:
+            if field in changed_fields(versions[index], base):
+                break
+            stale.setdefault(index, set()).add(field)
+    return [
+        Revert(
+            index,
+            tuple(field for field in FIELDS if field in reverted),
+            _carry(versions[index], new, reverted),
+        )
+        for index, reverted in sorted(stale.items())
+    ]
+
+
+def _carry(
+    version: SettingVersion, new: SettingVersion, fields: Collection[SettingField]
+) -> SettingVersion:
+    return replace(
+        version,
+        payday=new.payday if "payday" in fields else version.payday,
+        monthly_contribution=(
+            new.monthly_contribution
+            if "monthly_contribution" in fields
+            else version.monthly_contribution
+        ),
+        targets=dict(new.targets) if "targets" in fields else version.targets,
+    )
 
 
 @in_domain_context

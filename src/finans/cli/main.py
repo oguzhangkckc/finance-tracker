@@ -36,10 +36,10 @@ from finans.application.settings import (
     FromSettings,
     HistoryRow,
     Keep,
-    add_version,
     cancel_version,
     payday_for,
     propose,
+    save_proposal,
     setting_history,
 )
 from finans.application.transactions import (
@@ -169,6 +169,13 @@ def config_apply(file: FileOption = None) -> None:
 EffectiveOption = Annotated[
     str, typer.Option("--tarih", help="Yürürlük günü (YYYY-AA-GG); en erken bugün")
 ]
+CarryOption = Annotated[
+    bool,
+    typer.Option(
+        "--sonrakilere-de",
+        help="Değişikliği eski değerle taşıyan ileri tarihli planlanan sürümlere de uygula.",
+    ),
+]
 
 
 @ayar_app.command("goster")
@@ -234,18 +241,20 @@ def ayar_history() -> None:
 def ayar_contribution(
     amount: Annotated[str, typer.Argument(help="Aylık katkı (TL); ondalık ayırıcı nokta")],
     effective: EffectiveOption,
+    carry: CarryOption = False,
 ) -> None:
     """Aylık katkıyı yürürlük gününden itibaren değiştirir."""
-    _save_setting(effective, contribution=_parse_decimal("katkı", amount))
+    _save_setting(effective, carry, contribution=_parse_decimal("katkı", amount))
 
 
 @ayar_app.command("maas-gunu")
 def ayar_payday(
     day: Annotated[int, typer.Argument(help="Maaş günü (1 ile 31 arası)")],
     effective: EffectiveOption,
+    carry: CarryOption = False,
 ) -> None:
     """Maaş gününü değiştirir; değişiklik yalnız bir ayın 1'inden geçerli olabilir."""
-    _save_setting(effective, payday=day)
+    _save_setting(effective, carry, payday=day)
 
 
 @ayar_app.command("hedef")
@@ -255,9 +264,10 @@ def ayar_targets(
         typer.Argument(help="Bütün sınıflar SINIF=ORAN olarak; örnek: hisse=0.6 dusuk_risk=0.4"),
     ],
     effective: EffectiveOption,
+    carry: CarryOption = False,
 ) -> None:
     """Hedef dağılımı değiştirir; oranlar noktalı ve toplamı tam 1."""
-    _save_setting(effective, targets=_parse_targets(pairs))
+    _save_setting(effective, carry, targets=_parse_targets(pairs))
 
 
 @ayar_app.command("vazgec")
@@ -278,6 +288,7 @@ def ayar_cancel(
 
 def _save_setting(
     effective: str,
+    carry: bool,
     *,
     payday: int | Keep = KEEP,
     contribution: Decimal | Keep = KEEP,
@@ -298,18 +309,37 @@ def _save_setting(
                 contribution=contribution,
                 targets=targets,
             )
-            if proposal.issues:
-                raise ConfigError(proposal.issues)
-            setting_id = add_version(
-                uow, config, proposal.version, source="cli", today=clock.today(), at=clock.now()
+            saved = save_proposal(
+                uow,
+                config,
+                proposal,
+                source="cli",
+                today=clock.today(),
+                at=clock.now(),
+                carry_later=carry,
             )
-    change = _change_text(proposal.base, proposal.version, proposal.changed, list(config.targets))
-    typer.echo(f"Ayar sürümü #{setting_id} kaydedildi; yürürlük {day.isoformat()}: {change}")
-    for later in proposal.overridden_on:
-        typer.echo(
-            f"Uyarı: yürürlüğü {later.isoformat()} olan planlanan sürüm bu değişikliği"
-            " taşımıyor; o günden itibaren onun değeri geçerli olur."
-        )
+    order = list(config.targets)
+    change = _change_text(proposal.base, proposal.version, proposal.changed, order)
+    typer.echo(f"Ayar sürümü #{saved.setting_id} kaydedildi; yürürlük {day.isoformat()}: {change}")
+    replaced = dict(saved.rewritten)
+    for later in proposal.later:
+        stored = later.stored
+        moved = _change_text(stored.version, later.rewritten, later.fields, order)
+        if stored.id in replaced:
+            typer.echo(
+                f"Sonraki sürüme taşındı: #{stored.id} yerine #{replaced[stored.id]},"
+                f" {_version_day(stored)}: {moved}"
+            )
+        else:
+            kept = " ve ".join(
+                f"{FIELD_LABELS[f]} {_setting_text(stored.version, f, order)}" for f in later.fields
+            )
+            typer.echo(
+                f"Uyarı: yürürlüğü {stored.version.effective_from.isoformat()} olan planlanan"
+                f" sürüm (#{stored.id}) bu değişikliği taşımıyor; o günden itibaren {kept} olur."
+                " Taşımak için komut `--sonrakilere-de` ile verilir; şimdi düzeltmek için"
+                f" #{stored.id} sürümünden vazgeçip yeniden ekle."
+            )
 
 
 @contextmanager

@@ -19,8 +19,8 @@ from finans.domain.settings import (
     check_version,
     class_changes,
     effective_version,
-    overridden_on,
     payday_schedule,
+    reverting_versions,
     start_version,
     toml_differences,
     with_classes,
@@ -69,11 +69,20 @@ KEEP: Final = Keep.VALUE
 
 
 @dataclass(frozen=True, slots=True)
+class LaterRewrite:
+    """Değişikliği eski değeriyle geri alacak ileri tarihli sürüm ve değişikliği taşıyan hâli."""
+
+    stored: StoredSetting
+    fields: tuple[SettingField, ...]
+    rewritten: SettingVersion
+
+
+@dataclass(frozen=True, slots=True)
 class Proposal:
     version: SettingVersion
     base: SettingVersion
     changed: tuple[SettingField, ...]
-    overridden_on: tuple[date, ...]
+    later: tuple[LaterRewrite, ...]
     issues: tuple[ConfigIssue, ...]
 
 
@@ -89,7 +98,8 @@ def propose(
 ) -> Proposal:
     """Değişmeyen ayarlar yürürlük gününde geçerli olan sürümden alınır; bugünkünden değil, yoksa
     araya planlanmış bir sürümün değişikliği geri alınırdı."""
-    versions = active_versions(uow)
+    active = [s for s in uow.settings.list() if not s.is_cancelled]
+    versions = [s.version for s in active]
     current = effective_version(versions, today)
     if current is None:
         raise DomainError("Ayarların başlangıç sürümü yok; önce `ft config apply` çalıştır.")
@@ -104,7 +114,45 @@ def propose(
     issues = check_version(new, versions=versions, classes=toml.targets.keys(), today=today)
     if not changed:
         issues.append(ConfigIssue("ayar", "o günkü ayarla aynı; yeni sürüm gerekmiyor."))
-    return Proposal(new, base, changed, overridden_on(new, versions, changed), tuple(issues))
+    later = tuple(
+        LaterRewrite(active[revert.index], revert.fields, revert.carried)
+        for revert in reverting_versions(new, base, versions, changed)
+    )
+    return Proposal(new, base, changed, later, tuple(issues))
+
+
+@dataclass(frozen=True, slots=True)
+class Saved:
+    """`rewritten`: (vazgeçilen sürüm, yerine yazılan sürüm) çiftleri."""
+
+    setting_id: int
+    rewritten: tuple[tuple[int, int], ...]
+
+
+def save_proposal(
+    uow: UnitOfWork,
+    toml: PortfolioConfig,
+    proposal: Proposal,
+    *,
+    source: SettingSource,
+    today: date,
+    at: datetime,
+    carry_later: bool,
+) -> Saved:
+    """`carry_later`: değişikliği geri alacak her ileri tarihli sürümden vazgeçilir ve aynı
+    yürürlük günüyle, yalnız değişen ayar güncellenmiş olarak yeniden yazılır. Hepsi çağıranın
+    tek işleminde; biri reddedilirse hiçbiri kalmaz."""
+    if proposal.issues:
+        raise ConfigError(proposal.issues)
+    setting_id = add_version(uow, toml, proposal.version, source=source, today=today, at=at)
+    rewritten: list[tuple[int, int]] = []
+    if carry_later:
+        for later in proposal.later:
+            reason = f"yeni değişiklik taşındı: #{setting_id}"
+            uow.settings.cancel(later.stored.id, reason=reason, at=at)
+            new_id = add_version(uow, toml, later.rewritten, source=source, today=today, at=at)
+            rewritten.append((later.stored.id, new_id))
+    return Saved(setting_id, tuple(rewritten))
 
 
 SettingState = Literal["in_force", "past", "planned", "replaced", "cancelled"]

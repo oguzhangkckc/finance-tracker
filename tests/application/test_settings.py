@@ -18,8 +18,10 @@ from finans.application.settings import (
     HistoryRow,
     add_version,
     cancel_version,
+    effective_config,
     payday_for,
     propose,
+    save_proposal,
     setting_history,
 )
 from finans.contracts.report import PaydayPlan, Report
@@ -238,9 +240,11 @@ def test_a_proposal_starts_from_the_version_in_force_on_its_day(migrated_db: Pat
 
     assert february.base == JANUARY
     assert february.version == replace(JANUARY, effective_from=date(2027, 2, 1), targets=retargeted)
-    assert (february.changed, february.issues, february.overridden_on) == (("targets",), (), ())
+    assert (february.changed, february.issues, february.later) == (("targets",), (), ())
     assert december.base == START
-    assert december.overridden_on == (date(2027, 1, 1),)
+    assert [(later.stored.id, later.fields, later.rewritten) for later in december.later] == [
+        (2, ("targets",), replace(JANUARY, targets=retargeted))
+    ]
 
 
 def test_a_proposal_that_changes_nothing_or_breaks_a_rule_has_issues(migrated_db: Path) -> None:
@@ -286,3 +290,65 @@ def test_the_history_shows_each_version_with_its_state_and_change(migrated_db: P
         (4, "planned", ("monthly_contribution",), JANUARY),
         (5, "cancelled", ("payday",), corrected),
     ]
+
+
+MARCH_TARGETS = replace(
+    START, effective_from=date(2027, 3, 1), targets={"hisse": D("0.7"), "dusuk_risk": D("0.3")}
+)
+
+
+@pytest.mark.parametrize(("carry", "in_march"), [(False, D(1000)), (True, D(1200))])
+def test_a_january_contribution_lasts_past_a_planned_march_change_only_when_carried(
+    migrated_db: Path, carry: bool, in_march: Decimal
+) -> None:
+    with SqliteUnitOfWork(migrated_db) as uow:
+        uow.settings.add(START, source="toml", at=RECORDED)
+        uow.settings.add(MARCH_TARGETS, source="web", at=RECORDED)
+        proposal = propose(
+            uow, CONFIG, effective_from=date(2027, 1, 1), today=TODAY, contribution=D(1200)
+        )
+        save_proposal(
+            uow, CONFIG, proposal, source="cli", today=TODAY, at=RECORDED, carry_later=carry
+        )
+
+    with SqliteUnitOfWork(migrated_db, readonly=True) as uow:
+        march = effective_config(uow, CONFIG, on=date(2027, 3, 15))
+    assert [(later.stored.id, later.fields) for later in proposal.later] == [
+        (2, ("monthly_contribution",))
+    ]
+    assert (march.monthly_contribution, march.targets) == (in_march, MARCH_TARGETS.targets)
+
+
+def test_carrying_cancels_the_later_version_and_rewrites_it_on_its_own_day(
+    migrated_db: Path,
+) -> None:
+    with SqliteUnitOfWork(migrated_db) as uow:
+        uow.settings.add(START, source="toml", at=RECORDED)
+        uow.settings.add(MARCH_TARGETS, source="web", at=RECORDED)
+        proposal = propose(
+            uow, CONFIG, effective_from=date(2027, 1, 1), today=TODAY, contribution=D(1200)
+        )
+        saved = save_proposal(
+            uow, CONFIG, proposal, source="cli", today=TODAY, at=RECORDED, carry_later=True
+        )
+        rows = uow.settings.list()
+
+    assert (saved.setting_id, saved.rewritten) == (3, ((2, 4),))
+    assert [(row.id, row.source, row.cancel_reason) for row in rows] == [
+        (1, "toml", None),
+        (2, "web", "yeni değişiklik taşındı: #3"),
+        (3, "cli", None),
+        (4, "cli", None),
+    ]
+    assert rows[3].version == replace(MARCH_TARGETS, monthly_contribution=D(1200))
+
+
+def test_a_proposal_with_issues_is_not_saved(migrated_db: Path) -> None:
+    with SqliteUnitOfWork(migrated_db) as uow:
+        uow.settings.add(START, source="toml", at=RECORDED)
+        same = propose(uow, CONFIG, effective_from=TODAY, today=TODAY, contribution=D(1000))
+        with pytest.raises(ConfigError):
+            save_proposal(
+                uow, CONFIG, same, source="cli", today=TODAY, at=RECORDED, carry_later=False
+            )
+        assert len(uow.settings.list()) == 1

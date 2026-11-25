@@ -161,14 +161,34 @@ def test_a_broken_change_is_refused_and_nothing_is_written(
 
 
 @pytest.mark.usefixtures("db")
-def test_a_later_planned_version_that_carries_the_old_value_is_warned_about() -> None:
-    _ok("katki", "1500", "--tarih", "2027-03-01")
+def test_without_the_option_a_later_version_reverts_the_change_and_is_warned_about() -> None:
+    _ok("hedef", "hisse=0.7", "dusuk_risk=0.3", "--tarih", "2027-03-01")
 
-    saved = _ok("hedef", "hisse=0.7", "dusuk_risk=0.3", "--tarih", "2027-02-01")
+    saved = _ok("katki", "1200", "--tarih", "2027-01-01")
 
     assert saved.splitlines()[1] == (
-        "Uyarı: yürürlüğü 2027-03-01 olan planlanan sürüm bu değişikliği taşımıyor;"
-        " o günden itibaren onun değeri geçerli olur."
+        "Uyarı: yürürlüğü 2027-03-01 olan planlanan sürüm (#2) bu değişikliği taşımıyor;"
+        " o günden itibaren aylık katkı 1000 olur. Taşımak için komut `--sonrakilere-de` ile"
+        " verilir; şimdi düzeltmek için #2 sürümünden vazgeçip yeniden ekle."
+    )
+    assert "Planlanan: #2, yürürlük 2027-03-01" in _ok("goster")
+
+
+def test_with_the_option_the_change_is_carried_into_the_later_version(db: Path) -> None:
+    _ok("hedef", "hisse=0.7", "dusuk_risk=0.3", "--tarih", "2027-03-01")
+
+    saved = _ok("katki", "1200", "--tarih", "2027-01-01", "--sonrakilere-de")
+
+    assert saved.splitlines() == [
+        "Ayar sürümü #3 kaydedildi; yürürlük 2027-01-01: aylık katkı 1000 → 1200",
+        "Sonraki sürüme taşındı: #2 yerine #4, yürürlük 2027-03-01: aylık katkı 1000 → 1200",
+    ]
+    with SqliteUnitOfWork(db, readonly=True) as uow:
+        rows = uow.settings.list()
+    assert rows[1].cancel_reason == "yeni değişiklik taşındı: #3"
+    assert (rows[3].version.monthly_contribution, rows[3].version.targets) == (
+        D(1200),
+        {"hisse": D("0.7"), "dusuk_risk": D("0.3")},
     )
 
 

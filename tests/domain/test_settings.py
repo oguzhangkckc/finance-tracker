@@ -10,13 +10,15 @@ from finans.domain.models import DomainError, YearMonth
 from finans.domain.portfolio import AlertThresholds, PortfolioConfig
 from finans.domain.settings import (
     ClassChanges,
+    Revert,
+    SettingField,
     SettingVersion,
     changed_fields,
     check_version,
     class_changes,
     effective_version,
-    overridden_on,
     payday_schedule,
+    reverting_versions,
     start_version,
     toml_differences,
     with_classes,
@@ -196,17 +198,46 @@ def test_changed_fields_name_only_the_settings_that_differ() -> None:
     assert changed_fields(START, retargeted) == ("monthly_contribution", "targets")
 
 
-def test_a_later_version_carrying_another_value_overrides_the_change_from_its_day() -> None:
-    february = replace(
-        START, effective_from=date(2027, 2, 1), targets={"hisse": D("0.7"), "dusuk_risk": D("0.3")}
-    )
-    march_old_targets = replace(
-        START, effective_from=date(2027, 3, 1), monthly_contribution=D(1500)
-    )
-    march_new_targets = replace(february, effective_from=date(2027, 3, 1))
+RETARGETED = {"hisse": D("0.7"), "dusuk_risk": D("0.3")}
+MARCH = replace(START, effective_from=date(2027, 3, 1), targets=RETARGETED)
 
-    assert overridden_on(february, [START, JANUARY, march_old_targets], ["targets"]) == (
-        date(2027, 3, 1),
-    )
-    assert overridden_on(february, [START, JANUARY, march_new_targets], ["targets"]) == ()
-    assert overridden_on(february, [START, march_old_targets], []) == ()
+
+def test_a_later_version_still_carrying_the_old_value_reverts_the_change() -> None:
+    reverts = reverting_versions(JANUARY, START, [START, MARCH], ["monthly_contribution"])
+
+    assert reverts == [
+        Revert(1, ("monthly_contribution",), replace(MARCH, monthly_contribution=D(1200)))
+    ]
+    assert reverting_versions(JANUARY, START, [START, MARCH], []) == []
+
+
+def test_a_deliberately_different_later_value_is_kept_and_ends_the_walk() -> None:
+    may_raise = replace(MARCH, effective_from=date(2027, 5, 1), monthly_contribution=D(1500))
+    february_raise = replace(START, effective_from=date(2027, 2, 1), monthly_contribution=D(1500))
+    back_in_march = replace(MARCH, monthly_contribution=D(1000))
+    fields: list[SettingField] = ["monthly_contribution"]
+
+    assert [
+        r.index for r in reverting_versions(JANUARY, START, [START, MARCH, may_raise], fields)
+    ] == [1]
+    assert reverting_versions(JANUARY, START, [START, february_raise, back_in_march], fields) == []
+
+
+def test_only_the_version_that_wins_its_day_is_considered() -> None:
+    corrected = replace(MARCH, targets={"hisse": D("0.8"), "dusuk_risk": D("0.2")})
+    raised = replace(MARCH, monthly_contribution=D(1500))
+    fields: list[SettingField] = ["monthly_contribution"]
+
+    assert [
+        r.index for r in reverting_versions(JANUARY, START, [START, MARCH, corrected], fields)
+    ] == [2]
+    assert reverting_versions(JANUARY, START, [START, MARCH, raised], fields) == []
+
+
+def test_each_reverted_setting_is_carried_alone() -> None:
+    new = replace(JANUARY, targets=RETARGETED)
+    later = replace(START, effective_from=date(2027, 3, 1), monthly_contribution=D(1500))
+
+    reverts = reverting_versions(new, START, [START, later], ["monthly_contribution", "targets"])
+
+    assert reverts == [Revert(1, ("targets",), replace(later, targets=RETARGETED))]
