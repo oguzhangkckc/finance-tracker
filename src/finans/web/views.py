@@ -1,5 +1,6 @@
 """Sayfaların verisi: Telegram ve metin raporuyla aynı `Report` nesnesi (K-104)."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -90,6 +91,10 @@ def payday_text(settings: Settings, clock: Clock) -> str:
 def quiet_ended_on(settings: Settings) -> date | None:
     with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
         return uow.allocation_state.quiet_ended_on()
+
+
+def class_names(settings: Settings) -> Mapping[str, str]:
+    return _config(settings).class_labels
 
 
 def transactions(settings: Settings) -> list[StoredTransaction]:

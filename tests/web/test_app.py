@@ -58,7 +58,7 @@ def test_the_allowed_login_sees_the_page(client: WebClient) -> None:
     response = client.get("/gercek/", headers=ME)
 
     assert response.status_code == 200
-    assert "<h1>Özet</h1>" in response.text
+    assert '<h1 class="sr">Özet</h1>' in response.text
     assert LOGIN in response.text
 
 

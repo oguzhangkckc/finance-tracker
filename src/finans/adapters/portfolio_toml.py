@@ -10,11 +10,12 @@ from finans.domain.portfolio import (
     InstrumentEntry,
     PortfolioConfig,
     QualityThresholds,
+    validate_class_labels,
     validate_portfolio,
     validate_quality,
 )
 
-_SECTIONS = ("alerts", "contribution", "instruments", "quality", "targets")
+_SECTIONS = ("alerts", "contribution", "instruments", "quality", "sinif_adlari", "targets")
 _INSTRUMENT_FIELDS = ("code", "kind", "asset_class", "category", "name", "allocation")
 _ALERT_FIELDS = ("open_above", "close_below", "reminder_days")
 _KIND_HINT = "TEFAS_YAT, TEFAS_EMK, TEFAS_BYF ya da MANUAL olmalı."
@@ -33,8 +34,11 @@ class TomlPortfolioSource:
         contribution, payday = _contribution(data.get("contribution", {}), issues)
         alerts = _alerts(data.get("alerts", {}), issues)
         jump = _jump(data.get("quality", {}), issues)
+        labels = _class_labels(data.get("sinif_adlari", {}), issues)
         issues.extend(validate_portfolio(entries, targets, alerts, contribution, payday=payday))
         issues.extend(validate_quality(jump))
+        classes = {entry.asset_class for entry in entries if entry.asset_class} | set(targets)
+        issues.extend(validate_class_labels(labels, classes))
         if issues or alerts is None:
             raise ConfigError(issues)
         return PortfolioConfig(
@@ -46,7 +50,21 @@ class TomlPortfolioSource:
             quality=QualityThresholds.with_overrides(
                 {name: value for name, value in jump.items() if value is not None}
             ),
+            class_labels=labels,
         )
+
+
+def _class_labels(raw: object, issues: list[ConfigIssue]) -> dict[str, str]:
+    table = _table(raw, "sinif_adlari", issues)
+    if table is None:
+        return {}
+    labels: dict[str, str] = {}
+    for code, value in table.items():
+        if isinstance(value, str):
+            labels[code] = value.strip()
+        else:
+            issues.append(ConfigIssue(f"sinif_adlari.{code}", f"metin olmalı, {value!r} verildi."))
+    return labels
 
 
 def _read(path: Path) -> dict[str, object]:

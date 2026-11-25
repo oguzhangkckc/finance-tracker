@@ -8,6 +8,7 @@ import pytest
 
 from finans.settings import Settings
 from finans.web.app import MORE, STATIC, TABS
+from finans.web.svg import allocation_bar
 from tests.support.web_profiles import ME, PAGES, two_profiles, web
 
 CSS = (STATIC / "site.css").read_text(encoding="utf-8")
@@ -126,3 +127,54 @@ def test_the_more_page_lists_every_page_missing_from_the_tabs(base: Settings) ->
         assert f'<a href="/sanal{href}">' in page
         assert f"<span>{label}</span>" in page
     assert len(TABS) == 5
+
+
+def test_classes_show_their_configured_or_derived_names_never_the_code(base: Settings) -> None:
+    client = web(base)
+
+    summary = client.get("/gercek/", headers=ME).text
+    allocation = client.get("/gercek/dagilim", headers=ME).text
+
+    assert "<strong>Düşük risk</strong>" in allocation
+    assert "<strong>Hisse</strong>" in allocation
+    assert "Acil durum · dağılım dışı" in summary
+    for code in ("dusuk_risk", "acil_durum"):
+        assert code not in summary
+        assert code not in allocation
+
+
+def test_changes_are_marked_by_arrow_and_words_not_colour_alone(base: Settings) -> None:
+    summary = web(base).get("/gercek/", headers=ME).text
+
+    assert re.search(
+        r'<span class="delta (gain|loss)"><span aria-hidden="true">[▲▼]</span>', summary
+    )
+    assert re.search(r'<span class="sr"> (artış|azalış)</span>', summary)
+
+
+def test_empty_pages_say_what_will_fill_them(base: Settings) -> None:
+    client = web(base)
+
+    summary = client.get("/sanal/", headers=ME).text
+    holdings = client.get("/sanal/varliklar", headers=ME).text
+
+    assert "Henüz pozisyon yok. İşlemler girildiğinde fonlar burada görünür." in summary
+    assert "Henüz pozisyon yok." in holdings
+
+
+@pytest.mark.parametrize(
+    ("weight", "target", "fill", "mark"),
+    [
+        (Decimal("0.428"), Decimal("0.4"), "128.4", "119.0"),
+        (Decimal("1.2"), Decimal("1"), "300.0", "299.0"),
+        (Decimal("-0.1"), Decimal(0), "0.0", "0.0"),
+    ],
+)
+def test_allocation_bar_is_drawn_from_decimals_and_clamped(
+    weight: Decimal, target: Decimal, fill: str, mark: str
+) -> None:
+    bar = str(allocation_bar(weight, target))
+
+    assert f'<rect class="fill" x="0" y="3" width="{fill}"' in bar
+    assert f'<rect class="target" x="{mark}"' in bar
+    assert 'aria-hidden="true"' in bar

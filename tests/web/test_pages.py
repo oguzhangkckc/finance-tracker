@@ -36,6 +36,9 @@ PORTFOLIO = """
 hisse = 0.6
 dusuk_risk = 0.4
 
+[sinif_adlari]
+dusuk_risk = "Düşük risk"
+
 [contribution]
 monthly = 1000
 payday = 15

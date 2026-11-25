@@ -1,12 +1,14 @@
 {% extends "base.html" %}
+{% from "_ui.html" import allocation, empty %}
 {% block title %}Dağılım · finans-takip{% endblock %}
 {% block content %}
   <h1>Dağılım</h1>
   <p class="muted">Değerleme günü {{ report.logical_date }}</p>
 
   {% if report.allocation_skipped %}
-  <p class="warn">Dağılım hesaplanmadı; fiyatı eksik: {{ report.allocation_skipped | join(", ") }}.</p>
-  {% else %}
+  <div class="notice warn" role="status">{{ icon("uyari") }}<p><strong>Dağılım hesaplanmadı; fiyatı eksik: {{ report.allocation_skipped | join(", ") }}.</strong> Fiyat gelince kendiliğinden hesaplanır.</p></div>
+  {% elif report.allocation %}
+  {{ allocation(report.allocation, cls) }}
   <table class="cards">
     <thead>
       <tr><th>Sınıf</th><th class="num">Değer</th><th class="num">Ağırlık</th><th class="num">Hedef</th><th class="num">Sapma</th></tr>
@@ -14,7 +16,7 @@
     <tbody>
       {% for line in report.allocation %}
       <tr>
-        <td data-label="Sınıf"><strong>{{ line.asset_class }}</strong></td>
+        <td data-label="Sınıf"><strong>{{ cls(line.asset_class) }}</strong></td>
         <td data-label="Değer" class="num">{{ line.value | money }}</td>
         <td data-label="Ağırlık" class="num">{{ line.weight | percent(places=1) }}</td>
         <td data-label="Hedef" class="num">{{ line.target | percent(places=1) }}</td>
@@ -23,6 +25,8 @@
       {% endfor %}
     </tbody>
   </table>
+  {% else %}
+  {{ empty("Henüz dağılım yok; dağılım içi bir fona işlem girilince hesaplanır.") }}
   {% endif %}
 
   {% if report.quiet_period %}
@@ -33,7 +37,7 @@
   <ul class="cards">
     {% for alert in report.alerts %}
     <li>
-      <div class="row"><strong>{{ alert.asset_class }}</strong><span class="num">{% if alert.deviation is not none %}{{ alert.deviation | points }}{% endif %}</span></div>
+      <div class="row"><strong>{{ cls(alert.asset_class) }}</strong><span class="num">{% if alert.deviation is not none %}{{ alert.deviation | points }}{% endif %}</span></div>
       <div class="muted">{% if alert.direction == "above" %}hedefin üstünde{% else %}hedefin altında{% endif %} · açıldı {{ alert.opened_at.date() }}</div>
     </li>
     {% else %}

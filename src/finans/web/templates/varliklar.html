@@ -12,7 +12,7 @@
       {% for holding in report.holdings %}
       <tr>
         <td data-label="Fon"><strong>{{ holding.instrument }}</strong></td>
-        <td data-label="Sınıf">{{ holding.asset_class }}{% if not holding.allocation %} · dağılım dışı{% endif %}</td>
+        <td data-label="Sınıf">{{ cls(holding.asset_class) }}{% if not holding.allocation %} · dağılım dışı{% endif %}</td>
         <td data-label="Adet" class="num">{{ holding.units | exact }}</td>
         <td data-label="Maliyet" class="num">{{ holding.cost | money }}</td>
         <td data-label="Değer" class="num">{% if holding.value is not none %}{{ holding.value | money }}{% else %}—{% endif %}</td>
@@ -20,7 +20,7 @@
         <td data-label="Fiyat">{{ price(holding, stale) }}</td>
       </tr>
       {% else %}
-      <tr><td>Pozisyon yok.</td></tr>
+      <tr><td>Henüz pozisyon yok.</td></tr>
       {% endfor %}
     </tbody>
   </table>

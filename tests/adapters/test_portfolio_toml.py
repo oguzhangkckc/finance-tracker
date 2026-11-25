@@ -97,7 +97,7 @@ x = 1
 """
     assert _issues(tmp_path, text) == [
         "hedefler: tanınmayan bölüm; geçerli bölümler: alerts, contribution, instruments, quality, "
-        "targets.",
+        "sinif_adlari, targets.",
         'instruments[0].kind: "TEFAS" geçersiz; '
         "TEFAS_YAT, TEFAS_EMK, TEFAS_BYF ya da MANUAL olmalı.",
         "instruments[0].renk: tanınmayan alan.",
@@ -228,4 +228,30 @@ def test_target_class_needs_an_in_allocation_instrument(tmp_path: Path) -> None:
         "targets.dusuk_risk: bu sınıfta dağılım içi varlık yok; "
         "allocation = false olanlar sayılmaz."
     )
+    assert expected in _issues(tmp_path, text)
+
+
+def test_class_labels_are_read_and_optional(tmp_path: Path) -> None:
+    labelled = TomlPortfolioSource().load(
+        _write(tmp_path, BASE + '\n[sinif_adlari]\nhisse = "Türkiye hisse"\n')
+    )
+    plain = TomlPortfolioSource().load(_write(tmp_path, BASE))
+
+    assert labelled.class_labels == {"hisse": "Türkiye hisse"}
+    assert plain.class_labels == {}
+
+
+@pytest.mark.parametrize(
+    ("extra", "expected"),
+    [
+        ("[sinif_adlari]\nhisse = 5\n", "sinif_adlari.hisse: metin olmalı, 5 verildi."),
+        (
+            '[sinif_adlari]\nkripto = "Kripto"\n',
+            'sinif_adlari.kripto: "kripto" bilinen bir sınıf değil. Sınıflar: hisse.',
+        ),
+        ("sinif_adlari = 1\n", "sinif_adlari: [sinif_adlari] tablosu olmalı."),
+    ],
+)
+def test_class_label_errors_name_the_field(tmp_path: Path, extra: str, expected: str) -> None:
+    text = extra + BASE if not extra.startswith("[") else BASE + "\n" + extra
     assert expected in _issues(tmp_path, text)

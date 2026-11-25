@@ -3,6 +3,7 @@ from decimal import Decimal
 from finans.domain.portfolio import (
     AlertThresholds,
     InstrumentEntry,
+    validate_class_labels,
     validate_portfolio,
     validate_quality,
 )
@@ -109,3 +110,18 @@ def test_jump_thresholds_must_lie_in_zero_one_and_unparsed_values_are_skipped() 
         "quality.jump.altin: 0 ile 1 arasında olmalı (0.15 = %15); 0 verildi.",
         "quality.jump.kripto: 0 ile 1 arasında olmalı (0.15 = %15); 1.5 verildi.",
     ]
+
+
+def test_class_labels_must_name_known_classes_and_be_short_and_not_empty() -> None:
+    issues = validate_class_labels(
+        {"hisse": "Türkiye hisse", "tahvil": "Tahvil", "dusuk_risk": "  ", "altin": "A" * 41},
+        {"hisse", "dusuk_risk", "altin"},
+    )
+
+    assert [str(issue) for issue in issues] == [
+        'sinif_adlari.tahvil: "tahvil" bilinen bir sınıf değil. '
+        "Sınıflar: altin, dusuk_risk, hisse.",
+        "sinif_adlari.dusuk_risk: boş olamaz.",
+        "sinif_adlari.altin: en çok 40 karakter olmalı; 41 verildi.",
+    ]
+    assert validate_class_labels({"hisse": "Türkiye hisse"}, {"hisse"}) == []

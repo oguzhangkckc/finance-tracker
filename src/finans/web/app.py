@@ -18,7 +18,7 @@ from starlette.templating import Jinja2Templates
 
 from finans import bootstrap
 from finans.application.report import ReportKind
-from finans.contracts.display import exact, money, percent, points
+from finans.contracts.display import class_label, exact, money, percent, points
 from finans.contracts.report import SANAL_NOTICE
 from finans.ports.clock import BUSINESS_TZ, Clock
 from finans.settings import PROFILES, Profile, Settings, profile_settings
@@ -31,10 +31,12 @@ from finans.web.security import (
     same_origin,
 )
 from finans.web.session import CSRF_FIELD, SessionMiddleware, csrf_token, valid_csrf
+from finans.web.svg import allocation_bar
 from finans.web.views import (
     PAGE_ERRORS,
     PageError,
     ask_for_refresh,
+    class_names,
     general_staleness,
     load_report,
     payday_text,
@@ -101,7 +103,12 @@ def _environment() -> Environment:
     )
     env.filters.update(money=money, percent=percent, points=points, exact=exact, local=_local)
     env.globals.update(
-        icon=icon, is_current=_is_current, is_tab_current=_is_tab_current, more=MORE, tabs=TABS
+        icon=icon,
+        allocation_bar=allocation_bar,
+        is_current=_is_current,
+        is_tab_current=_is_tab_current,
+        more=MORE,
+        tabs=TABS,
     )
     return env
 
@@ -169,10 +176,12 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
 
         def report_context(kind: ReportKind) -> dict[str, object]:
             report = load_report(conf, time, kind=kind)
+            labels = class_names(conf)
             return {
                 "report": report,
                 "stale": stale_by_instrument(report),
                 "stale_all": general_staleness(report),
+                "cls": lambda code: class_label(code, labels),
             }
 
         def text(title: str, load: Callable[[], str]) -> Callable[[], dict[str, object]]:
