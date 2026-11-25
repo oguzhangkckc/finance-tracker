@@ -5,6 +5,7 @@ import pytest
 from typer.testing import CliRunner
 
 from finans.adapters.sqlite.migrate import bundled
+from finans.application.password import hash_password
 from finans.cli.main import app
 
 runner = CliRunner()
@@ -77,3 +78,57 @@ def test_age_secret_key_on_the_server_fails_without_showing_it(
     assert result.exit_code == 1
     assert "✗ age gizli anahtarı: sunucuda bulundu, kaldır: .env" in result.output
     assert secret not in result.output
+
+
+WEB_HASH = hash_password("uzun bir parola cümlesi")
+
+
+@pytest.mark.parametrize(
+    ("content", "line", "code"),
+    [
+        (None, "✗ Web yazma şifresi: credstore'da yok; finans-web başlamaz", 1),
+        ("\n", "! Web yazma şifresi: dosya boş; web'de yazma kapalı", 0),
+        (f"{WEB_HASH}\n", "✓ Web yazma şifresi: geçerli scrypt özeti", 0),
+        ("düz metin şifre\n", "✗ Web yazma şifresi: scrypt özeti değil; finans-web başlamaz", 1),
+    ],
+)
+def test_the_web_password_file_is_checked_without_showing_it(
+    portfolio: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    content: str | None,
+    line: str,
+    code: int,
+) -> None:
+    """K-126: sorun finans-web yeniden başlamadan görünsün; değer hiçbir durumda yazılmaz."""
+    assert runner.invoke(app, ["config", "apply"]).exit_code == 0
+    credentials = tmp_path / "credentials"
+    credentials.mkdir()
+    if content is not None:
+        (credentials / "ft_web_password").write_text(content, encoding="utf-8")
+    monkeypatch.setenv("CREDENTIALS_DIRECTORY", str(credentials))
+    monkeypatch.setenv("FT_WEB_ORIGIN", "https://cihaz.ornek.ts.net")
+
+    result = runner.invoke(app, ["doctor"])
+
+    assert result.exit_code == code, result.output
+    assert line in result.output
+    assert WEB_HASH.split("$")[-1] not in result.output
+    assert "düz metin" not in result.output
+
+
+@pytest.mark.parametrize("credentials", [False, True])
+def test_without_a_configured_web_there_is_no_web_password_line(
+    portfolio: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, credentials: bool
+) -> None:
+    assert runner.invoke(app, ["config", "apply"]).exit_code == 0
+    if credentials:
+        (tmp_path / "credentials").mkdir()
+        monkeypatch.setenv("CREDENTIALS_DIRECTORY", str(tmp_path / "credentials"))
+    else:
+        monkeypatch.setenv("FT_WEB_ORIGIN", "https://cihaz.ornek.ts.net")
+
+    result = runner.invoke(app, ["doctor"])
+
+    assert result.exit_code == 0, result.output
+    assert "Web yazma şifresi" not in result.output

@@ -240,6 +240,22 @@ def test_sanal_wrapper_runs_like_the_sanal_service() -> None:
     assert loop[1].split() == SANAL_SECRETS
 
 
+DOCTOR_CREDENTIAL_BLOCK = (
+    'if [ "${1:-}" = doctor ] && [ -e /etc/finans/credstore/ft_web_password ]; then\n'
+    '  credentials+=(-p "LoadCredential=ft_web_password:/etc/finans/credstore/ft_web_password")\n'
+    "fi\n"
+)
+
+
+@pytest.mark.parametrize("wrapper", ["ft-finans", "ft-sanal"])
+def test_only_manual_doctor_sees_the_web_password_and_only_if_it_exists(wrapper: str) -> None:
+    """K-126: eksik dosya birimi başlatmazdı; yokluğunu doctor bildirir."""
+    text = (DEPLOY / wrapper).read_text(encoding="utf-8")
+
+    assert text.count(DOCTOR_CREDENTIAL_BLOCK) == 1
+    assert "ft_web_password" not in text.replace(DOCTOR_CREDENTIAL_BLOCK, "")
+
+
 WEB_HARDENING = {
     **HARDENING,
     # K-106
