@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_charts.html" import value_history %}
+{% from "_charts.html" import value_history, contribution_history %}
 {% block title %}Getiri · finans-takip{% endblock %}
 {% macro figure(item) -%}
   {% if item is none %}—
@@ -25,6 +25,7 @@
   <p class="note">Para ağırlıklı getiri alım ve satışların tarihini ve tutarını hesaba katar; bir yıldan kısa dönemde yıllığa çevrilmez.</p>
 
   {{ value_history(chart, "getiri-deger") }}
+  {{ contribution_history(contributions, "getiri-katki") }}
 
   <h2>Fon bazında</h2>
   <table class="cards">

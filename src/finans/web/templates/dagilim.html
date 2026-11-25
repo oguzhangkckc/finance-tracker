@@ -8,7 +8,7 @@
   {% if report.allocation_skipped %}
   <div class="notice warn" role="status">{{ icon("uyari") }}<p><strong>Dağılım hesaplanmadı; fiyatı eksik: {{ report.allocation_skipped | join(", ") }}.</strong> Fiyat gelince kendiliğinden hesaplanır.</p></div>
   {% elif report.allocation %}
-  {{ allocation(report.allocation, cls) }}
+  {{ allocation(report.allocation, cls, report.alerts) }}
   <table class="cards">
     <thead>
       <tr><th>Sınıf</th><th class="num">Değer</th><th class="num">Ağırlık</th><th class="num">Hedef</th><th class="num">Sapma</th></tr>

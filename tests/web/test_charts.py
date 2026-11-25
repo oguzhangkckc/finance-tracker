@@ -4,8 +4,9 @@ import re
 from datetime import date
 from decimal import Decimal
 
-from finans.application.history import ValuePoint
-from finans.web.svg import value_chart
+from finans.application.history import MonthContribution, ValuePoint
+from finans.domain.models import YearMonth
+from finans.web.svg import contribution_chart, value_chart
 
 D = Decimal
 
@@ -70,3 +71,44 @@ def test_a_single_point_or_a_flat_line_still_draws() -> None:
     assert _path(single, "line-value") == "M160.0 80.0"
     assert '<circle class="dot-value" cx="160.0" cy="80.0" r="3"/>' in single
     assert _path(flat, "line-value") == "M0.0 80.0 L320.0 80.0"
+
+
+def test_contribution_bars_show_the_plan_outlined_and_the_actual_filled() -> None:
+    # Ölçek 0 ile 2740,5 arası (en büyük 2610, %5 pay); y = 152 - v / 2740,5 × 144.
+    months = [
+        MonthContribution(YearMonth(2026, 9), D(0), D(1000)),
+        MonthContribution(YearMonth(2026, 10), D(500), D(1000)),
+        MonthContribution(YearMonth(2026, 11), D(2610), D(1000)),
+    ]
+
+    svg = str(contribution_chart(months, chart_id="katki", title="Katkı", description="Aylık"))
+
+    planned = re.findall(r'<rect class="bar-planned" ([^/]+)/>', svg)
+    actual = re.findall(r'<rect class="bar-actual" ([^/]+)/>', svg)
+    assert planned == [
+        'x="10.7" y="99.5" width="40.5" height="52.5"',
+        'x="117.3" y="99.5" width="40.5" height="52.5"',
+        'x="224.0" y="99.5" width="40.5" height="52.5"',
+    ]
+    assert actual == [
+        'x="55.5" y="152.0" width="40.5" height="0.0"',
+        'x="162.1" y="125.7" width="40.5" height="26.3"',
+        'x="268.8" y="14.9" width="40.5" height="137.1"',
+    ]
+    assert 'role="img" aria-labelledby="katki-baslik katki-aciklama"' in svg
+
+
+def test_a_month_of_net_selling_goes_below_the_line_and_no_plan_means_no_outline() -> None:
+    months = [
+        MonthContribution(YearMonth(2026, 10), D(-500), None),
+        MonthContribution(YearMonth(2026, 11), D(1500), None),
+    ]
+
+    svg = str(contribution_chart(months, chart_id="k", title="t", description="d"))
+
+    assert "bar-planned" not in svg
+    zero = re.search(r'<line class="baseline" x1="0" y1="([\d.]+)"', svg)
+    first = re.search(r'<rect class="bar-actual" x="[\d.]+" y="([\d.]+)"', svg)
+    assert zero is not None
+    assert first is not None
+    assert first.group(1) == zero.group(1)

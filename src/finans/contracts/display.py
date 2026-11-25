@@ -45,6 +45,14 @@ def points(deviation: Decimal) -> str:
     return f"{sign}{text} puan"
 
 
+def gap_text(deviation: Decimal) -> str:
+    """Hedefe uzaklık işaretsiz ve renksiz söylenir; fazla olmak kazanç değildir (K-129)."""
+    _, text = _digits(abs(deviation) * 100, 1)
+    if text == "0,0":
+        return "hedefte"
+    return f"{text} puan {'fazla' if deviation > 0 else 'eksik'}"
+
+
 def exact(value: Decimal) -> str:
     """Fiyat ve adet yuvarlanmadan, ondalık ayırıcı virgülle (ör. 12,83827)."""
     return canonical_text(value).replace(".", ",")

@@ -8,7 +8,12 @@ from decimal import Decimal
 from finans import bootstrap
 from finans.application.backup import BackupCheck, verify_backups
 from finans.application.doctor import Check
-from finans.application.history import ValuePoint, value_history
+from finans.application.history import (
+    MonthContribution,
+    ValuePoint,
+    monthly_contributions,
+    value_history,
+)
 from finans.application.price_refresh import RefreshStatus, refresh_status, request_refresh
 from finans.application.report import ReportKind, build_report, payday_plan
 from finans.contracts.display import class_label
@@ -222,3 +227,15 @@ def value_chart_view(settings: Settings, clock: Clock) -> ValueChart:
     )
     estimated = next((p.cpi_period for p in reversed(points) if p.estimated), None)
     return ValueChart(points, gap, estimated)
+
+
+CONTRIBUTION_MONTHS = 12
+
+
+def contribution_view(settings: Settings, clock: Clock) -> list[MonthContribution]:
+    """Planlanan katkı W2d'ye kadar portfolio.toml'dan (K-129)."""
+    planned = load_config(settings).monthly_contribution
+    with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+        return monthly_contributions(
+            uow, end=clock.today(), months=CONTRIBUTION_MONTHS, planned=planned
+        )

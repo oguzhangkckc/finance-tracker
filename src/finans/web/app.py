@@ -24,6 +24,7 @@ from finans.contracts.display import (
     class_label,
     day_label,
     exact,
+    gap_text,
     money,
     month_label,
     percent,
@@ -39,7 +40,7 @@ from finans.web.icons import icon
 from finans.web.lock import Attempt, WriteLock
 from finans.web.security import BodyLimitMiddleware, IdentityMiddleware, SecurityHeadersMiddleware
 from finans.web.session import SessionMiddleware, csrf_token
-from finans.web.svg import allocation_bar, value_chart
+from finans.web.svg import allocation_bar, contribution_chart, value_chart
 from finans.web.table import table
 from finans.web.tables import (
     ALERT_EVENTS,
@@ -57,6 +58,7 @@ from finans.web.views import (
     alert_event_rows,
     ask_for_refresh,
     class_names,
+    contribution_view,
     general_staleness,
     holding_rows,
     load_report,
@@ -144,7 +146,13 @@ def _environment() -> Environment:
         undefined=StrictUndefined,
     )
     env.filters.update(
-        money=money, percent=percent, points=points, exact=exact, entered=_entered, ay=month_label
+        money=money,
+        percent=percent,
+        points=points,
+        exact=exact,
+        entered=_entered,
+        ay=month_label,
+        sapma=gap_text,
     )
     env.globals.update(
         icon=icon,
@@ -183,7 +191,12 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
     lock = WriteLock(stored, time)
     assets = Assets(STATIC)
     templates = Jinja2Templates(env=_environment())
-    templates.env.globals.update(asset=assets.url, same_places=same_places, value_chart=value_chart)
+    templates.env.globals.update(
+        asset=assets.url,
+        same_places=same_places,
+        value_chart=value_chart,
+        contribution_chart=contribution_chart,
+    )
 
     def day(value: date | str, case: Case = "", year: bool | None = None) -> str:
         """Bugünün yılı uygulamanın saatinden; saatler her zaman İstanbul'a göre (K-99).
@@ -307,7 +320,11 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
             (
                 "/getiri",
                 "getiri.html",
-                lambda: {**report_context("monthly"), "chart": value_chart_view(conf, time)},
+                lambda: {
+                    **report_context("monthly"),
+                    "chart": value_chart_view(conf, time),
+                    "contributions": contribution_view(conf, time),
+                },
             ),
             ("/raporlar", "raporlar.html", lambda: {}),
             (

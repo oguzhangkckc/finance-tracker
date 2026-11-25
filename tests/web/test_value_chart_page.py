@@ -7,6 +7,7 @@ from decimal import Decimal
 
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.domain.models import PricePoint, Side, Transaction
+from finans.ports.repositories import AlertState
 from tests.support.web_writes import NOW, Site
 
 GAIN = "Değer, enflasyona göre güncellenmiş yatırımın 107,00 TL üstünde: reel kazanç."
@@ -63,3 +64,30 @@ def test_without_cpi_the_adjusted_line_is_missing_and_no_verdict_is_given(site: 
     assert "TÜFE yok" in page
     assert "reel kazanç" not in page
     assert "reel kayıp" not in page
+
+
+def test_returns_page_shows_twelve_months_of_contributions_against_the_plan(site: Site) -> None:
+    page = site.browser().get("/gercek/getiri").text
+
+    assert 'aria-labelledby="getiri-katki-baslik getiri-katki-aciklama"' in page
+    months = re.findall(r'<td data-label="Ay">([^<]+)</td>', page)
+    assert (len(months), months[0], months[-1]) == (12, "Aralık 2025", "Kasım 2026")
+    assert '<td data-label="Gerçekleşen" class="num">2.610,00 TL</td>' in page
+    assert page.count('<td data-label="Planlanan" class="num">1.000,00 TL</td>') == 12
+    assert page.count('<rect class="bar-planned"') == 12 + 1
+
+
+def test_a_class_with_an_open_alarm_is_amber_and_gaps_have_no_gain_colour(site: Site) -> None:
+    opened = datetime(2026, 11, 21, 15, 35, tzinfo=UTC)
+    with SqliteUnitOfWork(site.conf("real").db_path) as uow:
+        uow.allocation_state.end_quiet(date(2026, 11, 20))
+        uow.alerts.save(AlertState("drift:hisse", "below", opened, None, opened, "{}"))
+
+    page = site.browser().get("/gercek/dagilim").text
+
+    alloc = page[page.index('<div class="panel alloc">') : page.index("</div>\n  </div>")]
+    assert alloc.count("Alarm eşiği aşıldı") == 1
+    assert alloc.count('class="fill alarm"') == 1
+    assert "puan fazla" in alloc or "puan eksik" in alloc
+    assert 'class="gain"' not in alloc
+    assert 'class="loss"' not in alloc

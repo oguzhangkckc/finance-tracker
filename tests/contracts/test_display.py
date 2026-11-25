@@ -7,6 +7,7 @@ from finans.contracts.display import (
     class_label,
     day_label,
     exact,
+    gap_text,
     money,
     month_label,
     percent,
@@ -138,3 +139,13 @@ def test_compared_prices_share_the_larger_number_of_places(
     values: tuple[Decimal | None, ...], shown: tuple[str | None, ...]
 ) -> None:
     assert same_places(*values) == shown
+
+
+@pytest.mark.parametrize(
+    ("deviation", "text"),
+    [(D("0.028"), "2,8 puan fazla"), (D("-0.0615"), "6,2 puan eksik"), (D("0"), "hedefte")],
+)
+def test_a_gap_to_the_target_is_said_without_a_gain_or_loss_sign(
+    deviation: Decimal, text: str
+) -> None:
+    assert gap_text(deviation) == text

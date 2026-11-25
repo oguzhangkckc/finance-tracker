@@ -40,3 +40,31 @@
 </figure>
 {% endif %}
 {%- endmacro %}
+
+{% macro contribution_history(months, id) -%}
+{% if months %}
+<figure class="panel chart">
+  <figcaption>Katkı geçmişi</figcaption>
+  {{ contribution_chart(months, chart_id=id, title="Katkı geçmişi", description="Son " ~ (months | length) ~ " ayın net katkısı ve planlanan aylık katkı; " ~ (months[0].month | ay) ~ " ile " ~ (months[-1].month | ay) ~ " arası.") }}
+  <ul class="legend">
+    <li><svg class="key" viewBox="0 0 28 8" aria-hidden="true"><rect class="bar-planned" x="1" y="1" width="26" height="6"/></svg>Planlanan katkı</li>
+    <li><svg class="key" viewBox="0 0 28 8" aria-hidden="true"><rect class="bar-actual" x="1" y="1" width="26" height="6"/></svg>Gerçekleşen net katkı</li>
+  </ul>
+  <details>
+    <summary>Tablo olarak göster</summary>
+    <table class="cards">
+      <thead><tr><th>Ay</th><th class="num">Planlanan</th><th class="num">Gerçekleşen</th></tr></thead>
+      <tbody>
+        {% for month in months %}
+        <tr>
+          <td data-label="Ay">{{ month.month | ay }}</td>
+          <td data-label="Planlanan" class="num">{% if month.planned is not none %}{{ month.planned | money }}{% else %}tanımlı değil{% endif %}</td>
+          <td data-label="Gerçekleşen" class="num">{{ month.invested | money }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+</figure>
+{% endif %}
+{%- endmacro %}

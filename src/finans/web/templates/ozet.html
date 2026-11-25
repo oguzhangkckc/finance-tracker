@@ -40,7 +40,7 @@
 
   {% if report.allocation %}
   <h2>Dağılım <a class="more" href="{{ prefix }}/dagilim">Ayrıntı ›</a></h2>
-  {{ allocation(report.allocation, cls) }}
+  {{ allocation(report.allocation, cls, report.alerts) }}
   {% endif %}
   {% if report.quiet_period %}
   <p class="note">Portföy henüz küçük; sapma alarmları 3 aylık katkıya ulaşınca başlar.</p>
