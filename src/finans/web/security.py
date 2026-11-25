@@ -18,7 +18,9 @@ SECURITY_HEADERS: Final = {
     ),
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
-    "Referrer-Policy": "no-referrer",
+    # no-referrer'da tarayıcı form POST'una "Origin: null" yazar ve köken denetimi hep reddeder;
+    # same-origin dışarıya yine referrer göndermez.
+    "Referrer-Policy": "same-origin",
     "Cache-Control": "no-store",
 }
 
@@ -32,6 +34,13 @@ def display_name(raw: str | None) -> str | None:
     except (HeaderParseError, LookupError, UnicodeError, ValueError):
         return None
     return text or None
+
+
+def same_origin(headers: Headers, origin: str) -> bool:
+    """POST yalnızca bu kökenden: Origin ve Fetch Metadata birlikte (K-105, K-122)."""
+    return headers.getlist("origin") == [origin] and headers.getlist("sec-fetch-site") == [
+        "same-origin"
+    ]
 
 
 class IdentityMiddleware:

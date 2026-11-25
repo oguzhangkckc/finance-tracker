@@ -6,6 +6,7 @@ from datetime import date, timedelta
 from finans import bootstrap
 from finans.application.backup import BackupCheck, verify_backups
 from finans.application.doctor import Check
+from finans.application.price_refresh import RefreshStatus, refresh_status, request_refresh
 from finans.application.report import ReportKind, build_report, payday_plan
 from finans.contracts.report import Report
 from finans.domain.models import DomainError
@@ -94,6 +95,17 @@ def quiet_ended_on(settings: Settings) -> date | None:
 def transactions(settings: Settings) -> list[StoredTransaction]:
     with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
         return list(reversed(uow.transactions.list(include_voided=True)))
+
+
+def refresh_view(settings: Settings, clock: Clock) -> RefreshStatus:
+    with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+        return refresh_status(uow, bootstrap.refresh_requests(settings), now=clock.now())
+
+
+def ask_for_refresh(settings: Settings, clock: Clock) -> RefreshStatus:
+    """Web fiyat çekmez; istek dosyası bırakır, işi systemd başlatır (K-106, K-123)."""
+    with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+        return request_refresh(uow, bootstrap.refresh_requests(settings), now=clock.now())
 
 
 def system_view(settings: Settings, clock: Clock) -> SystemView:

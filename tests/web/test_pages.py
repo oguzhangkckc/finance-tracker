@@ -69,6 +69,7 @@ def _client(
         portfolio_path=portfolio,
         web_allowed_login="kisi@example.com",
         web_origin="https://cihaz.ornek.ts.net",
+        web_session_key="k" * 64,
         **extra,  # type: ignore[arg-type]
     )
     return WebClient(create_app(settings, clock=clock))
@@ -190,6 +191,7 @@ def test_a_missing_portfolio_shows_an_error_page(migrated_db: Path) -> None:
         db_path=migrated_db,
         web_allowed_login="kisi@example.com",
         web_origin="https://cihaz.ornek.ts.net",
+        web_session_key="k" * 64,
     )
 
     response = WebClient(create_app(settings, clock=SUNDAY_EVENING)).get("/", headers=ME)

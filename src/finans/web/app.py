@@ -1,13 +1,16 @@
-"""finans-web uygulaması; sayfalar salt okunur, kimlik ve başlıklar middleware'de (K-101…K-106)."""
+"""finans-web uygulaması; tek yazma fiyat güncelleme isteğidir (K-101…K-106, K-122)."""
 
 from collections.abc import Callable
 from datetime import datetime
+from typing import Final
+from urllib.parse import parse_qs
 
 from jinja2 import Environment, PackageLoader, StrictUndefined
 from starlette.applications import Starlette
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware import Middleware
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import PlainTextResponse, RedirectResponse, Response
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
@@ -18,14 +21,22 @@ from finans.contracts.display import exact, money, percent, points
 from finans.contracts.report import SANAL_NOTICE
 from finans.ports.clock import BUSINESS_TZ, Clock
 from finans.settings import Settings
-from finans.web.security import BodyLimitMiddleware, IdentityMiddleware, SecurityHeadersMiddleware
+from finans.web.security import (
+    BodyLimitMiddleware,
+    IdentityMiddleware,
+    SecurityHeadersMiddleware,
+    same_origin,
+)
+from finans.web.session import CSRF_FIELD, SessionMiddleware, csrf_token, valid_csrf
 from finans.web.views import (
     PAGE_ERRORS,
     PageError,
+    ask_for_refresh,
     general_staleness,
     load_report,
     payday_text,
     quiet_ended_on,
+    refresh_view,
     report_text,
     stale_by_instrument,
     system_view,
@@ -42,6 +53,15 @@ NAV = (
     ("/islemler", "İşlemler"),
     ("/sistem", "Sistem"),
 )
+MIN_SESSION_KEY: Final = 32
+REFUSED: Final = "İstek reddedildi."
+# Yönlendirmede yalnız sabit bir anahtar taşınır; metin sayfaya istekten yansımaz.
+NOTICES: Final = {
+    "alindi": (
+        "Güncelleme isteği alındı; fiyat işi birkaç dakika içinde çalışır. "
+        "Bugünün fiyatları zaten tamamsa TEFAS'a istek atılmaz."
+    ),
+}
 
 
 class WebSetupError(Exception):
@@ -68,6 +88,14 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
         raise WebSetupError(
             "FT_WEB_ALLOWED_LOGIN ve FT_WEB_ORIGIN tanımlı olmalı; web arayüzü başlamaz (K-123)."
         )
+    secret = settings.web_session_key
+    key = secret.get_secret_value().encode() if secret is not None else b""
+    if len(key) < MIN_SESSION_KEY:
+        raise WebSetupError(
+            f"ft_web_session_key tanımlı ve en az {MIN_SESSION_KEY} karakter olmalı; "
+            "web arayüzü başlamaz (K-123)."
+        )
+    origin = settings.web_origin.rstrip("/")
     time = clock or bootstrap.system_clock()
     templates = Jinja2Templates(env=_environment())
 
@@ -83,6 +111,8 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
                 "viewer": request.state.display_name or settings.web_allowed_login,
                 "nav": NAV,
                 "path": request.url.path,
+                "csrf": csrf_token(key, request.state.session),
+                "notice": NOTICES.get(request.query_params.get("istek", "")),
                 **context,
             },
             status_code=status,
@@ -111,7 +141,11 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
         return lambda: {"title": title, "text": load()}
 
     pages: list[tuple[str, str, Callable[[], dict[str, object]]]] = [
-        ("/", "ozet.html", lambda: report_context("weekly")),
+        (
+            "/",
+            "ozet.html",
+            lambda: {**report_context("weekly"), "refresh": refresh_view(settings, time)},
+        ),
         # Lotlar ve para ağırlıklı getiri yalnızca aylık raporda.
         ("/varliklar", "varliklar.html", lambda: report_context("monthly")),
         ("/dagilim", "dagilim.html", lambda: report_context("weekly")),
@@ -141,14 +175,36 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
         ("/sistem", "sistem.html", lambda: {"system": system_view(settings, time)}),
     ]
 
+    async def refresh(request: Request) -> Response:
+        if not same_origin(request.headers, origin):
+            return PlainTextResponse(REFUSED, status_code=403)
+        try:
+            form = parse_qs((await request.body()).decode("ascii"), max_num_fields=4)
+        except ValueError:
+            return PlainTextResponse("Form okunamadı.", status_code=400)
+        tokens = form.get(CSRF_FIELD, [])
+        if len(tokens) != 1 or not valid_csrf(key, request.state.session, tokens[0]):
+            return PlainTextResponse(REFUSED, status_code=403)
+        try:
+            status = await run_in_threadpool(ask_for_refresh, settings, time)
+        except (PageError, *PAGE_ERRORS) as exc:
+            return page(request, "hata.html", {"message": str(exc)}, status=503)
+        except OSError:
+            message = "Güncelleme isteği yazılamadı; /sistem sayfasına bakın."
+            return page(request, "hata.html", {"message": message}, status=503)
+        target = "/?istek=alindi" if status.decision.allowed else "/"
+        return RedirectResponse(target, status_code=303)
+
     return Starlette(
         routes=[
             *(Route(path, view(name, load), methods=["GET"]) for path, name, load in pages),
+            Route("/fiyat-guncelle", refresh, methods=["POST"]),
             Mount("/static", StaticFiles(packages=[("finans.web", "static")]), name="static"),
         ],
         middleware=[
             Middleware(SecurityHeadersMiddleware),
             Middleware(IdentityMiddleware, allowed_login=settings.web_allowed_login),
             Middleware(BodyLimitMiddleware),
+            Middleware(SessionMiddleware, key=key),
         ],
     )

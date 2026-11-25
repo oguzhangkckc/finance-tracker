@@ -16,6 +16,7 @@ from tests.support.web_client import WebClient
 
 LOGIN = "kisi@example.com"
 ORIGIN = "https://cihaz.ornek.ts.net"
+SESSION_KEY = "k" * 64
 ME = {"Tailscale-User-Login": LOGIN}
 # Hayali ad: ğ, ö ve ç içerir; Tailscale bu başlığı RFC 2047 ile kodlar.
 NAME = "Gökçe Doğan"
@@ -42,6 +43,7 @@ def _settings(tmp_path: Path, **extra: object) -> Settings:
         "portfolio_path": portfolio,
         "web_allowed_login": LOGIN,
         "web_origin": ORIGIN,
+        "web_session_key": SESSION_KEY,
         **extra,
     }
     return Settings(**values)  # type: ignore[arg-type]
@@ -160,6 +162,14 @@ def test_the_app_does_not_start_without_login_or_origin(tmp_path: Path, missing:
         create_app(_settings(tmp_path, **{missing: ""}))
 
 
+@pytest.mark.parametrize("key", [None, "", "k" * 31])
+def test_the_app_does_not_start_without_a_strong_session_key(
+    tmp_path: Path, key: str | None
+) -> None:
+    with pytest.raises(WebSetupError, match="ft_web_session_key tanımlı ve en az 32 karakter"):
+        create_app(_settings(tmp_path, web_session_key=key))
+
+
 @pytest.fixture
 def _restore_logging() -> Iterator[None]:
     root = logging.getLogger()
@@ -188,6 +198,7 @@ def test_main_serves_only_on_the_owner_only_unix_socket(
             "FT_DB_PATH": str(tmp_path / "finans.db"),
             "FT_WEB_ALLOWED_LOGIN": LOGIN,
             "FT_WEB_ORIGIN": ORIGIN,
+            "FT_WEB_SESSION_KEY": SESSION_KEY,
             "FT_WEB_SOCKET": str(path),
         }.items():
             monkeypatch.setenv(name, value)

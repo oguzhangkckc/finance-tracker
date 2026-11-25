@@ -48,5 +48,15 @@
   {% if report.alerts %}
   <p><a class="button" href="/dagilim">Açık sapma alarmı: {{ report.alerts | length }}</a></p>
   {% endif %}
+  <h2>Fiyatlar</h2>
   <p class="note">Fonların günde bir fiyatı vardır; gösterilen, açıklanmış son fiyattır ve günüyle yazılır.</p>
+  <p class="muted">Son fiyat güncellemesi: {% if refresh.last_sync is not none %}{{ refresh.last_sync | local }}{% else %}son iki günde yok{% endif %}</p>
+  {% if refresh.decision.allowed %}
+  <form method="post" action="/fiyat-guncelle">
+    <input type="hidden" name="belirtec" value="{{ csrf }}">
+    <button class="button" type="submit">Fiyatları güncelle</button>
+  </form>
+  {% else %}
+  <p class="note">Elle güncelleme şu an kapalı: {{ refresh.decision.reason }}.{% if refresh.decision.earliest is not none %} En erken {{ refresh.decision.earliest | local }}.{% endif %}</p>
+  {% endif %}
 {% endblock %}

@@ -75,6 +75,15 @@ nav a[aria-current="page"] { background: var(--surface); font-weight: 600; }
 
 .button { border: 1px solid var(--line); background: var(--surface); }
 
+button.button { font: inherit; cursor: pointer; }
+
+.notice {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--surface);
+}
+
 .viewer, .muted { color: var(--muted); }
 
 .small { font-size: 0.9rem; }
