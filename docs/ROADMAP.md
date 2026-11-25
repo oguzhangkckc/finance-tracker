@@ -35,7 +35,8 @@ Not: `txn.unit_price_scale` (migration 0003): girilen fiyatın basamak sayısı 
 Not: `make live` EVDS canlı smoke testini çalıştırır; haftalık timer M4'te. `ft doctor` son fiyat tarihlerini ve bayatlığı gösterir.
 Kabul kapısı: Bir ay canlı veri; elle tutulan tabloyla mutabakat ±0,01 TL/kalem.
 Not: "Bir ay canlı veri" fiyat ve TÜFE akışıyla izlenebilir; mutabakat gerçek aracı kurum ekstresi gerektirir ve sanal portföyle geçilmez (K-112).
-Kabul süresi: "bir ay canlı veri" 2026-11-25 – 2026-12-25 (sanal `sync-prices`'ın ilk zamanlanmış çalışması 2026-11-25 12:15). Elle tutulan tabloyla mutabakat ilk gerçek aracı kurum ekstresini bekliyor.
+Kabul süresi (ilk): "bir ay canlı veri" 2026-11-25 – 2026-12-25 (sanal `sync-prices`'ın ilk zamanlanmış çalışması 2026-11-25 12:15); toplu kurulum nedeniyle yeniden başlatıldı.
+Kabul süresi (yeni): 2026-11-25 – 2026-12-25. Başlangıç toplu kurulumun bittiği an (16:46, `a008fc3`); yeni kodla ilk zamanlanmış sanal `sync-prices` 2026-11-25 21:45. Elle tutulan tabloyla mutabakat ilk gerçek aracı kurum ekstresini bekliyor.
 
 ## M4 · Rapor ve bildirim (ilk kullanılabilir sürüm)
 Report modeli, metin ve JSON render, aylık raporda XIRR ve yalnızca katkıyla dengeleme, Telegram (rapor botu), uyarı tekilleştirme; systemd timer'ları, job_run, dead man's switch, yedekleme.
@@ -43,10 +44,11 @@ Geliştirme kapısı: Snapshot ve iş testleri yeşil; zamanlayıcılar test ort
 Kapının kanıtı: uçtan uca rapor snapshot'ları `tests/e2e`; iş yürütücü `tests/application/test_jobs.py`; birim dosyaları `tests/deploy` ve CI'daki `units` işi (`deploy/check-units.sh`, systemd-analyze calendar ve verify).
 Kabul kapısı: İki hafta kesintisiz ve doğru rapor; süre, cihazda bütün zamanlayıcıların açıldığı gün başlar.
 Kurulum durumu (2026-11-24): cihaz kuruldu; `ft doctor` fiyatlar dışında yeşil; `backup` ve `sync-cpi` zamanlayıcıları açık; ilk yedek Mac'e çekildi ve geri yükleme testi geçti.
-Kabul süresi (sanal portföy, K-112): 2026-11-24 – 2026-12-08. İlk sanal alımlar 2026-11-24'te girildi; altı sanal zamanlayıcı da açık. Süre içinde haftalık rapor 2026-11-29 ve 2026-12-06'da, aylık rapor 2026-12-05 ile 10 arasında. Gerçek `sync-prices`, `weekly-report`, `monthly-report` ve `payday` gerçek alımlar başlayınca açılır (K-121).
+Kabul süresi (ilk, sanal portföy, K-112): 2026-11-24 – 2026-12-08; toplu kurulum nedeniyle yeniden başlatıldı.
+Kabul süresi (yeni, sanal portföy, K-112): 2026-11-25 – 2026-12-09. Toplu kurulum 2026-11-25 16:46'da bitti (`a008fc3`); altı sanal ve iki gerçek zamanlayıcı yeni kodla yeniden açıldı. Süre içinde haftalık rapor 2026-11-29 ve 2026-12-06'da, aylık rapor 2026-12-05 ile 10 arasında. Gerçek `sync-prices`, `weekly-report`, `monthly-report` ve `payday` gerçek alımlar başlayınca açılır (K-121).
 Not: M4 kabulü sanal portföyle şartlı geçilebilir: sanal timer'lar iki hafta açık ve raporlar zamanında, raporlar aynı sanal işlemlerle elle tutulan tabloyla mutabık, gerçek profilin yedek ping'i hiç kaçmamış; gerçek işlemler başlayınca ilk rapor ping'i ayrıca doğrulanır (K-112).
 M4 kabul süresinde yapılan değişiklik (2026-11-25, `2a6383f`): Pi #15'ten #18'e güncellendi. Rapor üretimi ve renderer kodu değişmedi; yeni olanlar web servisi ve `sync-prices`'a eklenen `--bugun`. #17 iki değişiklik getirdi: veri kalitesi denetimi raporun gününe kadarki işlemlere bakar (geçmiş tarihli raporları düzeltir); sanal önizlemede payı 0 çıkan fon görünür. Kurulumdan hemen sonra iki profilde `doctor` ve `job list` kontrol edildi. Zamanlanmış bir iş bu güncelleme yüzünden bozulursa kabul süresi düzeltme gününden yeniden başlar.
-Toplu kurulumla gelecek düzeltme: alarm teslimi outbox desenine geçer; Telegram'a gönderim sırasında veritabanı işlemi açık tutulmaz (K-131). Rapor ve alarm davranışına dokunduğu için kurulumdan sonra M4 kabul süresi yeniden başlar (bkz. W2, toplu kurulum).
+Toplu kurulumla gelen düzeltme (2026-11-25): alarm teslimi outbox desenine geçti; Telegram'a gönderim sırasında veritabanı işlemi açık tutulmaz (K-131). Rapor ve alarm davranışına dokunduğu için M4 kabul süresi kurulum günü yeniden başladı (bkz. W2, toplu kurulum).
 İlk commit (M3 düzeltmeleri): mutabakatta adet farkı son 5 işlem gününde girilmiş tek bir işlemle eşleşiyorsa "olası valör farkı" gösterilir (K-79).
 Not: Para ağırlıklı getirinin kökü [−0,99; 10] dışındaysa (alt ya da üst) rapor basit getiriyi ve "Zamanlama nedeniyle para ağırlıklı getiri anlamlı değil." notunu gösterir; domain sonuç türü bu durumu "hesaplanamadı"dan ayırır (K-44).
 Not: Katkı tanımlı değilse aylık raporun dengeleme bölümü "Katkı tanımlı değil." yazar, sıfırlarla dolu öneri göstermez; eksik `[contribution]` 0 yerine "tanımlı değil" okunur (K-56).
@@ -92,7 +94,7 @@ Toplu kurulum (2026-11-25 kararı): kurulumlar kabul sürelerine göre bölünme
 - `ft_web_password`, `finans-web` yeniden başlatılmadan önce oluşturulur.
 - `portfolio.toml`'u Pi'ye kopyala (yerel kurulum kılavuzu Adım 8'deki gibi), sha256 karşılaştır. `config apply`'dan önce yapılır: ayarların başlangıç sürümü bu dosyadan yazılır.
 - İki profilde `ft db migrate` (0005, 0006) ve ardından `ft config apply`: ayarların başlangıç sürümü `portfolio.toml`'dan yazılır (K-127); `doctor` "Ayarlar: başlangıç sürümü (portfolio.toml)" gösterir.
-Kabul süreleri: M3 ve M4 kurulumun bittiği gün yeniden başlar. Mevcut sürelerin "toplu kurulum nedeniyle yeniden başlatıldı" notuyla kapatılması ve yeni tarihler kurulumdan sonra ayrı, küçük bir PR'dır.
+Kurulum 2026-11-25'te yapıldı: Pi `2a6383f`'ten `a008fc3`'e geçti; iki profilde migration 0005 ve 0006 ile `config apply` uygulandı; servisler 16:46'da yeni kodla açıldı. Değer geçmişinin Pi'deki hesabı ölçüldü (Özet ve Getiri 0,11 sn'nin altında); önbellek gerekmiyor. M3 ve M4 kabul süreleri kurulum günü yeniden başladı (bkz. M3, M4).
 
 ### W2a · Tasarım sistemi ve iskelet
 Renk belirteçleri (gerçek profil Petrol, sanal profil Mürdüm), sistem yazı tipi ve ölçek, bileşenler; statik dosyalar içerik özetli adla ve uzun önbellekle; iki profil tek serviste `/gercek/` ve `/sanal/`; sınıf adları `[sinif_adlari]`; mevcut sayfalar yeni düzende; boş ve hata durumları (K-125, K-128).
