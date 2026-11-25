@@ -9,14 +9,14 @@
   {% set action = prefix ~ "/varliklar" %}
   {{ tools(view, action, "Fon kodu") }}
   {% if view.rows %}
-  <table class="cards">
+  <table class="cards" id="tablo">
     <thead>
       <tr>{{ th(view, "fon", "Fon") }}{{ th(view, "sinif", "Sınıf") }}{{ th(view, "adet", "Adet", num=true) }}{{ th(view, "maliyet", "Maliyet", num=true) }}{{ th(view, "deger", "Değer", num=true) }}{{ th(view, "getiri", "Basit getiri", num=true) }}<th>Fiyat</th><th><span class="sr">Lotlar</span></th></tr>
     </thead>
     <tbody>
       {% for row in view.rows %}
       {% set holding = row.line %}
-      <tr>
+      <tr data-ara="{{ view.spec.search(row) }}">
         <td data-label="Fon"><strong>{{ holding.instrument }}</strong></td>
         <td data-label="Sınıf">{{ row.class_name }}{% if not holding.allocation %} · dağılım dışı{% endif %}</td>
         <td data-label="Adet" class="num">{{ holding.units | exact }}</td>

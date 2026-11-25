@@ -17,7 +17,7 @@
   {% set action = prefix ~ "/islemler" %}
   {{ tools(view, action, "Fon kodu, dekont no ya da not") }}
   {% if view.rows %}
-  <table class="cards">
+  <table class="cards" id="tablo">
     <thead>
       <tr>{{ th(view, "no", "#") }}{{ th(view, "tarih", "Tarih") }}{{ th(view, "fon", "Fon") }}{{ th(view, "tur", "Tür") }}{{ th(view, "adet", "Adet", num=true) }}<th class="num">Fiyat</th>{{ th(view, "tutar", "Tutar", num=true) }}<th class="num">Komisyon</th><th>Not</th>{% if writable %}<th><span class="sr">İşlem</span></th>{% endif %}</tr>
     </thead>
@@ -25,7 +25,7 @@
       {% for row in view.rows %}
       {% set stored = row.stored %}
       {% set tx = stored.transaction %}
-      <tr{% if stored.voided_at %} class="voided"{% endif %}>
+      <tr data-ara="{{ view.spec.search(row) }}"{% if stored.voided_at %} class="voided"{% endif %}>
         <td data-label="#">{{ stored.id }}</td>
         <td data-label="Tarih">{{ tx.trade_date | gun }}</td>
         <td data-label="Fon"><strong>{{ tx.instrument }}</strong>{% if row.class_name %} <span class="muted">{{ row.class_name }}</span>{% endif %}</td>

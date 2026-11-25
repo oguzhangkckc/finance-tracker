@@ -100,6 +100,9 @@ h2 { margin: 28px 0 10px; font-size: 1.125rem; font-weight: 650; }
 
 .skip:focus { top: 8px; }
 
+/* app.js satırları ve notları hidden ile gizler; kart düzenindeki display bunu ezmesin. */
+[hidden] { display: none !important; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }

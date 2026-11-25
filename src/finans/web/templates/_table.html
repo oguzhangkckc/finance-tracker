@@ -5,12 +5,13 @@
     {% if view.spec.search %}
     <div class="field">
       <label for="ara">Ara</label>
-      <input id="ara" name="ara" type="search" value="{{ view.value('ara') }}" placeholder="{{ search_hint }}" autocomplete="off">
+      <input id="ara" name="ara" type="search" value="{{ view.value('ara') }}" placeholder="{{ search_hint }}" autocomplete="off" data-suz="tablo" aria-describedby="ara-ipucu">
+      <p class="hint" id="ara-ipucu" hidden>Bu sayfada süzülüyor; tüm kayıtlarda aramak için Enter.</p>
     </div>
     {% endif %}
     <div class="field">
       <label for="siralama">Sırala</label>
-      <select id="siralama" name="siralama">
+      <select id="siralama" name="siralama" data-otomatik>
         {% for value, label, selected in view.sort_choices %}
         <option value="{{ value }}"{% if selected %} selected{% endif %}>{{ label }}</option>
         {% endfor %}
@@ -51,6 +52,9 @@
 {% endif %}
 {% if view.misunderstood %}
 <p class="note">Filtre anlaşılmadı: {{ view.misunderstood }}. Yok sayıldı.</p>
+{% endif %}
+{% if view.spec.search %}
+<p class="note" id="ara-bos" role="status" hidden>Bu sayfada eşleşen satır yok; tüm kayıtlarda aramak için Enter.</p>
 {% endif %}
 {%- endmacro %}
 

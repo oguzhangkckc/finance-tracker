@@ -17,7 +17,7 @@ from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.domain.models import Side, Transaction
 from finans.settings import Profile
 from tests.support import report_scenario as scenario
-from tests.support.web_browser import HIDDEN, hidden_fields
+from tests.support.web_browser import HIDDEN, hidden_fields, only_app_script
 from tests.support.web_writes import (
     GERCEK,
     NOW,
@@ -394,7 +394,7 @@ def test_write_pages_keep_the_page_rules(site: Site, path: str) -> None:
 
     assert page.count("<h1") == 1
     assert "style=" not in page
-    assert "<script" not in page
+    assert only_app_script(page)
     for field in re.findall(r'<(?:input|select|textarea) id="([^"]+)"', page):
         assert f'<label for="{field}">' in page
 

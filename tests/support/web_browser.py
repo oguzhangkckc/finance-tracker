@@ -73,3 +73,20 @@ def hidden_fields(html: str, action: str) -> dict[str, str]:
     start = html.index(f'action="{action}"')
     form = html[start : html.index("</form>", start)]
     return {name: value for name, value in HIDDEN.findall(form) if name != "belirtec"}
+
+
+_SCRIPT_TAG = re.compile(r"<script\b[^>]*>(.*?)</script>", re.S)
+_APP_SCRIPT = re.compile(r'<script src="/static/app\.[0-9a-f]{12}\.js" defer>')
+_HANDLER = re.compile(r"\son[a-z]+=")
+
+
+def only_app_script(page: str) -> bool:
+    """CSP script-src 'self' (K-129): yalnız özetli app.js; satır içi betik ve olay işleyici yok."""
+    tags = re.findall(r"<script\b[^>]*>", page)
+    bodies = _SCRIPT_TAG.findall(page)
+    return (
+        len(tags) == 1
+        and _APP_SCRIPT.fullmatch(tags[0]) is not None
+        and all(not body.strip() for body in bodies)
+        and _HANDLER.search(page) is None
+    )

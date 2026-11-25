@@ -8,6 +8,7 @@ import pytest
 
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.domain.models import Side, Transaction
+from tests.support.web_browser import only_app_script
 from tests.support.web_writes import NOW, REAL_BUY, Site, post_confirm, post_preview
 
 PAGE = "/gercek/islemler"
@@ -33,7 +34,7 @@ def test_the_default_is_newest_first_with_amounts_and_class_names(site: Site) ->
     assert '<th aria-sort="descending"><a href="?sirala=tarih&amp;yon=artan">Tarih' in page
     assert '<td data-label="Tutar" class="num">1.000,00 TL</td>' in page
     assert '<strong>XPP</strong> <span class="muted">Düşük risk</span>' in page
-    assert "<script" not in page
+    assert only_app_script(page)
 
 
 @pytest.mark.parametrize(
