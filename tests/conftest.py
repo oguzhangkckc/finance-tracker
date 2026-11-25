@@ -26,29 +26,12 @@ def _network_blocked(*_args: object, **_kwargs: object) -> NoReturn:
     )
 
 
-_CONNECT = socket.socket.connect
-_CONNECT_EX = socket.socket.connect_ex
-
-
-def _local_connect(self: socket.socket, address: object) -> None:
-    """Unix soketi ağ değil, yerel süreçler arası iletişim (ör. deploy'un web soketi denetimi)."""
-    if self.family != socket.AF_UNIX:
-        _network_blocked()
-    _CONNECT(self, address)  # type: ignore[arg-type]
-
-
-def _local_connect_ex(self: socket.socket, address: object) -> int:
-    if self.family != socket.AF_UNIX:
-        _network_blocked()
-    return _CONNECT_EX(self, address)  # type: ignore[arg-type]
-
-
 @pytest.fixture(autouse=True)
 def _no_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
     if request.node.get_closest_marker("live") is not None:
         return
-    monkeypatch.setattr(socket.socket, "connect", _local_connect)
-    monkeypatch.setattr(socket.socket, "connect_ex", _local_connect_ex)
+    monkeypatch.setattr(socket.socket, "connect", _network_blocked)
+    monkeypatch.setattr(socket.socket, "connect_ex", _network_blocked)
     monkeypatch.setattr(socket, "create_connection", _network_blocked)
     monkeypatch.setattr(socket, "getaddrinfo", _network_blocked)
 
