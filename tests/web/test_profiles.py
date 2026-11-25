@@ -1,73 +1,29 @@
 import re
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
-from finans import bootstrap
-from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
-from finans.settings import Settings, profile_settings
-from finans.web.app import create_app
-from tests.fakes.clock import FixedClock
-from tests.support import report_scenario as scenario
-from tests.support.web_client import WebClient
-from tests.web.test_pages import PORTFOLIO
+from finans.settings import Settings
+from tests.support.web_profiles import ME, ORIGIN, PAGES, two_profiles, web
 
-LOGIN = "kisi@example.com"
-ORIGIN = "https://cihaz.ornek.ts.net"
-ME = {"Tailscale-User-Login": LOGIN}
-# İstanbul'da Çarşamba 12:30: elle güncelleme açık.
-NOW = FixedClock(datetime(2026, 11, 25, 9, 30, tzinfo=UTC))
-PAGES = (
-    "/",
-    "/varliklar",
-    "/dagilim",
-    "/getiri",
-    "/raporlar",
-    "/raporlar/haftalik",
-    "/raporlar/aylik",
-    "/raporlar/maas-gunu",
-    "/alarmlar",
-    "/islemler",
-    "/sistem",
-)
 TOKEN = re.compile(r'name="belirtec" value="([0-9a-f]{64})"')
 
 
 @pytest.fixture
 def base(tmp_path: Path, migrated_db: Path) -> Settings:
-    """Gerçek veritabanında senaryonun işlemleri var; sanal veritabanı boş."""
-    scenario.seed(migrated_db)
-    portfolio = tmp_path / "portfolio.toml"
-    portfolio.write_text(PORTFOLIO, encoding="utf-8")
-    settings = Settings(
-        db_path=migrated_db,
-        portfolio_path=portfolio,
-        web_allowed_login=LOGIN,
-        web_origin=ORIGIN,
-        web_session_key="k" * 64,
-    )
-    sanal = profile_settings(settings)["sanal"]
-    bootstrap.sanal_init(sanal, NOW)
-    with SqliteUnitOfWork(sanal.db_path, sanal=True) as uow:
-        uow.instruments.sync(list(scenario.CONFIG.instruments))
-    return settings
-
-
-def _client(settings: Settings) -> WebClient:
-    return WebClient(create_app(settings, clock=NOW))
+    return two_profiles(tmp_path, migrated_db)
 
 
 @pytest.mark.parametrize(("opening", "target"), [("real", "/gercek/"), ("sanal", "/sanal/")])
 def test_root_goes_to_the_opening_profile(base: Settings, opening: str, target: str) -> None:
-    response = _client(base.model_copy(update={"profile": opening})).get("/", headers=ME)
+    response = web(base.model_copy(update={"profile": opening})).get("/", headers=ME)
 
     assert response.status_code == 307
     assert response.headers["location"] == target
 
 
 def test_each_prefix_reads_its_own_database(base: Settings) -> None:
-    client = _client(base)
+    client = web(base)
 
     real = client.get("/gercek/islemler", headers=ME).text
     sanal = client.get("/sanal/islemler", headers=ME).text
@@ -82,7 +38,7 @@ def test_each_prefix_reads_its_own_database(base: Settings) -> None:
 def test_every_page_carries_its_profile_and_only_sanal_has_the_band(
     base: Settings, slug: str, profile: str
 ) -> None:
-    client = _client(base)
+    client = web(base)
 
     for path in PAGES:
         page = client.get(f"/{slug}{path}", headers=ME)
@@ -92,25 +48,28 @@ def test_every_page_carries_its_profile_and_only_sanal_has_the_band(
 
 
 def test_the_profile_switch_keeps_the_page_and_links_stay_in_the_profile(base: Settings) -> None:
-    page = _client(base).get("/gercek/varliklar", headers=ME).text
+    page = web(base).get("/gercek/varliklar", headers=ME).text
 
     assert '<a href="/gercek/varliklar" aria-current="page">Gerçek</a>' in page
     assert '<a href="/sanal/varliklar">Sanal</a>' in page
-    assert '<a href="/gercek/varliklar" aria-current="page">Varlıklar</a>' in page
+    current = (
+        r'<a href="/gercek/varliklar" aria-current="page"><svg[^>]*>.*?</svg><span>Varlıklar</span>'
+    )
+    assert len(re.findall(current, page, re.S)) == 2  # yan menü ve alt sekme
     assert 'href="/gercek/dagilim"' in page
     assert 'href="/sanal/dagilim"' not in page
 
 
 @pytest.mark.parametrize("path", ["/baska/", "/varliklar", "/gercek/yok"])
 def test_unknown_prefixes_and_unprefixed_pages_are_not_found(base: Settings, path: str) -> None:
-    assert _client(base).get(path, headers=ME).status_code == 404
+    assert web(base).get(path, headers=ME).status_code == 404
 
 
 @pytest.mark.parametrize(("slug", "profile"), [("gercek", "real"), ("sanal", "sanal")])
 def test_a_refresh_request_goes_to_the_profile_of_the_page(
     base: Settings, slug: str, profile: str
 ) -> None:
-    client = _client(base)
+    client = web(base)
     page = client.get(f"/{slug}/", headers=ME)
     match = TOKEN.search(page.text)
     assert match is not None

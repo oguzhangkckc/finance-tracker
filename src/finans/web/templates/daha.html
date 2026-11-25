@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Daha fazla · finans-takip{% endblock %}
+{% block content %}
+  <h1>Daha fazla</h1>
+  <ul class="menu panel">
+    {% for href, label, name in more %}
+    <li><a href="{{ prefix }}{{ href }}">{{ icon(name) }}<span>{{ label }}</span></a></li>
+    {% endfor %}
+  </ul>
+{% endblock %}

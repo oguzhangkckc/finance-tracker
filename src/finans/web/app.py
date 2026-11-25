@@ -23,6 +23,7 @@ from finans.contracts.report import SANAL_NOTICE
 from finans.ports.clock import BUSINESS_TZ, Clock
 from finans.settings import PROFILES, Profile, Settings, profile_settings
 from finans.web.assets import Assets
+from finans.web.icons import icon
 from finans.web.security import (
     BodyLimitMiddleware,
     IdentityMiddleware,
@@ -45,16 +46,19 @@ from finans.web.views import (
     transactions,
 )
 
-NAV = (
-    ("/", "Özet"),
-    ("/varliklar", "Varlıklar"),
-    ("/dagilim", "Dağılım"),
-    ("/getiri", "Getiri"),
-    ("/raporlar", "Raporlar"),
-    ("/alarmlar", "Alarmlar"),
-    ("/islemler", "İşlemler"),
-    ("/sistem", "Sistem"),
+NAV: Final = (
+    ("/", "Özet", "ozet"),
+    ("/varliklar", "Varlıklar", "varliklar"),
+    ("/islemler", "İşlemler", "islemler"),
+    ("/dagilim", "Dağılım", "dagilim"),
+    ("/getiri", "Getiri", "getiri"),
+    ("/raporlar", "Raporlar", "raporlar"),
+    ("/alarmlar", "Alarmlar", "alarmlar"),
+    ("/sistem", "Sistem", "sistem"),
 )
+# Telefonda alt sekmeler; geri kalanlar "Daha fazla" sayfasında (K-128).
+TABS: Final = (*NAV[:3], NAV[5], ("/daha", "Daha fazla", "daha"))
+MORE: Final = tuple(item for item in NAV if item not in TABS)
 STATIC: Final = Path(__file__).parent / "static"
 SLUGS: Final[dict[Profile, str]] = {"real": "gercek", "sanal": "sanal"}
 PROFILE_LABELS: Final[dict[Profile, str]] = {"real": "Gerçek", "sanal": "Sanal"}
@@ -78,6 +82,17 @@ def _local(moment: datetime) -> str:
     return f"{moment.astimezone(BUSINESS_TZ):%Y-%m-%d %H:%M}"
 
 
+def _is_current(href: str, subpath: str) -> bool:
+    """Alt sayfa (ör. /raporlar/aylik) üst menü öğesini de seçili yapar."""
+    return href == subpath or (href != "/" and subpath.startswith(f"{href}/"))
+
+
+def _is_tab_current(href: str, subpath: str) -> bool:
+    if href == "/daha":
+        return subpath == "/daha" or any(_is_current(other, subpath) for other, *_ in MORE)
+    return _is_current(href, subpath)
+
+
 def _environment() -> Environment:
     env = Environment(
         loader=PackageLoader("finans.web", "templates"),
@@ -85,6 +100,9 @@ def _environment() -> Environment:
         undefined=StrictUndefined,
     )
     env.filters.update(money=money, percent=percent, points=points, exact=exact, local=_local)
+    env.globals.update(
+        icon=icon, is_current=_is_current, is_tab_current=_is_tab_current, more=MORE, tabs=TABS
+    )
     return env
 
 
@@ -124,6 +142,7 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
                 name,
                 {
                     "profile": profile,
+                    "profile_label": PROFILE_LABELS[profile],
                     "prefix": prefix,
                     "subpath": subpath,
                     "switch": switch,
@@ -192,6 +211,7 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
             ),
             ("/islemler", "islemler.html", lambda: {"transactions": transactions(conf)}),
             ("/sistem", "sistem.html", lambda: {"system": system_view(conf, time)}),
+            ("/daha", "daha.html", lambda: {}),
         ]
 
         async def refresh(request: Request) -> Response:
