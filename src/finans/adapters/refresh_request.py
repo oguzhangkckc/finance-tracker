@@ -15,6 +15,11 @@ class FileRefreshRequests:
         self._request = directory / f"{profile}.request"
         self._log = directory / f"{profile}.log"
 
+    @property
+    def trigger(self) -> Path:
+        """Profilin `.path` birimi bu dosyayı izler (K-124)."""
+        return self._request
+
     def accepted(self) -> list[datetime]:
         if not self._log.exists():
             return []
