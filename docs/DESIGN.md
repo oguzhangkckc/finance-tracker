@@ -963,7 +963,7 @@ Hedef: evdeki, her zaman açık, 64 bit Debian tabanlı bir Linux cihaz (Raspber
    sudo /opt/finans/deploy/ft-sanal sanal maas-gunu-uygula
    ```
 
-11. **Web arayüzü (W1, K-101…K-106, K-122…K-124).** Web servisi ağsızdır; `tailscale serve` HTTPS'i sonlandırır ve isteği `/run/finans-web/web.sock`'a iletir. Profil servisin drop-in dosyasındadır (`finans-web.service.d/profil.conf`, gerçek işlemler başlayana kadar `sanal`); yalnızca o profilin `.path` birimi etkinleştirilir. Profil `real`'e geçince drop-in değişir ve `finans-sanal-refresh.path` yerine `finans-refresh.path` etkinleştirilir.
+11. **Web arayüzü (W1, K-101…K-106, K-122…K-124).** Web servisi ağsızdır; `tailscale serve` HTTPS'i sonlandırır ve isteği `/run/finans-web/web.sock`'a iletir. Web iki profili de sunar: `/gercek/` ve `/sanal/` (K-125). Drop-in dosyası (`finans-web.service.d/profil.conf`, `FT_PROFILE`) yalnız açılış profilini seçer; `/` oraya yönlendirir. İki profilin `.path` birimi de etkinleştirilir.
 
     1. **Adlar, HTTPS'ten önce.** Sertifika şeffaflık kayıtları cihaz ve tailnet adını herkese açık yapar. Yönetim panelinin DNS sayfasında tailnet adının rastgele olduğu (kişisel ad ya da e-posta parçası içermediği) kontrol edilir; değilse rastgele bir adla değiştirilir. Cihaz adı amacı ele vermez: varsayılan ya da nötr bir ad olur, `finans` gibi bir ad olmaz. İkisi tamamsa MagicDNS ve HTTPS sertifikaları açılır.
     2. **Telefon.** Telefon aynı hesapla tailnet'e eklenir. Machines sayfasında etiketsiz göründüğü ve anahtar süresinin açık olduğu ("Expiry disabled" yazmadığı) kontrol edilir. Politika değişmez: etiketsiz kullanıcı cihazları Pi'nin 443'üne ulaşır, etiketli cihazlar ulaşamaz.
@@ -979,7 +979,7 @@ Hedef: evdeki, her zaman açık, 64 bit Debian tabanlı bir Linux cihaz (Raspber
        ```sh
        sudo cp -R /opt/finans/deploy/systemd/finans-* /etc/systemd/system/
        sudo systemctl daemon-reload
-       sudo systemctl enable --now finans-web.service finans-sanal-refresh.path
+       sudo systemctl enable --now finans-web.service finans-refresh.path finans-sanal-refresh.path
        sudo tailscale serve --bg --https=443 unix:/run/finans-web/web.sock
        ```
 

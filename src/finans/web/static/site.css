@@ -73,6 +73,8 @@ nav a, .button {
 
 nav a[aria-current="page"] { background: var(--surface); font-weight: 600; }
 
+nav.profiles a[aria-current="page"] { background: var(--accent); color: var(--bg); }
+
 .button { border: 1px solid var(--line); background: var(--surface); }
 
 button.button { font: inherit; cursor: pointer; }

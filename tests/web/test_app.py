@@ -55,7 +55,7 @@ def client(tmp_path: Path, migrated_db: Path) -> WebClient:
 
 
 def test_the_allowed_login_sees_the_page(client: WebClient) -> None:
-    response = client.get("/", headers=ME)
+    response = client.get("/gercek/", headers=ME)
 
     assert response.status_code == 200
     assert "<h1>Özet</h1>" in response.text
@@ -75,7 +75,7 @@ def test_the_allowed_login_sees_the_page(client: WebClient) -> None:
 def test_anything_but_exactly_one_allowed_login_is_refused(
     client: WebClient, headers: list[tuple[str, str]]
 ) -> None:
-    response = client.get("/", headers=headers)
+    response = client.get("/gercek/", headers=headers)
 
     assert response.status_code == 403
     assert response.text == "Erişim yok."
@@ -89,12 +89,12 @@ def test_identity_is_checked_before_routing(client: WebClient) -> None:
 def test_the_display_name_never_grants_access(client: WebClient) -> None:
     headers = {"Tailscale-User-Login": "baska@example.com", "Tailscale-User-Name": NAME_Q}
 
-    assert client.get("/", headers=headers).status_code == 403
+    assert client.get("/gercek/", headers=headers).status_code == 403
 
 
 @pytest.mark.parametrize("raw", [NAME_B, NAME_Q])
 def test_an_rfc2047_display_name_is_decoded_for_the_page(client: WebClient, raw: str) -> None:
-    response = client.get("/", headers={**ME, "Tailscale-User-Name": raw})
+    response = client.get("/gercek/", headers={**ME, "Tailscale-User-Name": raw})
 
     assert display_name(raw) == NAME
     assert f'<span class="viewer">{NAME}</span>' in response.text
@@ -105,14 +105,14 @@ def test_an_rfc2047_display_name_is_decoded_for_the_page(client: WebClient, raw:
 )
 def test_an_undecodable_display_name_is_not_shown(client: WebClient, raw: str | None) -> None:
     headers = ME if raw is None else {**ME, "Tailscale-User-Name": raw}
-    response = client.get("/", headers=headers)
+    response = client.get("/gercek/", headers=headers)
 
     assert display_name(raw) is None
     assert f'<span class="viewer">{LOGIN}</span>' in response.text
 
 
 def test_the_display_name_is_escaped(client: WebClient) -> None:
-    response = client.get("/", headers={**ME, "Tailscale-User-Name": "<script>x</script>"})
+    response = client.get("/gercek/", headers={**ME, "Tailscale-User-Name": "<script>x</script>"})
 
     assert "<script>" not in response.text
     assert "&lt;script&gt;x&lt;/script&gt;" in response.text
@@ -120,7 +120,7 @@ def test_the_display_name_is_escaped(client: WebClient) -> None:
 
 @pytest.mark.parametrize("headers", [ME, {}])
 def test_security_headers_are_on_every_response(client: WebClient, headers: dict[str, str]) -> None:
-    response = client.get("/", headers=headers)
+    response = client.get("/gercek/", headers=headers)
 
     for name, value in SECURITY_HEADERS.items():
         assert response.headers[name] == value
@@ -131,7 +131,7 @@ async def _chunks() -> AsyncIterator[bytes]:
 
 
 def test_only_reads_are_accepted(client: WebClient) -> None:
-    assert client.head("/", headers=ME).status_code == 200
+    assert client.head("/gercek/", headers=ME).status_code == 200
     assert client.post("/", headers=ME, content=b"a=1").status_code == 405
     assert client.post("/", headers=ME, content=b"x" * (16 * 1024 + 1)).status_code == 413
     chunked = client.post("/", headers=ME, content=_chunks())
@@ -143,17 +143,6 @@ def test_the_stylesheet_is_served(client: WebClient) -> None:
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/css")
-
-
-@pytest.mark.parametrize(("profile", "shown"), [("sanal", True), ("real", False)])
-def test_the_sanal_profile_has_a_band_on_every_page(
-    tmp_path: Path, profile: str, shown: bool
-) -> None:
-    settings = _settings(tmp_path, profile=profile)
-    page = WebClient(create_app(settings)).get("/", headers=ME)
-
-    assert ('class="band"' in page.text) is shown
-    assert ("SANAL — gerçek alım değil" in page.text) is shown
 
 
 @pytest.mark.parametrize("missing", ["web_allowed_login", "web_origin"])

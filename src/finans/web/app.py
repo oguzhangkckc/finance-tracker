@@ -1,4 +1,5 @@
-"""finans-web uygulaması; tek yazma fiyat güncelleme isteğidir (K-101…K-106, K-122)."""
+"""finans-web uygulaması; iki profil tek serviste, tek yazma fiyat güncelleme isteğidir
+(K-101…K-106, K-122, K-125)."""
 
 from collections.abc import Callable
 from datetime import datetime
@@ -11,7 +12,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.middleware import Middleware
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse, RedirectResponse, Response
-from starlette.routing import Mount, Route
+from starlette.routing import BaseRoute, Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 
@@ -20,7 +21,7 @@ from finans.application.report import ReportKind
 from finans.contracts.display import exact, money, percent, points
 from finans.contracts.report import SANAL_NOTICE
 from finans.ports.clock import BUSINESS_TZ, Clock
-from finans.settings import Settings
+from finans.settings import PROFILES, Profile, Settings, profile_settings
 from finans.web.security import (
     BodyLimitMiddleware,
     IdentityMiddleware,
@@ -53,6 +54,8 @@ NAV = (
     ("/islemler", "İşlemler"),
     ("/sistem", "Sistem"),
 )
+SLUGS: Final[dict[Profile, str]] = {"real": "gercek", "sanal": "sanal"}
+PROFILE_LABELS: Final[dict[Profile, str]] = {"real": "Gerçek", "sanal": "Sanal"}
 MIN_SESSION_KEY: Final = 32
 REFUSED: Final = "İstek reddedildi."
 # Yönlendirmede yalnız sabit bir anahtar taşınır; metin sayfaya istekten yansımaz.
@@ -84,6 +87,7 @@ def _environment() -> Environment:
 
 
 def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
+    """`settings` profili çözülmemiş ayarlardır; `settings.profile` açılış profilidir (K-125)."""
     if not settings.web_allowed_login or not settings.web_origin:
         raise WebSetupError(
             "FT_WEB_ALLOWED_LOGIN ve FT_WEB_ORIGIN tanımlı olmalı; web arayüzü başlamaz (K-123)."
@@ -96,114 +100,141 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
             "web arayüzü başlamaz (K-123)."
         )
     origin = settings.web_origin.rstrip("/")
+    viewer_login = settings.web_allowed_login
     time = clock or bootstrap.system_clock()
     templates = Jinja2Templates(env=_environment())
 
-    def page(
-        request: Request, name: str, context: dict[str, object], *, status: int = 200
-    ) -> Response:
-        return templates.TemplateResponse(
-            request,
-            name,
-            {
-                "profile": settings.profile,
-                "sanal_notice": SANAL_NOTICE,
-                "viewer": request.state.display_name or settings.web_allowed_login,
-                "nav": NAV,
-                "path": request.url.path,
-                "csrf": csrf_token(key, request.state.session),
-                "notice": NOTICES.get(request.query_params.get("istek", "")),
-                **context,
-            },
-            status_code=status,
-        )
+    def profile_routes(profile: Profile, conf: Settings) -> list[BaseRoute]:
+        prefix = f"/{SLUGS[profile]}"
 
-    # Senkron uç noktalar Starlette'in iş parçacığı havuzunda çalışır; DB okuması döngüyü bekletmez.
-    def view(name: str, load: Callable[[], dict[str, object]]) -> Callable[[Request], Response]:
-        def handler(request: Request) -> Response:
+        def page(
+            request: Request, name: str, context: dict[str, object], *, status: int = 200
+        ) -> Response:
+            subpath = request.url.path.removeprefix(prefix) or "/"
+            switch = [
+                (PROFILE_LABELS[other], f"/{SLUGS[other]}{subpath}", other == profile)
+                for other in PROFILES
+            ]
+            return templates.TemplateResponse(
+                request,
+                name,
+                {
+                    "profile": profile,
+                    "prefix": prefix,
+                    "subpath": subpath,
+                    "switch": switch,
+                    "sanal_notice": SANAL_NOTICE,
+                    "viewer": request.state.display_name or viewer_login,
+                    "nav": NAV,
+                    "csrf": csrf_token(key, request.state.session),
+                    "notice": NOTICES.get(request.query_params.get("istek", "")),
+                    **context,
+                },
+                status_code=status,
+            )
+
+        # Senkron uç noktalar iş parçacığı havuzunda çalışır; DB okuması döngüyü bekletmez.
+        def view(name: str, load: Callable[[], dict[str, object]]) -> Callable[[Request], Response]:
+            def handler(request: Request) -> Response:
+                try:
+                    context = load()
+                except (PageError, *PAGE_ERRORS) as exc:
+                    return page(request, "hata.html", {"message": str(exc)}, status=503)
+                return page(request, name, context)
+
+            return handler
+
+        def report_context(kind: ReportKind) -> dict[str, object]:
+            report = load_report(conf, time, kind=kind)
+            return {
+                "report": report,
+                "stale": stale_by_instrument(report),
+                "stale_all": general_staleness(report),
+            }
+
+        def text(title: str, load: Callable[[], str]) -> Callable[[], dict[str, object]]:
+            return lambda: {"title": title, "text": load()}
+
+        pages: list[tuple[str, str, Callable[[], dict[str, object]]]] = [
+            (
+                "/",
+                "ozet.html",
+                lambda: {**report_context("weekly"), "refresh": refresh_view(conf, time)},
+            ),
+            # Lotlar ve para ağırlıklı getiri yalnızca aylık raporda.
+            ("/varliklar", "varliklar.html", lambda: report_context("monthly")),
+            ("/dagilim", "dagilim.html", lambda: report_context("weekly")),
+            ("/getiri", "getiri.html", lambda: report_context("monthly")),
+            ("/raporlar", "raporlar.html", lambda: {}),
+            (
+                "/raporlar/haftalik",
+                "rapor.html",
+                text("Haftalık rapor", lambda: report_text(conf, time, "weekly")),
+            ),
+            (
+                "/raporlar/aylik",
+                "rapor.html",
+                text("Aylık rapor", lambda: report_text(conf, time, "monthly")),
+            ),
+            (
+                "/raporlar/maas-gunu",
+                "rapor.html",
+                text("Maaş günü", lambda: payday_text(conf, time)),
+            ),
+            (
+                "/alarmlar",
+                "alarmlar.html",
+                lambda: {**report_context("weekly"), "quiet_ended": quiet_ended_on(conf)},
+            ),
+            ("/islemler", "islemler.html", lambda: {"transactions": transactions(conf)}),
+            ("/sistem", "sistem.html", lambda: {"system": system_view(conf, time)}),
+        ]
+
+        async def refresh(request: Request) -> Response:
+            if not same_origin(request.headers, origin):
+                return PlainTextResponse(REFUSED, status_code=403)
             try:
-                context = load()
+                form = parse_qs((await request.body()).decode("ascii"), max_num_fields=4)
+            except ValueError:
+                return PlainTextResponse("Form okunamadı.", status_code=400)
+            tokens = form.get(CSRF_FIELD, [])
+            if len(tokens) != 1 or not valid_csrf(key, request.state.session, tokens[0]):
+                return PlainTextResponse(REFUSED, status_code=403)
+            try:
+                status = await run_in_threadpool(ask_for_refresh, conf, time)
             except (PageError, *PAGE_ERRORS) as exc:
                 return page(request, "hata.html", {"message": str(exc)}, status=503)
-            return page(request, name, context)
+            except OSError:
+                message = "Güncelleme isteği yazılamadı; Sistem sayfasına bakın."
+                return page(request, "hata.html", {"message": message}, status=503)
+            target = f"{prefix}/?istek=alindi" if status.decision.allowed else f"{prefix}/"
+            return RedirectResponse(target, status_code=303)
 
-        return handler
+        return [
+            *(
+                Route(f"{prefix}{path}", view(name, load), methods=["GET"])
+                for path, name, load in pages
+            ),
+            Route(f"{prefix}/fiyat-guncelle", refresh, methods=["POST"]),
+        ]
 
-    def report_context(kind: ReportKind) -> dict[str, object]:
-        report = load_report(settings, time, kind=kind)
-        return {
-            "report": report,
-            "stale": stale_by_instrument(report),
-            "stale_all": general_staleness(report),
-        }
+    def home(_request: Request) -> Response:
+        return RedirectResponse(f"/{SLUGS[settings.profile]}/", status_code=307)
 
-    def text(title: str, load: Callable[[], str]) -> Callable[[], dict[str, object]]:
-        return lambda: {"title": title, "text": load()}
-
-    pages: list[tuple[str, str, Callable[[], dict[str, object]]]] = [
-        (
-            "/",
-            "ozet.html",
-            lambda: {**report_context("weekly"), "refresh": refresh_view(settings, time)},
-        ),
-        # Lotlar ve para ağırlıklı getiri yalnızca aylık raporda.
-        ("/varliklar", "varliklar.html", lambda: report_context("monthly")),
-        ("/dagilim", "dagilim.html", lambda: report_context("weekly")),
-        ("/getiri", "getiri.html", lambda: report_context("monthly")),
-        ("/raporlar", "raporlar.html", lambda: {}),
-        (
-            "/raporlar/haftalik",
-            "rapor.html",
-            text("Haftalık rapor", lambda: report_text(settings, time, "weekly")),
-        ),
-        (
-            "/raporlar/aylik",
-            "rapor.html",
-            text("Aylık rapor", lambda: report_text(settings, time, "monthly")),
-        ),
-        (
-            "/raporlar/maas-gunu",
-            "rapor.html",
-            text("Maaş günü", lambda: payday_text(settings, time)),
-        ),
-        (
-            "/alarmlar",
-            "alarmlar.html",
-            lambda: {**report_context("weekly"), "quiet_ended": quiet_ended_on(settings)},
-        ),
-        ("/islemler", "islemler.html", lambda: {"transactions": transactions(settings)}),
-        ("/sistem", "sistem.html", lambda: {"system": system_view(settings, time)}),
-    ]
-
-    async def refresh(request: Request) -> Response:
-        if not same_origin(request.headers, origin):
-            return PlainTextResponse(REFUSED, status_code=403)
-        try:
-            form = parse_qs((await request.body()).decode("ascii"), max_num_fields=4)
-        except ValueError:
-            return PlainTextResponse("Form okunamadı.", status_code=400)
-        tokens = form.get(CSRF_FIELD, [])
-        if len(tokens) != 1 or not valid_csrf(key, request.state.session, tokens[0]):
-            return PlainTextResponse(REFUSED, status_code=403)
-        try:
-            status = await run_in_threadpool(ask_for_refresh, settings, time)
-        except (PageError, *PAGE_ERRORS) as exc:
-            return page(request, "hata.html", {"message": str(exc)}, status=503)
-        except OSError:
-            message = "Güncelleme isteği yazılamadı; /sistem sayfasına bakın."
-            return page(request, "hata.html", {"message": message}, status=503)
-        target = "/?istek=alindi" if status.decision.allowed else "/"
-        return RedirectResponse(target, status_code=303)
-
+    profiles = profile_settings(settings)
     return Starlette(
         routes=[
-            *(Route(path, view(name, load), methods=["GET"]) for path, name, load in pages),
-            Route("/fiyat-guncelle", refresh, methods=["POST"]),
+            Route("/", home, methods=["GET"]),
+            *(
+                route
+                for profile, conf in profiles.items()
+                for route in profile_routes(profile, conf)
+            ),
             Mount("/static", StaticFiles(packages=[("finans.web", "static")]), name="static"),
         ],
         middleware=[
             Middleware(SecurityHeadersMiddleware),
-            Middleware(IdentityMiddleware, allowed_login=settings.web_allowed_login),
+            Middleware(IdentityMiddleware, allowed_login=viewer_login),
             Middleware(BodyLimitMiddleware),
             Middleware(SessionMiddleware, key=key),
         ],

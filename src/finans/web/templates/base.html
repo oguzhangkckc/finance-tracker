@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="tr">
+<html lang="tr" data-profile="{{ profile }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -12,9 +12,14 @@
   <div class="band" role="status">{{ sanal_notice }}</div>
   {% endif %}
   <header>
+    <nav class="profiles" aria-label="Portföy">
+      {% for label, href, current in switch %}
+      <a href="{{ href }}"{% if current %} aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </nav>
     <nav aria-label="Sayfalar">
       {% for href, label in nav %}
-      <a href="{{ href }}"{% if href == path %} aria-current="page"{% endif %}>{{ label }}</a>
+      <a href="{{ prefix }}{{ href }}"{% if href == subpath %} aria-current="page"{% endif %}>{{ label }}</a>
       {% endfor %}
     </nav>
     <span class="viewer">{{ viewer }}</span>

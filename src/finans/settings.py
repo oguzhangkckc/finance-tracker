@@ -5,6 +5,9 @@ from typing import Annotated, Literal, Self
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+type Profile = Literal["real", "sanal"]
+PROFILES: tuple[Profile, ...] = ("real", "sanal")
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -18,7 +21,7 @@ class Settings(BaseSettings):
     db_path: Path
     portfolio_path: Path | None = None
     # K-107: sanal portföy ayrı ve işaretli veritabanında; profil yalnızca buradan seçilir.
-    profile: Literal["real", "sanal"] = "real"
+    profile: Profile = "real"
     sanal_db_path: Path | None = None
     sanal_portfolio_path: Path | None = None
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
@@ -104,9 +107,18 @@ def resolve_profile(settings: Settings) -> Settings:
     )
 
 
-def load_settings() -> Settings:
+def profile_settings(base: Settings) -> dict[Profile, Settings]:
+    """Web iki profili birlikte sunar; `base` profili çözülmemiş ayarlardır (K-125)."""
+    return {p: resolve_profile(base.model_copy(update={"profile": p})) for p in PROFILES}
+
+
+def load_base_settings() -> Settings:
     # systemd LoadCredential sırları bu dizine, ayar adıyla dosya olarak koyar.
     credentials_dir = os.environ.get("CREDENTIALS_DIRECTORY")
     if credentials_dir:
-        return resolve_profile(Settings(_secrets_dir=credentials_dir))
-    return resolve_profile(Settings())
+        return Settings(_secrets_dir=credentials_dir)
+    return Settings()
+
+
+def load_settings() -> Settings:
+    return resolve_profile(load_base_settings())
