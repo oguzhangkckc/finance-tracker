@@ -1,0 +1,116 @@
+name: Deploy
+
+# K-140: CI main'de yeşil bitince ya da elle (workflow_dispatch) Pi'ye kurar; onay yoktur. Geri
+# dönüş workflow_dispatch'te önceki SHA ve "geri" ile yapılır. Depo herkese açık: cihaza özel
+# değerler secret'tır ve iş günlüğüne Pi'nin adı ya da doctor ayrıntısı yazılmaz.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Kurulacak commit (40 haneli, main'de)"
+        required: true
+        type: string
+      geri:
+        description: "Geriye dönüşe izin ver"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Fork'tan gelen ve dalı main adını taşıyan bir PR çalışması da workflow_run'ı tetikler.
+    if: >-
+      github.event_name == 'workflow_dispatch' || (
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: production
+    permissions:
+      contents: read
+    env:
+      SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.sha || github.event.workflow_run.head_sha }}
+      GERI: ${{ github.event_name == 'workflow_dispatch' && inputs.geri || false }}
+    steps:
+      - name: SHA denetimi
+        shell: bash
+        run: |
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Beklenmeyen commit kimliği."; exit 3; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SHA }}
+          persist-credentials: false
+      - name: Ön yüz var mı
+        id: on-yuz
+        shell: bash
+        run: |
+          if [[ -f frontend/package.json ]]; then echo "var=true" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.on-yuz.outputs.var == 'true'
+        with:
+          node-version-file: frontend/.nvmrc
+          # Önbelleğe main'deki CI işleri de yazabilir; SSH anahtarını gören işe oradan paket gelmesin.
+          package-manager-cache: "false"
+      - name: Ön yüzü derle
+        if: steps.on-yuz.outputs.var == 'true'
+        shell: bash
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+          tar -C dist -czf "$RUNNER_TEMP/on-yuz.tar.gz" .
+      - uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4.4.0
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          version: "1.104.4"
+          use-cache: "false"
+          log-mode: quiet
+      - name: Pi'de güncelle
+        shell: bash
+        env:
+          RPI_HOST: ${{ secrets.RPI_HOST }}
+          RPI_USER: ${{ secrets.RPI_USER }}
+          RPI_KNOWN_HOSTS: ${{ secrets.RPI_KNOWN_HOSTS }}
+          RPI_SSH_KEY: ${{ secrets.RPI_SSH_KEY }}
+        run: |
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Beklenmeyen commit kimliği."; exit 3; }
+          dir="$(mktemp -d)"
+          trap 'rm -rf "$dir"' EXIT
+          (umask 077 && printf '%s\n' "$RPI_SSH_KEY" > "$dir/key" \
+            && printf '%s\n' "$RPI_KNOWN_HOSTS" > "$dir/known_hosts")
+          command="sudo /usr/local/sbin/finans-guncelle $SHA"
+          if [[ "$GERI" == "true" ]]; then command="$command --geri"; fi
+          package=/dev/null
+          if [[ -f "$RUNNER_TEMP/on-yuz.tar.gz" ]]; then
+            command="$command --paket -"
+            package="$RUNNER_TEMP/on-yuz.tar.gz"
+          fi
+          code=0
+          ssh -T -i "$dir/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$dir/known_hosts" -o GlobalKnownHostsFile=/dev/null \
+            -o ConnectTimeout=30 -o ConnectionAttempts=3 -o ServerAliveInterval=30 -o LogLevel=ERROR \
+            "$RPI_USER@$RPI_HOST" "$command" < "$package" || code=$?
+          case "$code" in
+            0) ;;
+            1) echo "::error::Kurulum başarısız; yukarıdaki satır nedenini ve geri dönüşü söylüyor." ;;
+            2) echo "::error::Elle kurulum gerekiyor (birim, wrapper ya da deploy betiği farklı)." ;;
+            3) echo "::error::Pi isteği reddetti." ;;
+            4) echo "::warning::Meşgul (başka deploy ya da çalışan iş); sonra yeniden çalıştır." ;;
+            *) echo "::error::Pi'ye bağlanılamadı ya da sudo çalışmadı (çıkış $code)." ;;
+          esac
+          exit "$code"
