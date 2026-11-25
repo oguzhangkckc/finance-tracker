@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Literal
 
 import pytest
 
@@ -33,9 +34,24 @@ def _chrome() -> str | None:
     return None
 
 
+def missing_chrome(ci: str | None) -> Literal["skip", "fail"]:
+    """Yerelde atlanır; CI'da Chrome yoksa test başarısız olur, kurulum sorunu testleri
+    sessizce devre dışı bırakamaz."""
+    return "fail" if ci else "skip"
+
+
 CHROME = _chrome()
-pytestmark = pytest.mark.skipif(CHROME is None, reason="Chrome yok; app.js denetlenemedi")
 DESKTOP, PHONE = 1280, 390
+
+
+@pytest.fixture
+def chrome() -> str:
+    if CHROME is None:
+        if missing_chrome(os.environ.get("CI")) == "fail":
+            pytest.fail("CI'da Chrome bulunamadı; app.js testleri atlanamaz")
+        pytest.skip("Chrome yok; app.js yerelde denetlenemedi")
+    return CHROME
+
 
 # Yalnız teste ait ölçüm betiği; uygulamaya girmez. Sonuç JSON olarak sayfaya yazılır.
 HARNESS = r"""
@@ -100,7 +116,7 @@ window.addEventListener("load", function () {
 """
 
 
-def _run(page: str, tmp_path: Path, width: int) -> dict[str, object]:
+def _run(chrome: str, page: str, tmp_path: Path, width: int) -> dict[str, object]:
     script = re.compile(r'<script src="/static/app\.[0-9a-f]{12}\.js" defer></script>')
     assert script.search(page), "sayfa app.js'i yüklemiyor"
     local = script.sub('<script src="app.js" defer></script>', page)
@@ -111,7 +127,7 @@ def _run(page: str, tmp_path: Path, width: int) -> dict[str, object]:
     (tmp_path / "harness.js").write_text(HARNESS, encoding="utf-8")
     (tmp_path / "page.html").write_text(local, encoding="utf-8")
     command = [
-        str(CHROME),
+        chrome,
         "--headless=new",
         "--disable-gpu",
         "--no-first-run",
@@ -137,10 +153,12 @@ def _run(page: str, tmp_path: Path, width: int) -> dict[str, object]:
     return dict(json.loads(html.unescape(found.group(1))))
 
 
-def test_the_search_box_filters_this_page_and_says_so(site: Site, tmp_path: Path) -> None:
+def test_the_search_box_filters_this_page_and_says_so(
+    site: Site, tmp_path: Path, chrome: str
+) -> None:
     page = site.browser().get("/gercek/islemler").text
 
-    out = _run(page, tmp_path, DESKTOP)
+    out = _run(chrome, page, tmp_path, DESKTOP)
 
     assert out == {
         "hint": True,
@@ -155,21 +173,23 @@ def test_the_search_box_filters_this_page_and_says_so(site: Site, tmp_path: Path
     }
 
 
-def test_only_the_sort_box_on_a_desktop_submits_by_itself(site: Site, tmp_path: Path) -> None:
+def test_only_the_sort_box_on_a_desktop_submits_by_itself(
+    site: Site, tmp_path: Path, chrome: str
+) -> None:
     page = site.browser().get("/gercek/islemler").text
 
-    out = _run(page, tmp_path, PHONE)
+    out = _run(chrome, page, tmp_path, PHONE)
 
     assert (out["sortSubmits"], out["filterSubmits"]) == (0, 0)
 
 
 def test_a_disabled_button_comes_back_when_the_page_returns_from_the_cache(
-    site: Site, tmp_path: Path
+    site: Site, tmp_path: Path, chrome: str
 ) -> None:
     me = site.browser()
     preview = post_preview(me, "real", "alis", REAL_BUY).text
 
-    out = _run(preview, tmp_path, DESKTOP)
+    out = _run(chrome, preview, tmp_path, DESKTOP)
 
     assert out == {
         "postDisabled": True,
@@ -185,3 +205,10 @@ def test_without_javascript_the_hint_and_empty_note_stay_hidden(site: Site) -> N
     assert '<p class="hint" id="ara-ipucu" hidden>' in page
     assert '<p class="note" id="ara-bos" role="status" hidden>' in page
     assert re.search(r"\son[a-z]+=", page) is None
+
+
+@pytest.mark.parametrize(("ci", "action"), [(None, "skip"), ("", "skip"), ("true", "fail")])
+def test_a_missing_chrome_fails_on_ci_and_is_skipped_only_locally(
+    ci: str | None, action: str
+) -> None:
+    assert missing_chrome(ci) == action
