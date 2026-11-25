@@ -54,9 +54,18 @@ def _oversell_issue(transactions: Sequence[Transaction]) -> str | None:
     return None
 
 
-def add_transaction(
-    uow: UnitOfWork, tx: Transaction, *, ref: str | None, note: str | None, now: datetime
-) -> int:
+class VoidBlockedError(DomainError):
+    """K-58: iptali engelleyen satışlar web'de bağlantı olarak gösterilsin diye taşınır."""
+
+    def __init__(self, message: str, blocking: list[StoredTransaction]) -> None:
+        super().__init__(message)
+        self.blocking = blocking
+
+
+def check_transaction(
+    uow: UnitOfWork, tx: Transaction, *, ref: str | None
+) -> list[StoredTransaction]:
+    """`add_transaction`'ın bütün ret kuralları; önizleme de bunu kullanır (K-126)."""
     issue = _tradeable_issue(uow, tx)
     if issue is not None:
         raise DomainError(issue)
@@ -66,12 +75,17 @@ def add_transaction(
     issue = _oversell_issue([s.transaction for s in existing] + [tx])
     if issue is not None:
         raise DomainError(issue)
+    return existing
+
+
+def add_transaction(
+    uow: UnitOfWork, tx: Transaction, *, ref: str | None, note: str | None, now: datetime
+) -> int:
+    check_transaction(uow, tx, ref=ref)
     return uow.transactions.add(tx, external_ref=ref, note=note, created_at=now)
 
 
-def void_transaction(uow: UnitOfWork, txn_id: int, *, reason: str, now: datetime) -> None:
-    if not reason.strip():
-        raise DomainError("İptal gerekçesi boş olamaz.")
+def check_void(uow: UnitOfWork, txn_id: int) -> StoredTransaction:
     stored = uow.transactions.get(txn_id)
     if stored is None:
         raise DomainError(f"{txn_id} numaralı işlem yok.")
@@ -84,10 +98,18 @@ def void_transaction(uow: UnitOfWork, txn_id: int, *, reason: str, now: datetime
             f"{canonical_text(s.transaction.units)} adet)"
             for s in blocking
         )
-        raise DomainError(
+        raise VoidBlockedError(
             f"{txn_id} numaralı işlem iptal edilemez; sonraki satışlar elde olmayan payı satmış "
-            f"olur. Önce şu satışları `ft tx void` ile iptal et: {listed}."
+            f"olur. Önce şu satışları `ft tx void` ile iptal et: {listed}.",
+            blocking,
         )
+    return stored
+
+
+def void_transaction(uow: UnitOfWork, txn_id: int, *, reason: str, now: datetime) -> None:
+    if not reason.strip():
+        raise DomainError("İptal gerekçesi boş olamaz.")
+    check_void(uow, txn_id)
     uow.transactions.void(txn_id, reason=reason.strip(), at=now)
 
 
