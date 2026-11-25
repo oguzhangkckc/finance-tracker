@@ -76,7 +76,7 @@ filterwarnings = ["error"]
 
 [tool.coverage.run]
 branch = true
-source = ["finans", "istek"]
+source = ["finans", "istek", "kur"]
 
 [tool.coverage.report]
 show_missing = true
