@@ -1,7 +1,8 @@
 #!/usr/bin/python3 -I
 """Deploy çalıştırıcısı (K-133…K-135). `finans-deploy.service` (User=finans) bunu istek dosyası
 görünce çalıştırır: dondurma, doğrulama, canlıya dokunmayan hazırlık, elle kurulum kuralları,
-zamanlayıcı penceresi ve iş kilitleri, atomik geçiş, sağlık denetimi ve gerekirse geri dönüş.
+zamanlayıcı penceresi ve iş kilitleri, atomik geçiş, sağlık denetimi, gerekirse geri dönüş ve
+Telegram bildirimi.
 
 Pi'nin sistem Python'uyla (3.12) ve yalnız standart kütüphaneyle çalışır; uygulamanın sanal
 ortamından bağımsızdır, bozuk bir sürüm deploy'u ve geri dönüşü bozamaz. Pi'de uzantısız olarak
@@ -17,9 +18,9 @@ import socket
 import subprocess
 import sys
 import time
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from enum import IntEnum
 from pathlib import Path
@@ -46,6 +47,13 @@ WEB_UNIT: Final = "finans-web.service"
 HEALTH_UNIT: Final = "finans-deploy-saglik.service"
 PAGES: Final = ("/gercek/", "/sanal/")
 TIMER_NAME: Final = re.compile(r"finans-(sanal-)?([a-z][a-z-]*)\.timer")
+TELEGRAM_TOKEN: Final = re.compile(r"[0-9]{5,}:[A-Za-z0-9_-]{20,}")
+TELEGRAM_CREDENTIAL: Final = "ft_telegram_bot_token"
+TELEGRAM_LIMIT: Final = 4000
+TELEGRAM_TIMEOUT: Final = 20
+NO_TELEGRAM: Final = (
+    "Telegram tanımlı değil (token ya da FT_TELEGRAM_CHAT_ID); bildirim gönderilmedi"
+)
 
 
 class Kod(IntEnum):
@@ -96,10 +104,13 @@ URETIM: Final = Yollar(
 
 @dataclass(frozen=True)
 class Sonuc:
+    """`bildir`: Telegram'a gider mi; "zaten kurulu" ve "meşgul" gürültüdür, CI'da görünür."""
+
     kod: Kod
     mesaj: str
     sha: str
     onceki: str | None = None
+    bildir: bool = True
 
 
 class Durdur(Exception):
@@ -117,16 +128,22 @@ class Calistirici(Protocol):
         *,
         cwd: Path | None = None,
         env: dict[str, str] | None = None,
+        input: str | None = None,
     ) -> subprocess.CompletedProcess[str]: ...
 
 
 def run(
-    args: Sequence[str], *, cwd: Path | None = None, env: dict[str, str] | None = None
+    args: Sequence[str],
+    *,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+    input: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(  # noqa: S603 - argümanlar listedir, kabuk yok
         list(args),
         cwd=cwd,
         env=env,
+        input=input,
         capture_output=True,
         text=True,
         check=False,
@@ -213,7 +230,7 @@ def verify(paths: Yollar, sha: str, runner: Calistirici = run) -> str:
         raise Durdur(Sonuc(Kod.ELLE_KURULUM, message, sha))
     if current == sha:
         message = f"{short(sha)} zaten kurulu; bir şey yapılmadı."
-        raise Durdur(Sonuc(Kod.TAMAM, message, sha, current))
+        raise Durdur(Sonuc(Kod.TAMAM, message, sha, current, bildir=False))
     # Bütün dallar çekilir: başka daldaki bir commit "bulunamadı" değil "`main`'de yok" diye
     # reddedilsin. Ata denetimi yalnız `origin/main`'e karşıdır.
     fetched = _git(
@@ -223,15 +240,16 @@ def verify(paths: Yollar, sha: str, runner: Calistirici = run) -> str:
         message = f"❌ GitHub'dan çekilemedi: {last_line(fetched.stderr)}. Canlı sürüm değişmedi."
         raise Durdur(Sonuc(Kod.BASARISIZ, message, sha, current))
     if _git(paths, runner, "cat-file", "-e", f"{sha}^{{commit}}").returncode:
-        message = f"Reddedildi: {short(sha)} GitHub'da bulunamadı."
+        message = f"⛔ Deploy reddedildi: {short(sha)} GitHub'da bulunamadı."
         raise Durdur(Sonuc(Kod.RET, message, sha, current))
     on_main = _git(paths, runner, "merge-base", "--is-ancestor", sha, "refs/remotes/origin/main")
     if on_main.returncode:
-        raise Durdur(Sonuc(Kod.RET, f"Reddedildi: {short(sha)} `main`'de yok.", sha, current))
+        message = f"⛔ Deploy reddedildi: {short(sha)} `main`'de yok."
+        raise Durdur(Sonuc(Kod.RET, message, sha, current))
     if _git(paths, runner, "merge-base", "--is-ancestor", current, sha).returncode:
         message = (
-            f"Reddedildi: kurulu sürüm ({short(current)}) {short(sha)} commit'inin atası değil; "
-            "geriye dönüş yapılmaz."
+            f"⛔ Deploy reddedildi: kurulu sürüm ({short(current)}) {short(sha)} commit'inin "
+            "atası değil; geriye dönüş yapılmaz."
         )
         raise Durdur(Sonuc(Kod.RET, message, sha, current))
     return current
@@ -621,7 +639,7 @@ def deploy(paths: Yollar, sha: str, env: Ortam) -> Sonuc:
             f"⏳ Pencere dışı: {name} {at} (İstanbul) çalışacak; deploy yapılmadı, "
             "sonra yeniden çalıştır."
         )
-        return Sonuc(Kod.MESGUL, message, sha, current)
+        return Sonuc(Kod.MESGUL, message, sha, current, bildir=False)
     try:
         problem = _switch_and_restart(paths, sha, env, force=False)
     except OSError as exc:
@@ -632,7 +650,7 @@ def deploy(paths: Yollar, sha: str, env: Ortam) -> Sonuc:
             f"⏳ Çalışan iş 10 dakikada bitmedi ({problem[8:]}); deploy yapılmadı, "
             "yeniden çalıştır."
         )
-        return Sonuc(Kod.MESGUL, message, sha, current)
+        return Sonuc(Kod.MESGUL, message, sha, current, bildir=False)
     if problem is None:
         problem = health(paths, env.login, sleep=env.sleep, now=env.now)
     if problem is None:
@@ -670,18 +688,98 @@ def runner_lock(paths: Yollar) -> Iterator[None]:
         os.close(descriptor)
 
 
+@dataclass(frozen=True)
+class Telegram:
+    token: str
+    chat_id: str
+
+
+def telegram_from(environ: Mapping[str, str]) -> Telegram | None:
+    """Token çalıştırıcı biriminin kimlik dizininden (LoadCredential), sohbet kimliği
+    `finans.env`'den. Biri eksikse ya da biçimi bozuksa bildirim gönderilmez."""
+    directory = environ.get("CREDENTIALS_DIRECTORY", "")
+    chat_id = environ.get("FT_TELEGRAM_CHAT_ID", "").strip()
+    if not directory or not re.fullmatch(r"-?[0-9]+", chat_id):
+        return None
+    try:
+        token = (Path(directory) / TELEGRAM_CREDENTIAL).read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return Telegram(token, chat_id) if TELEGRAM_TOKEN.fullmatch(token) else None
+
+
+def scrub(text: str, secrets: Sequence[str] = ()) -> str:
+    """Sonuç mesajı CI günlüğüne ve Telegram'a gider; sırlar ve token biçimindeki her şey çıkar."""
+    for secret in secrets:
+        if secret:
+            text = text.replace(secret, "***")
+    return TELEGRAM_TOKEN.sub("***", text)
+
+
+def _quoted(value: str) -> str:
+    """curl yapılandırma dosyasının tırnaklı değeri; kaçışlar curl'ün kurallarına göre."""
+    escaped = (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+    )
+    return f'"{escaped}"'
+
+
+def curl_config(telegram: Telegram, text: str) -> str:
+    """Token komut satırına (ps) ve log'a girmesin diye curl'e standart girdiden verilir."""
+    url = f"https://api.telegram.org/bot{telegram.token}/sendMessage"
+    lines = [
+        f"url = {_quoted(url)}",
+        f"data-urlencode = {_quoted('chat_id=' + telegram.chat_id)}",
+        f"data-urlencode = {_quoted('text=' + text[:TELEGRAM_LIMIT])}",
+        'proto = "=https"',
+        f"max-time = {TELEGRAM_TIMEOUT}",
+        "fail",
+        "silent",
+        "show-error",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def send_telegram(telegram: Telegram, text: str, runner: Calistirici = run) -> str | None:
+    sent = runner(["curl", "-K", "-"], input=curl_config(telegram, text))
+    if sent.returncode == 0:
+        return None
+    detail = scrub(last_line(sent.stderr), [telegram.token])
+    return f"Telegram bildirimi gönderilemedi (curl {sent.returncode}): {detail}"
+
+
+def _log(text: str) -> None:
+    """journald'a gider; sır içermez (`scrub`'dan geçmiş metin)."""
+    sys.stderr.write(f"{text}\n")
+
+
 def main(
     paths: Yollar = URETIM,
     env: Ortam | None = None,
-    notify: Callable[[Sonuc], None] = lambda _result: None,
+    notify: Callable[[str], str | None] | None = None,
+    environ: Mapping[str, str] = os.environ,
 ) -> int:
     env = env or Ortam(
         run,
         time.sleep,
         time.time,
         today_in_istanbul(),
-        os.environ.get("FT_WEB_ALLOWED_LOGIN", ""),
+        environ.get("FT_WEB_ALLOWED_LOGIN", ""),
     )
+    telegram = telegram_from(environ)
+    secrets = [telegram.token] if telegram else []
+    if notify is None:
+        runner = env.runner
+
+        def notify(text: str) -> str | None:
+            if telegram is None:
+                return NO_TELEGRAM
+            return send_telegram(telegram, text, runner)
+
     with runner_lock(paths):
         request = read_request(paths)
         if request is None:
@@ -691,8 +789,13 @@ def main(
             result = deploy(paths, sha, env)
         except Durdur as stopped:
             result = stopped.sonuc
+        result = replace(result, mesaj=scrub(result.mesaj, secrets))
         write_result(paths, ident, result, datetime.fromtimestamp(env.now(), ISTANBUL))
-    notify(result)
+    _log(result.mesaj)
+    if result.bildir:
+        problem = notify(result.mesaj)
+        if problem is not None:
+            _log(scrub(problem, secrets))
     return int(result.kod)
 
 

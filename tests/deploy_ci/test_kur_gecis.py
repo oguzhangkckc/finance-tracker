@@ -5,7 +5,7 @@ Saat ve systemd sahtedir; git gerçektir."""
 import fcntl
 import json
 import os
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import date, datetime
 from pathlib import Path
@@ -19,6 +19,14 @@ from tests.deploy_ci.conftest import LOGIN, NOW, Pi, Systemd, Web
 TODAY = date(2026, 12, 16)
 IDENT = "c" * 32
 FAILED_DOCTOR = "✓ SQLite: 3.53\n✗ Web yazma şifresi: scrypt özeti değil\n✗ Yedek: alıcı yok\n"
+
+
+def _recorder(seen: list[str]) -> Callable[[str], str | None]:
+    def notify(text: str) -> str | None:
+        seen.append(text)
+        return None
+
+    return notify
 
 
 def _env(systemd: Systemd, login: str = LOGIN) -> kur.Ortam:
@@ -324,7 +332,7 @@ def test_only_the_last_three_releases_and_the_ones_in_use_are_kept(pi: Pi) -> No
 def test_main_runs_one_request_writes_its_result_and_notifies(pi: Pi, systemd: Systemd) -> None:
     child = pi.commit({"docs/DESIGN.md": "yeni\n"})
     pi.paths.istek.write_text(f"{child}\n{IDENT}\n", encoding="ascii")
-    seen: list[kur.Sonuc] = []
+    seen: list[str] = []
     busy_during: list[bool] = []
     request_side = istek.Yollar(pi.paths.istek, pi.paths.sonuc, pi.paths.sonuc / "kur.lock")
 
@@ -333,34 +341,34 @@ def test_main_runs_one_request_writes_its_result_and_notifies(pi: Pi, systemd: S
         systemd.sleep(seconds)
 
     env = kur.Ortam(kur.run, sleep, systemd.now, TODAY, LOGIN)
-    code = kur.main(pi.paths, env, seen.append)
+    code = kur.main(pi.paths, env, _recorder(seen), environ={})
 
     data = json.loads((pi.paths.sonuc / f"{IDENT}.json").read_text(encoding="utf-8"))
     assert code == 0
     assert (data["kod"], data["sha"]) == (0, child)
     assert data["mesaj"].startswith(f"✅ finans güncellendi: {child[:7]}")
-    assert [result.kod for result in seen] == [kur.Kod.TAMAM]
+    assert seen == [data["mesaj"]]
     assert busy_during
     assert all(busy_during)
     assert not istek.busy(request_side)
 
 
 def test_main_without_a_request_does_nothing(pi: Pi, systemd: Systemd) -> None:
-    seen: list[kur.Sonuc] = []
+    seen: list[str] = []
 
-    assert kur.main(pi.paths, _env(systemd), seen.append) == 0
+    assert kur.main(pi.paths, _env(systemd), _recorder(seen), environ={}) == 0
     assert seen == []
     assert [p.name for p in pi.paths.sonuc.iterdir()] == ["kur.lock"]
 
 
 def test_main_writes_a_refusal_as_a_result(pi: Pi, systemd: Systemd) -> None:
     pi.paths.istek.write_text(f"{'0' * 40}\n{IDENT}\n", encoding="ascii")
-    seen: list[kur.Sonuc] = []
+    seen: list[str] = []
 
-    code = kur.main(pi.paths, _env(systemd), seen.append)
+    code = kur.main(pi.paths, _env(systemd), _recorder(seen), environ={})
 
     assert code == kur.Kod.RET
-    assert seen[0].mesaj == "Reddedildi: 0000000 GitHub'da bulunamadı."
+    assert seen == ["⛔ Deploy reddedildi: 0000000 GitHub'da bulunamadı."]
 
 
 def test_a_switch_that_cannot_be_made_is_reported_with_the_way_back(

@@ -119,12 +119,15 @@ def test_an_unknown_commit_a_side_branch_and_going_back_are_refused(pi: Pi) -> N
 
     assert (unknown.kod, unknown.mesaj) == (
         kur.Kod.RET,
-        "Reddedildi: 0123456 GitHub'da bulunamadı.",
+        "⛔ Deploy reddedildi: 0123456 GitHub'da bulunamadı.",
     )
-    assert (off_main.kod, off_main.mesaj) == (kur.Kod.RET, f"Reddedildi: {side[:7]} `main`'de yok.")
+    assert (off_main.kod, off_main.mesaj) == (
+        kur.Kod.RET,
+        f"⛔ Deploy reddedildi: {side[:7]} `main`'de yok.",
+    )
     assert back.kod == kur.Kod.RET
     assert back.mesaj == (
-        f"Reddedildi: kurulu sürüm ({child[:7]}) {first[:7]} commit'inin atası değil; "
+        f"⛔ Deploy reddedildi: kurulu sürüm ({child[:7]}) {first[:7]} commit'inin atası değil; "
         "geriye dönüş yapılmaz."
     )
 
