@@ -34,7 +34,7 @@
         <td data-label="Fiyat" class="num">{{ tx.unit_price | exact }}</td>
         <td data-label="Tutar" class="num">{{ row.amount | money }}</td>
         <td data-label="Komisyon" class="num">{{ tx.fee | exact }}</td>
-        <td data-label="Not">{% if stored.voided_at %}<span class="warn">İptal: {{ stored.void_reason }}</span> {% endif %}{{ stored.note or "" }}{% if stored.external_ref %} <span class="muted">{{ stored.external_ref }}</span>{% endif %}</td>
+        <td class="wrap" data-label="Not">{% if stored.voided_at %}<span class="warn">İptal: {{ stored.void_reason }}</span> {% endif %}{{ stored.note or "" }}{% if stored.external_ref %} <span class="muted">{{ stored.external_ref }}</span>{% endif %}</td>
         {% if writable %}<td data-label="">{% if not stored.voided_at %}<a href="{{ prefix }}/islemler/{{ stored.id }}/iptal">İptal et<span class="sr"> (#{{ stored.id }})</span></a>{% endif %}</td>{% endif %}
       </tr>
       {% endfor %}

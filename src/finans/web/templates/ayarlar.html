@@ -61,7 +61,7 @@
         <td data-label="#">{{ stored.id }}</td>
         <td data-label="Kayıt">{{ stored.recorded_at | local }}</td>
         <td data-label="Yürürlük">{% if stored.version.effective_from.year == 1 %}Başlangıç (portfolio.toml){% else %}{{ stored.version.effective_from | gun(case="den") }} itibaren{% endif %}</td>
-        <td data-label="Değişiklik">{% for name, change in describe(item.previous, stored.version, item.changed) %}<div>{{ name }}: {{ change }}</div>{% else %}değişiklik yok{% endfor %}</td>
+        <td class="wrap" data-label="Değişiklik">{% for name, change in describe(item.previous, stored.version, item.changed) %}<div>{{ name }}: {{ change }}</div>{% else %}değişiklik yok{% endfor %}</td>
         <td data-label="Durum">{{ states[item.state] }}{% if stored.cancel_reason %}: {{ stored.cancel_reason }}{% endif %}{% if item.state == "planned" and writable %} · <a href="{{ prefix }}/ayarlar/{{ stored.id }}/vazgec">Vazgeç<span class="sr"> (#{{ stored.id }})</span></a>{% endif %}</td>
         <td data-label="Kaynak">{{ sources[stored.source] }}</td>
       </tr>

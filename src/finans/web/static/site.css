@@ -587,6 +587,8 @@ pre.report {
 
   table.cards tr { display: table-row; padding: 0; }
 
+  /* Gövdedeki `anywhere` tablo algoritmasına kısa sütunları harf genişliğine indirme izni verir;
+     masaüstü tablosunda yalnız uzun serbest metin sütunu (.wrap) kelime içinden kırılır. */
   table.cards th, table.cards td {
     display: table-cell;
     width: auto;
@@ -594,7 +596,10 @@ pre.report {
     border-top: 1px solid var(--line);
     text-align: left;
     vertical-align: top;
+    overflow-wrap: normal;
   }
+
+  table.cards td.wrap { overflow-wrap: anywhere; }
 
   table.cards th { border-top: 0; color: var(--ink-2); font-size: 0.8125rem; font-weight: 600; vertical-align: middle; }
 
