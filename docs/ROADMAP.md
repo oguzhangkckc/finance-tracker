@@ -119,10 +119,8 @@ Maaş günü, aylık katkı ve hedef dağılım veritabanında, yürürlük tari
 Geliştirme kapısı: migration öncesi ve sonrası bütün rapor türleri aynı; Ocak'tan geçerli katkı Ekim raporunu değiştirmez; geriye tarih ve toplamı 1 olmayan hedef reddedilir; TOML sınıf kuralları; CLI ile eşlik; maaş günü değişikliği iki yönde; Ocak katkısı ve Mart hedefi senaryosu taşımalı ve taşımasız; iki profile ayrı yazım ve ayrı sonuç; hedef toplamı Chrome'da; log'da tutar yok.
 Takvim: geliştirme 25 Kasım (bitti); Pi'ye toplu kurulumla. Kurulumda iki profilde `ft db migrate` ve `ft config apply`; `doctor` "Ayarlar: başlangıç sürümü (portfolio.toml)" göstermeli.
 
-## D1 · Otomatik deploy
-GitHub Actions → Tailscale (`tag:ci`) → yalnız tek bir betiği çalıştırabilen deploy kullanıcısı → sürüm dizinleri, sağlık kontrolü, otomatik geri dönüş, Telegram bildirimi, dondurma anahtarı. Birim dosyası, deploy betiği ya da migration değişirse otomatik kurulum durur ve elle kurulum istenir. Karar satırları D1 dalında yazılır; imzalı commit doğrulaması şimdilik yok.
-Geliştirme kapısı: kalıp ve doğrulama, dondurma, zamanlayıcı penceresi ve kilit, geri dönüş testleri; `deploy.yml`'nin yapısı (tetikleyici koşulları, izinler, SHA sabitleri); birim sertleştirmesi.
-Takvim: geliştirme W2b'den sonra; Pi'ye 26–30 Aralık.
+## D1 · Otomatik deploy (iptal edildi)
+İptal edildi (2026-11-25, kullanıcı kararı): güvenlik ve deploy sadeleştirildi, zorunlu komut, sürüm dizinleri ve path birimlerinin bakım maliyeti fazla. Kod PR #28 ile merge edilmişti; Pi'ye kurulmadan geri alındı (K-132…K-135 iptal). D1 kurulum günü için planlanan M3/M4 yeniden başlatması da kalkar (kullanıcı kararı). Yerini sadeleştirme milestone'ları alır; ilki D1'in geri alınmasıdır, gerisi (karar satırları, deploy, API, arayüz, geçiş) bir sonraki tasarım değişikliğinde bu dosyaya yazılır.
 
 ## M5 · OpenClaw ve güvenlik sertleştirmesi
 JSON anlık görüntüleri ve rrsync ile aktarımı (yalnızca çekirdekten dışarı), ft-agent (boru hattı ve veri tazeliği için iki ayrı bayatlık sinyali), JSON Schema kontratı, SKILL.md, PPK özeti akışı (oranlar kodla çıkarılır), asistan botu; iki makine, ayrı OS kullanıcıları, systemd sertleştirmesinin geri kalanı (LoadCredential K-92 ve beş ayar K-98 ile M4'te geldi), makine bazında egress allowlist.
