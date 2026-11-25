@@ -3,7 +3,7 @@
 {% block title %}Varlıklar · finans-takip{% endblock %}
 {% block content %}
   <h1>Varlıklar</h1>
-  <p class="muted">Değerleme günü {{ report.logical_date }}</p>
+  <p class="muted">Değerleme günü {{ report.logical_date | gun }}</p>
   <table class="cards">
     <thead>
       <tr><th>Fon</th><th>Sınıf</th><th class="num">Adet</th><th class="num">Maliyet</th><th class="num">Değer</th><th class="num">Basit getiri</th><th>Fiyat</th></tr>

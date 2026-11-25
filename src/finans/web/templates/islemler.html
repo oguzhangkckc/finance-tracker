@@ -21,7 +21,7 @@
       {% set tx = stored.transaction %}
       <tr{% if stored.voided_at %} class="voided"{% endif %}>
         <td data-label="#">{{ stored.id }}</td>
-        <td data-label="Tarih">{{ tx.trade_date }}</td>
+        <td data-label="Tarih">{{ tx.trade_date | gun }}</td>
         <td data-label="Fon"><strong>{{ tx.instrument }}</strong></td>
         <td data-label="Yön">{% if tx.side.value == "BUY" %}alış{% else %}satış{% endif %}</td>
         <td data-label="Adet" class="num">{{ tx.units | exact }}</td>

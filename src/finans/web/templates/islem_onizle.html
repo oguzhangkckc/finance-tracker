@@ -15,7 +15,7 @@
 <div class="panel">
   <dl class="summary">
     <dt>Fon</dt><dd>{{ tx.instrument }}{% if names.get(tx.instrument, tx.instrument) != tx.instrument %} · {{ names[tx.instrument] }}{% endif %}</dd>
-    <dt>{% if paper %}Fiyat günü{% else %}İşlem günü{% endif %}</dt><dd>{{ tx.trade_date }}</dd>
+    <dt>{% if paper %}Fiyat günü{% else %}İşlem günü{% endif %}</dt><dd>{{ tx.trade_date | gun }}</dd>
     <dt>Adet</dt><dd class="num">{{ tx.units | entered }} pay</dd>
     <dt>Birim fiyat</dt><dd class="num">{{ tx.unit_price | entered }} TL</dd>
     <dt>Komisyon</dt><dd class="num">{{ tx.fee | money }}</dd>
@@ -34,15 +34,16 @@
 {% set found = issue.price %}
 <div class="notice {% if issue.level == 'info' %}info{% else %}warn{% endif %}" role="status">{{ icon("uyari" if issue.level != "info" else "bilgi") }}<div>
   {% if found %}
-  <p>{% if found.published is not none %}Girdiğin fiyat {{ found.entered | entered }} TL; {{ tx.trade_date }} günü yayımlanan fiyat {{ found.published | entered }} TL (fark %{{ found.difference_percent | exact }}).{% else %}{{ tx.trade_date }} günü yayımlanmış fiyat yok; hafta sonu ya da tatil olabilir.{% endif %}</p>
+  {% set shown = same_places(found.entered, found.published, found.suggested_price) %}
+  <p>{% if found.published is not none %}Girdiğin fiyat {{ shown[0] }} TL; {{ tx.trade_date | gun(case="de") }} yayımlanan fiyat {{ shown[1] }} TL (fark %{{ found.difference_percent | exact }}).{% else %}{{ tx.trade_date | gun(case="de") }} yayımlanmış fiyat yok; hafta sonu ya da tatil olabilir.{% endif %}</p>
   {% if found.suggested %}
-  <p>Girdiğin fiyat {{ found.suggested }} gününün fiyatıyla ({{ found.suggested_price | entered }} TL) tutuyor; işlem günü büyük olasılıkla {{ found.suggested }}.</p>
+  <p>Girdiğin fiyat {{ found.suggested | gun(case="in") }} fiyatıyla ({{ shown[2] }} TL) tutuyor; işlem günü büyük olasılıkla {{ found.suggested | gun }}.</p>
   <form class="actions" method="post" action="{{ prefix }}/islemler/yeni/{{ kind }}">
     <input type="hidden" name="belirtec" value="{{ csrf }}">
     {% for name, value in edit.items() %}
     <input type="hidden" name="{{ name }}" value="{{ found.suggested if name == 'gun' else value }}">
     {% endfor %}
-    <button class="btn btn-secondary" type="submit">İşlem gününü {{ found.suggested }} yap</button>
+    <button class="btn btn-secondary" type="submit">İşlem gününü {{ found.suggested | gun }} yap</button>
   </form>
   {% endif %}
   {% else %}

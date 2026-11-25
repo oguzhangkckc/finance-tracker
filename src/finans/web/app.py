@@ -2,7 +2,7 @@
 
 import re
 from collections.abc import Callable, Mapping
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Final
@@ -19,7 +19,17 @@ from starlette.templating import Jinja2Templates
 from finans import bootstrap
 from finans.application.password import well_formed
 from finans.application.report import ReportKind
-from finans.contracts.display import class_label, exact, money, percent, points
+from finans.contracts.display import (
+    Case,
+    class_label,
+    day_label,
+    exact,
+    money,
+    month_label,
+    percent,
+    points,
+    same_places,
+)
 from finans.contracts.report import SANAL_NOTICE
 from finans.ports.clock import BUSINESS_TZ, Clock
 from finans.settings import PROFILES, Profile, Settings, profile_settings
@@ -102,11 +112,6 @@ def _entered(value: Decimal) -> str:
     return f"{value:f}".replace(".", ",")
 
 
-def _local(moment: datetime) -> str:
-    """Saatler her zaman İstanbul'a göre (K-99)."""
-    return f"{moment.astimezone(BUSINESS_TZ):%Y-%m-%d %H:%M}"
-
-
 def _is_current(href: str, subpath: str) -> bool:
     """Alt sayfa (ör. /raporlar/aylik) üst menü öğesini de seçili yapar."""
     return href == subpath or (href != "/" and subpath.startswith(f"{href}/"))
@@ -125,7 +130,7 @@ def _environment() -> Environment:
         undefined=StrictUndefined,
     )
     env.filters.update(
-        money=money, percent=percent, points=points, exact=exact, local=_local, entered=_entered
+        money=money, percent=percent, points=points, exact=exact, entered=_entered, ay=month_label
     )
     env.globals.update(
         icon=icon,
@@ -164,7 +169,20 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
     lock = WriteLock(stored, time)
     assets = Assets(STATIC)
     templates = Jinja2Templates(env=_environment())
-    templates.env.globals["asset"] = assets.url
+    templates.env.globals.update(asset=assets.url, same_places=same_places)
+
+    def day(value: date, case: Case = "", year: bool | None = None) -> str:
+        """Bugünün yılı uygulamanın saatinden; saatler her zaman İstanbul'a göre (K-99)."""
+        return day_label(value, today=time.today(), case=case, year=year)
+
+    def local(moment: datetime) -> str:
+        here = moment.astimezone(BUSINESS_TZ)
+        return f"{day(here.date())} {here:%H:%M}"
+
+    def local_day(moment: datetime) -> str:
+        return day(moment.astimezone(BUSINESS_TZ).date())
+
+    templates.env.filters.update(gun=day, local=local, local_gun=local_day)
 
     def profile_routes(profile: Profile, conf: Settings) -> list[BaseRoute]:
         prefix = f"/{SLUGS[profile]}"

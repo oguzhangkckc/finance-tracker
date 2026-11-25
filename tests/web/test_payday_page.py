@@ -26,8 +26,10 @@ def test_the_last_payday_plan_is_previewed_then_applied_as_the_cli_would(
 
     assert page.status_code == 200, page.text
     assert 'name="maas_gunu" type="date" value="2026-11-15"' in page.text
-    assert "2026-11-20 fiyatıyla 57 pay × 10,5 TL = 598,50 TL; artan 1,50 TL." in page.text
-    assert "2026-11-20 fiyatıyla 20 pay × 20 TL = 400,00 TL; artan 0,00 TL." in page.text
+    assert "<h2>15 Kasım planı</h2>" in page.text
+    assert "Fiyat penceresi 25 Kasım&#39;da biter." in page.text
+    assert "20 Kasım fiyatıyla 57 pay × 10,5 TL = 598,50 TL; artan 1,50 TL." in page.text
+    assert "20 Kasım fiyatıyla 20 pay × 20 TL = 400,00 TL; artan 0,00 TL." in page.text
     assert SANAL in page.text
     assert "Planı uygula (2 alım)" in page.text
     assert site.rows("sanal") == []

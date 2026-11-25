@@ -433,14 +433,16 @@ def test_a_price_from_another_day_is_shown_with_commas_and_one_tap_moves_the_day
 
     preview = post_preview(me, "real", "alis", {**REAL_BUY, "fiyat": "10,500000"})
 
-    assert (
-        "Girdiğin fiyat 10,500000 TL; 2026-11-25 günü yayımlanan fiyat 11 TL (fark %4,55)."
-        in preview.text
+    published = (
+        "Girdiğin fiyat 10,500000 TL; 25 Kasım'da yayımlanan fiyat 11,000000 TL (fark %4,55)."
     )
-    assert "2026-11-20 gününün fiyatıyla (10,5 TL) tutuyor" in preview.text
+    matching = "Girdiğin fiyat 20 Kasım'ın fiyatıyla (10,500000 TL) tutuyor"
+    assert published.replace("'", "&#39;") in preview.text
+    assert matching.replace("'", "&#39;") in preview.text
+    assert "İşlem gününü 20 Kasım yap" in preview.text
     fix = hidden_fields(preview.text, "/gercek/islemler/yeni/alis")
     assert fix == {**REAL_BUY, "fiyat": "10,500000", "gun": "2026-11-20"}
     moved = me.post("/gercek/islemler/yeni/alis", fix)
     assert moved.status_code == 200
-    assert "<dt>İşlem günü</dt><dd>2026-11-20</dd>" in moved.text
+    assert "<dt>İşlem günü</dt><dd>20 Kasım</dd>" in moved.text
     assert 'class="notice warn"' not in moved.text

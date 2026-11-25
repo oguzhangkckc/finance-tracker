@@ -83,7 +83,7 @@ def test_wrong_passwords_count_down_and_the_fifth_closes_the_lock(tmp_path: Path
     fifth = me.unlock(WRONG)
     assert fifth.status_code == 429
     assert "Çok fazla yanlış deneme." in fifth.text
-    assert "2026-12-15 12:15" in fifth.text
+    assert "15 Aralık 12:15" in fifth.text
     assert me.unlock(PASSWORD).status_code == 429
     waiting = me.get("/gercek/kilit")
     assert "Çok fazla yanlış deneme." in waiting.text

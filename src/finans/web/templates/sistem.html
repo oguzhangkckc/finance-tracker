@@ -17,7 +17,7 @@
       <tr>
         <td data-label="#">{{ run.id }}</td>
         <td data-label="İş">{{ run.job }}</td>
-        <td data-label="Gün">{{ run.logical_date }}</td>
+        <td data-label="Gün">{{ run.logical_date | gun }}</td>
         <td data-label="Sonuç">{{ run.status }}</td>
         <td data-label="Başladı">{{ run.started_at | local }}</td>
       </tr>
