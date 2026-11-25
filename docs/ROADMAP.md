@@ -46,7 +46,7 @@ Kurulum durumu (2026-11-24): cihaz kuruldu; `ft doctor` fiyatlar dışında yeş
 Kabul süresi (sanal portföy, K-112): 2026-11-24 – 2026-12-08. İlk sanal alımlar 2026-11-24'te girildi; altı sanal zamanlayıcı da açık. Süre içinde haftalık rapor 2026-11-29 ve 2026-12-06'da, aylık rapor 2026-12-05 ile 10 arasında. Gerçek `sync-prices`, `weekly-report`, `monthly-report` ve `payday` gerçek alımlar başlayınca açılır (K-121).
 Not: M4 kabulü sanal portföyle şartlı geçilebilir: sanal timer'lar iki hafta açık ve raporlar zamanında, raporlar aynı sanal işlemlerle elle tutulan tabloyla mutabık, gerçek profilin yedek ping'i hiç kaçmamış; gerçek işlemler başlayınca ilk rapor ping'i ayrıca doğrulanır (K-112).
 M4 kabul süresinde yapılan değişiklik (2026-11-25, `2a6383f`): Pi #15'ten #18'e güncellendi. Rapor üretimi ve renderer kodu değişmedi; yeni olanlar web servisi ve `sync-prices`'a eklenen `--bugun`. #17 iki değişiklik getirdi: veri kalitesi denetimi raporun gününe kadarki işlemlere bakar (geçmiş tarihli raporları düzeltir); sanal önizlemede payı 0 çıkan fon görünür. Kurulumdan hemen sonra iki profilde `doctor` ve `job list` kontrol edildi. Zamanlanmış bir iş bu güncelleme yüzünden bozulursa kabul süresi düzeltme gününden yeniden başlar.
-M4 kabulünden sonra kurulacak düzeltme: alarm teslimi outbox desenine geçer; Telegram'a gönderim sırasında veritabanı işlemi açık tutulmaz (K-131). Rapor ve alarm davranışına dokunduğu için kabul süresi (2026-12-08) bitmeden Pi'ye kurulmaz.
+Toplu kurulumla gelecek düzeltme: alarm teslimi outbox desenine geçer; Telegram'a gönderim sırasında veritabanı işlemi açık tutulmaz (K-131). Rapor ve alarm davranışına dokunduğu için kurulumdan sonra M4 kabul süresi yeniden başlar (bkz. W2, toplu kurulum).
 İlk commit (M3 düzeltmeleri): mutabakatta adet farkı son 5 işlem gününde girilmiş tek bir işlemle eşleşiyorsa "olası valör farkı" gösterilir (K-79).
 Not: Para ağırlıklı getirinin kökü [−0,99; 10] dışındaysa (alt ya da üst) rapor basit getiriyi ve "Zamanlama nedeniyle para ağırlıklı getiri anlamlı değil." notunu gösterir; domain sonuç türü bu durumu "hesaplanamadı"dan ayırır (K-44).
 Not: Katkı tanımlı değilse aylık raporun dengeleme bölümü "Katkı tanımlı değil." yazar, sıfırlarla dolu öneri göstermez; eksik `[contribution]` 0 yerine "tanımlı değil" okunur (K-56).
@@ -85,29 +85,35 @@ Not: kabul süresi başlamadan cihaza alınması önerilir; kabul süresince `/o
 ## W2 · Panelden yönetim (W2a–W2d)
 İşlemler, ayarlar ve tablolar panelden; tasarım sistemi (K-105, K-125…K-130). Sıra W2a → W2b → W2c → W2d; yazma, 15 Aralık maaş günü hedefi yüzünden tablolardan önce gelir.
 Ön koşul (W2b Pi'ye kurulmadan önce): paylaşılan cihazın sertleştirmesinin kolay maddeleri tamam (K-130).
+Toplu kurulum (2026-11-25 kararı): kurulumlar kabul sürelerine göre bölünmez; proje yeni canlıya çıktı ve henüz gerçek para yok. W2a, W2b, alarm teslimi düzeltmesi (K-131), W2c ve W2d bitince Pi'ye tek oturumda elle kurulur. Kurulum rehberi:
+- En başta iki profilin veritabanının yedeği ve sha256 özeti alınır.
+- Her aşamadan sonra iki profilde `doctor` ve `job list`, arayüzde sayfalar kontrol edilir.
+- Geri dönüş: kod önceki commit'e döndürülür ve kurulum öncesi yedek geri yüklenir; migration'lar geri alınamaz.
+- `ft_web_password`, `finans-web` yeniden başlatılmadan önce oluşturulur.
+Kabul süreleri: M3 ve M4 kurulumun bittiği gün yeniden başlar. Mevcut sürelerin "toplu kurulum nedeniyle yeniden başlatıldı" notuyla kapatılması ve yeni tarihler kurulumdan sonra ayrı, küçük bir PR'dır.
 
 ### W2a · Tasarım sistemi ve iskelet
 Renk belirteçleri (gerçek profil Petrol, sanal profil Mürdüm), sistem yazı tipi ve ölçek, bileşenler; statik dosyalar içerik özetli adla ve uzun önbellekle; iki profil tek serviste `/gercek/` ve `/sanal/`; sınıf adları `[sinif_adlari]`; mevcut sayfalar yeni düzende; boş ve hata durumları (K-125, K-128).
 Geliştirme kapısı: CSS belirteçlerinden kontrast testi (AA); her sayfada tek `h1`, etiketli alanlar, `aria-current` ve `data-profile`; sanal sayfada bant; satır içi stil ve betik yok; statik dosya özeti ve önbellek başlığı; mevcut rakam testleri yeşil.
-Takvim: geliştirme 26 Kasım – 2 Aralık; Pi'ye W2b ile.
+Takvim: geliştirme 26 Kasım – 2 Aralık; Pi'ye toplu kurulumla.
 
 ### W2b · Panelden yazma
 Şifre kilidi, imzalı önizleme ve tek kullanımlık nonce, yazma bağlantısı (K-126). Sanal profilde tutarla alım, adetle satış ve maaş günü planı; gerçek profilde dekonttan alım ve satış; gerekçeli iptal. CLI'yla aynı application fonksiyonları ve kurallar (K-51, K-58, K-64, K-109, K-113, K-119).
 Geliştirme kapısı: CLI ile eşlik (aynı satır), önizleme = kayıt, çift gönderim, imza süresi, şifre ve kilit, yazma kurulmamışken kapalı, log'da tutar yok; her önizleme ve onay ekranında doğru profil satırı ("GERÇEK/SANAL portföye kaydedilecek") var, öbürü yok.
 Cihaz testi: sanal profilde bir alım ve iptali. Gerçek `sync-prices` timer'ı ilk gerçek alım günü açılır (K-121).
-Takvim: geliştirme 3–9 Aralık; Pi'ye W2a ile 10–12 Aralık (M4 kabulünden ve sertleştirmeden sonra); hedef 15 Aralık maaş günü.
+Takvim: geliştirme 3–9 Aralık; Pi'ye toplu kurulumla (sertleştirmenin kolay maddelerinden sonra).
 Kabul kapısı: web'den girilen ilk gerçek işlemler aracı kurum ekstresiyle ±0,01 TL/kalem mutabık.
 
 ### W2c · Tablolar ve grafikler
 Sunucuda sıralama, filtre ve sayfalama (adres parametreleri); `app.js` yalnız kolaylık; `value_history` ve üç SVG grafik (K-129).
 K-64 uyarısı yapısal olur: girilen fiyat, yayımlanmış fiyat ve önerilen gün ayrı alanlarda taşınır. Böylece önizlemede "işlem gününü düzelt" düğmesi olur; web virgülle, CLI noktayla biçimlendirir. CLI çıktısı değişmez (testle).
 Geliştirme kapısı: sıralama, filtre ve sayfalama birim testleri (Decimal, sınırlar, bilinmeyen parametre); SVG snapshot'ları; JavaScript kapalıyken bütün akışlar.
-Takvim: geliştirme 10–18 Aralık; Pi'ye 15 Aralık'tan sonra.
+Takvim: geliştirme 10–18 Aralık; Pi'ye toplu kurulumla.
 
 ### W2d · Ayarlar
 Maaş günü, aylık katkı ve hedef dağılım veritabanında, yürürlük tarihli; `portfolio.toml` ilk değer; değişiklik geçmişi (K-127).
 Geliştirme kapısı: migration öncesi ve sonrası bütün rapor türleri aynı; Ocak'tan geçerli katkı Ekim raporunu değiştirmez; geriye tarih ve toplamı 1 olmayan hedef reddedilir; TOML sınıf kuralları; CLI ile eşlik.
-Takvim: geliştirme 19 Aralık – 4 Ocak; Pi'ye M3 kabulünden sonra, Ocak maaş gününden önce.
+Takvim: geliştirme W2c'den sonra; Pi'ye toplu kurulumla.
 
 ## D1 · Otomatik deploy
 GitHub Actions → Tailscale (`tag:ci`) → yalnız tek bir betiği çalıştırabilen deploy kullanıcısı → sürüm dizinleri, sağlık kontrolü, otomatik geri dönüş, Telegram bildirimi, dondurma anahtarı. Birim dosyası, deploy betiği ya da migration değişirse otomatik kurulum durur ve elle kurulum istenir. Karar satırları D1 dalında yazılır; imzalı commit doğrulaması şimdilik yok.
