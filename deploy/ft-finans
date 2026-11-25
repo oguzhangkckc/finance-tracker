@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Sunucuda elle ft komutu: zamanlanmış işlerle aynı kullanıcı, ayar, sır ve sertleştirmeyle (K-97, K-98).
-# Kullanım: sudo /opt/finans/deploy/ft-finans doctor
+# Kullanım: sudo ft-finans doctor
 set -euo pipefail
 
 credentials=()
