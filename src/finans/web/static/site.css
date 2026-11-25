@@ -1,0 +1,186 @@
+/* Önce dar ekran (K-123 (11)); geniş ekran kuralları en altta. JavaScript yok. */
+:root {
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --fg: #1a1a1a;
+  --muted: #5a5a5a;
+  --line: #dddddd;
+  --accent: #1d4ed8;
+  --warn: #9a3412;
+  --band-bg: #fff2cc;
+  --band-fg: #5c4400;
+  --tap: 44px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161616;
+    --surface: #1f1f1f;
+    --fg: #ececec;
+    --muted: #a8a8a8;
+    --line: #333333;
+    --accent: #93b4ff;
+    --warn: #fdba74;
+    --band-bg: #4a3b00;
+    --band-fg: #ffe9a8;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  overflow-x: hidden;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  overflow-wrap: anywhere;
+}
+
+a { color: var(--accent); }
+
+.band {
+  padding: 0.5rem 1rem;
+  background: var(--band-bg);
+  color: var(--band-fg);
+  font-weight: 600;
+  text-align: center;
+}
+
+header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+  padding: 0.25rem 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+nav { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+
+nav a, .button {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  padding: 0 0.75rem;
+  border-radius: 0.5rem;
+  color: var(--fg);
+  text-decoration: none;
+}
+
+nav a[aria-current="page"] { background: var(--surface); font-weight: 600; }
+
+.button { border: 1px solid var(--line); background: var(--surface); }
+
+button.button { font: inherit; cursor: pointer; }
+
+.notice {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--surface);
+}
+
+.viewer, .muted { color: var(--muted); }
+
+.small { font-size: 0.9rem; }
+
+main { max-width: 64rem; margin: 0 auto; padding: 1rem; }
+
+h1 { margin: 0.5rem 0 0; font-size: 1.5rem; }
+
+h2 { margin-top: 1.5rem; font-size: 1.15rem; }
+
+.num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.warn { color: var(--warn); }
+
+.note { color: var(--muted); font-size: 0.9rem; }
+
+.tag {
+  padding: 0 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 0.25rem;
+  font-size: 0.8rem;
+}
+
+.stats { display: grid; grid-template-columns: 1fr; gap: 0.5rem; margin: 1rem 0; }
+
+.stats > div, ul.cards > li, table.cards tr {
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--surface);
+}
+
+.stats dt { color: var(--muted); font-size: 0.9rem; }
+
+.stats dd { margin: 0; font-size: 1.25rem; text-align: left; }
+
+ul.cards { display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
+
+.row { display: flex; justify-content: space-between; gap: 1rem; }
+
+/* Dar ekranda tablo satırı kart olur; hücre etiketi data-label'dan gelir. */
+table.cards, table.cards tbody, table.cards tr, table.cards td { display: block; width: 100%; }
+
+table.cards thead { display: none; }
+
+table.cards tr { margin-bottom: 0.5rem; }
+
+table.cards td {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.2rem 0;
+  text-align: right;
+}
+
+table.cards td::before {
+  content: attr(data-label);
+  color: var(--muted);
+  text-align: left;
+}
+
+pre.report {
+  margin: 1rem 0;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  font: 0.9rem/1.45 ui-monospace, "SF Mono", Menlo, monospace;
+  white-space: pre-wrap;
+}
+
+tr.voided { opacity: 0.6; }
+
+@media (min-width: 48rem) {
+  .stats { grid-template-columns: repeat(3, 1fr); }
+
+  table.cards { display: table; border-collapse: collapse; }
+
+  table.cards thead { display: table-header-group; }
+
+  table.cards tbody { display: table-row-group; }
+
+  table.cards tr { display: table-row; border: 0; border-bottom: 1px solid var(--line); }
+
+  table.cards th, table.cards td {
+    display: table-cell;
+    width: auto;
+    padding: 0.5rem;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  table.cards th.num, table.cards td.num { text-align: right; }
+
+  table.cards td::before { content: none; }
+}

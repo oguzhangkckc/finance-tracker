@@ -6,14 +6,18 @@ readme = "docs/DESIGN.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "httpx>=0.28.1",
+    "jinja2>=3.1.6",
     "pydantic>=2.14.4",
     "pydantic-settings>=2.16.3",
+    "starlette>=1.10.0",
     "typer>=0.29.2",
+    "uvicorn>=0.54.0",
 ]
 
 [project.scripts]
 ft = "finans.cli.main:app"
 ft-agent = "finans.cli.agent:app"
+finans-web = "finans.web.__main__:main"
 
 [build-system]
 requires = ["uv_build>=0.10.8,<0.11.0"]
@@ -81,7 +85,7 @@ include_external_packages = true
 name = "Katmanlar"
 type = "layers"
 layers = [
-    "finans.cli",
+    "finans.cli | finans.web",
     "finans.bootstrap",
     "finans.settings",
     "finans.application | finans.adapters",
@@ -91,9 +95,9 @@ layers = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "CLI somut adapter görmez; bağlama yalnızca bootstrap'ta"
+name = "CLI ve web somut adapter görmez; bağlama yalnızca bootstrap'ta"
 type = "forbidden"
-source_modules = ["finans.cli"]
+source_modules = ["finans.cli", "finans.web"]
 forbidden_modules = ["finans.adapters"]
 allow_indirect_imports = true
 
@@ -110,10 +114,12 @@ modules = [
     "finans.adapters.json_log",
     "finans.adapters.lock",
     "finans.adapters.portfolio_toml",
+    "finans.adapters.refresh_request",
     "finans.adapters.render",
     "finans.adapters.sqlite",
     "finans.adapters.tefas",
     "finans.adapters.telegram",
+    "finans.adapters.unix_listener",
 ]
 
 [[tool.importlinter.contracts]]
@@ -126,8 +132,11 @@ source_modules = [
     "finans.application",
     "finans.settings",
     "finans.cli",
+    "finans.web",
 ]
-forbidden_modules = ["sqlite3", "socket", "urllib", "http", "httpx"]
+# K-103: import-linter standart kütüphaneyi yalnız üst düzeyde tanır; urllib.request ve
+# http.client gibi alt modüller tests/arch'taki AST denetiminde yasaklıdır.
+forbidden_modules = ["sqlite3", "socket", "httpx"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]

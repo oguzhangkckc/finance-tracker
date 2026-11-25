@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     tefas_base_url: str = "https://www.tefas.gov.tr/api/funds/"
     # K-71: istekler arası en az 10 sn; daha kısası kabul edilmez.
     tefas_min_interval_s: int = Field(default=10, ge=10)
+    # K-123: web arayüzü; izin verilen tek Tailscale girişi ve POST denetimi için köken.
+    web_allowed_login: str | None = None
+    web_origin: str | None = None
+    web_session_key: SecretStr | None = None
+    web_socket: Path = Path("/run/finans-web/web.sock")
 
     @field_validator(
         "evds_api_key",
@@ -53,6 +58,9 @@ class Settings(BaseSettings):
         "telegram_chat_id",
         "healthcheck_reports_url",
         "healthcheck_backup_url",
+        "web_allowed_login",
+        "web_origin",
+        "web_session_key",
         mode="before",
     )
     @classmethod

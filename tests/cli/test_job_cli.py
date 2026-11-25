@@ -2,6 +2,7 @@ import hashlib
 import logging
 import time
 from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -10,7 +11,11 @@ from typer.testing import CliRunner
 
 from finans import bootstrap
 from finans.cli.main import app
+from finans.ports.clock import Clock
+from finans.ports.sources import PriceSource
+from finans.settings import Settings
 from tests.fakes.clock import FixedClock
+from tests.fakes.sources import FakePriceSource
 
 runner = CliRunner()
 # İstanbul'da Pazar 20:30: haftalık raporun 20:00 dilimi geçmiş. Yerel saate bakan kod
@@ -81,6 +86,38 @@ def test_logical_date_and_listed_time_do_not_follow_the_system_zone(
     assert ran.exit_code == 0, ran.output
     assert "weekly-report 2026-11-29: tamam" in ran.output
     assert "#1 weekly-report 2026-11-29 ok (2026-11-29 20:30)" in listed.output
+
+
+@pytest.mark.usefixtures("portfolio")
+def test_bugun_runs_the_price_sync_for_the_istanbul_today(monkeypatch: pytest.MonkeyPatch) -> None:
+    @contextmanager
+    def prices(_settings: Settings, _clock: Clock) -> Iterator[PriceSource]:
+        yield FakePriceSource()
+
+    # Çarşamba 22:30 UTC İstanbul'da Perşembe 01:30'dur.
+    late_wednesday = datetime(2026, 11, 25, 22, 30, tzinfo=UTC)
+    monkeypatch.setattr(bootstrap, "system_clock", lambda: FixedClock(late_wednesday))
+    monkeypatch.setattr(bootstrap, "price_source", prices)
+
+    result = runner.invoke(app, ["job", "run", "sync-prices", "--bugun"])
+
+    assert result.exit_code == 0, result.output
+    assert "sync-prices 2026-11-26: kısmi" in result.output
+
+
+@pytest.mark.usefixtures("portfolio")
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["weekly-report", "--bugun"],
+        ["sync-prices", "--bugun", "--logical-date", "2026-11-26"],
+    ],
+)
+def test_bugun_is_only_for_the_price_sync_without_a_date(args: list[str]) -> None:
+    result = runner.invoke(app, ["job", "run", *args])
+
+    assert result.exit_code == 2
+    assert "--bugun yalnız sync-prices ile ve --logical-date olmadan verilir." in result.output
 
 
 @pytest.mark.usefixtures("portfolio")

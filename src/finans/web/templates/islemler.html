@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}İşlemler · finans-takip{% endblock %}
+{% block content %}
+  <h1>İşlemler</h1>
+  <table class="cards">
+    <thead>
+      <tr><th>#</th><th>Tarih</th><th>Fon</th><th>Yön</th><th class="num">Adet</th><th class="num">Fiyat</th><th class="num">Komisyon</th><th>Not</th></tr>
+    </thead>
+    <tbody>
+      {% for stored in transactions %}
+      {% set tx = stored.transaction %}
+      <tr{% if stored.voided_at %} class="voided"{% endif %}>
+        <td data-label="#">{{ stored.id }}</td>
+        <td data-label="Tarih">{{ tx.trade_date }}</td>
+        <td data-label="Fon"><strong>{{ tx.instrument }}</strong></td>
+        <td data-label="Yön">{% if tx.side.value == "BUY" %}alış{% else %}satış{% endif %}</td>
+        <td data-label="Adet" class="num">{{ tx.units | exact }}</td>
+        <td data-label="Fiyat" class="num">{{ tx.unit_price | exact }}</td>
+        <td data-label="Komisyon" class="num">{{ tx.fee | exact }}</td>
+        <td data-label="Not">{% if stored.voided_at %}<span class="warn">İptal: {{ stored.void_reason }}</span> {% endif %}{{ stored.note or "" }}{% if stored.external_ref %} <span class="muted">{{ stored.external_ref }}</span>{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td>Kayıtlı işlem yok.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

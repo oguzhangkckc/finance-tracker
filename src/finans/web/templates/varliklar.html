@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "_price.html" import price %}
+{% block title %}Varlıklar · finans-takip{% endblock %}
+{% block content %}
+  <h1>Varlıklar</h1>
+  <p class="muted">Değerleme günü {{ report.logical_date }}</p>
+  <table class="cards">
+    <thead>
+      <tr><th>Fon</th><th>Sınıf</th><th class="num">Adet</th><th class="num">Maliyet</th><th class="num">Değer</th><th class="num">Basit getiri</th><th>Fiyat</th></tr>
+    </thead>
+    <tbody>
+      {% for holding in report.holdings %}
+      <tr>
+        <td data-label="Fon"><strong>{{ holding.instrument }}</strong></td>
+        <td data-label="Sınıf">{{ holding.asset_class }}{% if not holding.allocation %} · dağılım dışı{% endif %}</td>
+        <td data-label="Adet" class="num">{{ holding.units | exact }}</td>
+        <td data-label="Maliyet" class="num">{{ holding.cost | money }}</td>
+        <td data-label="Değer" class="num">{% if holding.value is not none %}{{ holding.value | money }}{% else %}—{% endif %}</td>
+        <td data-label="Basit getiri" class="num">{% if holding.simple_return is not none %}{{ holding.simple_return | percent }}{% else %}—{% endif %}</td>
+        <td data-label="Fiyat">{{ price(holding, stale) }}</td>
+      </tr>
+      {% else %}
+      <tr><td>Pozisyon yok.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if report.lots %}
+  <h2>Lotlar</h2>
+  <table class="cards">
+    <thead>
+      <tr><th>Fon</th><th>Alış</th><th class="num">Adet</th><th class="num">Maliyet</th><th class="num">Değer</th><th class="num">Reel getiri</th></tr>
+    </thead>
+    <tbody>
+      {% for lot in report.lots %}
+      <tr>
+        <td data-label="Fon">{{ lot.instrument }}</td>
+        <td data-label="Alış">{{ lot.acquired }}</td>
+        <td data-label="Adet" class="num">{{ lot.units | exact }}</td>
+        <td data-label="Maliyet" class="num">{{ lot.cost | money }}</td>
+        <td data-label="Değer" class="num">{% if lot.value is not none %}{{ lot.value | money }}{% else %}—{% endif %}</td>
+        <td data-label="Reel getiri" class="num">{% if lot.real_return is not none %}{{ lot.real_return | percent }}{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+{% endblock %}

@@ -2,7 +2,7 @@ from decimal import Decimal
 
 import pytest
 
-from finans.contracts.display import money, percent, points
+from finans.contracts.display import exact, money, percent, points
 
 D = Decimal
 
@@ -28,3 +28,9 @@ def test_percent_and_points_show_signs_where_asked() -> None:
     assert percent(D("0.444"), places=1) == "%44,4"
     assert points(D("0.04396")) == "+4,4 puan"
     assert points(D("-0.04396")) == "-4,4 puan"
+
+
+def test_exact_keeps_every_digit_with_a_decimal_comma() -> None:
+    assert exact(D("12.838270")) == "12,83827"
+    assert exact(D("4050")) == "4050"
+    assert exact(D("0.000001")) == "0,000001"

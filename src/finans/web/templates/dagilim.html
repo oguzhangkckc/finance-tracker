@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Dağılım · finans-takip{% endblock %}
+{% block content %}
+  <h1>Dağılım</h1>
+  <p class="muted">Değerleme günü {{ report.logical_date }}</p>
+
+  {% if report.allocation_skipped %}
+  <p class="warn">Dağılım hesaplanmadı; fiyatı eksik: {{ report.allocation_skipped | join(", ") }}.</p>
+  {% else %}
+  <table class="cards">
+    <thead>
+      <tr><th>Sınıf</th><th class="num">Değer</th><th class="num">Ağırlık</th><th class="num">Hedef</th><th class="num">Sapma</th></tr>
+    </thead>
+    <tbody>
+      {% for line in report.allocation %}
+      <tr>
+        <td data-label="Sınıf"><strong>{{ line.asset_class }}</strong></td>
+        <td data-label="Değer" class="num">{{ line.value | money }}</td>
+        <td data-label="Ağırlık" class="num">{{ line.weight | percent(places=1) }}</td>
+        <td data-label="Hedef" class="num">{{ line.target | percent(places=1) }}</td>
+        <td data-label="Sapma" class="num">{{ line.deviation | points }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if report.quiet_period %}
+  <p class="note">Portföy henüz küçük; sapma alarmları 3 aylık katkıya ulaşınca başlar.</p>
+  {% endif %}
+
+  <h2>Açık alarmlar</h2>
+  <ul class="cards">
+    {% for alert in report.alerts %}
+    <li>
+      <div class="row"><strong>{{ alert.asset_class }}</strong><span class="num">{% if alert.deviation is not none %}{{ alert.deviation | points }}{% endif %}</span></div>
+      <div class="muted">{% if alert.direction == "above" %}hedefin üstünde{% else %}hedefin altında{% endif %} · açıldı {{ alert.opened_at.date() }}</div>
+    </li>
+    {% else %}
+    <li>Açık alarm yok.</li>
+    {% endfor %}
+  </ul>
+{% endblock %}

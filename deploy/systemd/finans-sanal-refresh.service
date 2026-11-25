@@ -1,0 +1,23 @@
+[Unit]
+Description=finans-takip sanal portföy elle fiyat güncellemesi
+Documentation=file:/opt/finans/docs/DESIGN.md
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=finans
+Group=finans
+WorkingDirectory=/var/lib/finans
+EnvironmentFile=/etc/finans/finans.env
+Environment=FT_PROFILE=sanal
+LoadCredential=ft_evds_api_key:/etc/finans/credstore/ft_evds_api_key
+LoadCredential=ft_telegram_bot_token:/etc/finans/credstore/ft_telegram_bot_token
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/finans
+ProtectHome=yes
+# K-123: istek önce silinir; iş sürerken gelen yeni istek iş bitince .path birimini yeniden tetikler.
+ExecStartPre=/usr/bin/rm -f /var/lib/finans/refresh/sanal.request
+ExecStart=/opt/finans/.venv/bin/ft job run sync-prices --bugun

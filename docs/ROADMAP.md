@@ -76,7 +76,8 @@ Geliştirme kapısı: profil ayrımı testleri yeşil (sanal işlem gerçek veri
 ## W1 · Web arayüzü, salt okuma
 `finans.web` (Starlette, Jinja2, uvicorn), Unix soketi ve `tailscale serve`, kimlik başlığı denetimi, sayfalar (özet, varlıklar, dağılım, getiri, raporlar, alarmlar, işlemler, sistem), `finans-web.service` (K-101…K-104, K-106). Sanal portföyle geliştirilir; testlerde hayali fixture'lar kullanılır. Fiyatlar açıklandığı günle ve bayatlık uyarısıyla gösterilir (K-120). "Fiyatları güncelle" düğmesi bir istek dosyası bırakır, fiyatı `.path` birimiyle başlayan iş çeker; en az 1 saat aralık, günde en fazla 6 kez; bunun için CSRF'nin bir kısmı W1'e çekilir (K-122).
 Ön koşul: cihaza Tailscale üzerinden yapılan bütün erişimlerin listesi kullanıcı onayından geçer; Pi etiketlenir ve politika her mevcut erişime açık izin verir (K-102).
-Geliştirme kapısı: kimlik, güvenlik başlıkları, salt okuma, HTML kaçışı ve birim testleri yeşil; cihazda kendi cihazından 200, Pi'nin kendisinden ve `tag:ci`'dan 403, Funnel kapalı.
+Cihaz testi (DESIGN, Kurulum adım 11): HTTPS'ten önce tailnet adı rastgele ve cihaz adı nötr; telefon tailnet'te etiketsiz, anahtar süresi açık; soket ve dizini yalnız `finans`'ın; düğme `.path` birimiyle işi başlatır ve iş veritabanına yazarken bütün sayfalar Mac'ten ve telefondan açılır (WAL, `-shm`; K-123).
+Geliştirme kapısı: kimlik, güvenlik başlıkları, salt okuma, CSRF, HTML kaçışı ve birim testleri yeşil; CI'da `systemd-analyze security` eşiği (K-124); cihazda Mac'ten ve telefondan 200, Pi'nin kendisinden 403, etiketli cihazlar politika gereği 443'e ulaşamaz, Funnel kapalı.
 Not: kabul süresi başlamadan cihaza alınması önerilir; kabul süresince `/opt/finans` güncellemesi kabul edilen sistemi değiştirir.
 
 ## W2 · Web'den işlem girişi

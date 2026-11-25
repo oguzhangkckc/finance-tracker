@@ -569,18 +569,27 @@ def job_run(
         str | None,
         typer.Option("--logical-date", help="YYYY-AA-GG; verilmezse son planlı çalışmanın günü."),
     ] = None,
+    today: Annotated[
+        bool,
+        typer.Option("--bugun", help="Yalnız sync-prices: mantıksal gün bugün (elle güncelleme)."),
+    ] = False,
 ) -> None:
     """Bir zamanlanmış işi çalıştırır (K-80); aynı gün için "ok" varsa atlar (K-12)."""
     settings = _load_settings_or_exit()
     bootstrap.configure_logging(settings)
     clock = bootstrap.system_clock()
+    if today and (name.value != "sync-prices" or logical is not None):
+        typer.echo("--bugun yalnız sync-prices ile ve --logical-date olmadan verilir.", err=True)
+        raise typer.Exit(code=2)
     with _user_errors():
         payday = bootstrap.portfolio_source().load(_portfolio_path(settings, None)).payday
-        day = (
-            _parse_date(logical)
-            if logical is not None
-            else logical_date(name.value, clock.now().astimezone(BUSINESS_TZ), payday=payday)
-        )
+        if today:
+            # K-123: elle güncelleme bugünü hedefler; bugün "ok" ise iş istek atmadan atlar.
+            day = clock.today()
+        elif logical is not None:
+            day = _parse_date(logical)
+        else:
+            day = logical_date(name.value, clock.now().astimezone(BUSINESS_TZ), payday=payday)
         outcome = bootstrap.run_scheduled_job(settings, clock, name.value, day)
     typer.echo(f"{name.value} {day}: {_OUTCOME_LABELS[outcome.status]}")
     for key, value in outcome.detail.items():

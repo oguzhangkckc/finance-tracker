@@ -15,11 +15,21 @@ done
 # EnvironmentFile sunucudaki yollara işaret ettiği için CI'da zararsız değerlerle değişir.
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
-cp "$units"/*.timer "$work"/
+harmless() {
+  sed -e 's#^ExecStart=.*#ExecStart=/bin/true#' -e '/^EnvironmentFile=/d' "$1" > "$2"
+}
+cp "$units"/*.timer "$units"/*.path "$work"/
+cp -R "$units/finans-web.service.d" "$work"/
 for timer in "$units"/*.timer; do
   instance="$(sed -n 's/^Unit=//p' "$timer")"
-  sed -e 's#^ExecStart=.*#ExecStart=/bin/true#' -e '/^EnvironmentFile=/d' \
-    "$units/${instance%%@*}@.service" > "$work/$instance"
+  harmless "$units/${instance%%@*}@.service" "$work/$instance"
 done
-systemd-analyze verify --man=no "$work"/*.timer "$work"/finans-*job@?*.service
+for service in finans-web finans-refresh finans-sanal-refresh; do
+  harmless "$units/$service.service" "$work/$service.service"
+done
+systemd-analyze verify --man=no "$work"/*.timer "$work"/*.path "$work"/finans-*job@?*.service \
+  "$work"/finans-web.service "$work"/finans-*refresh.service
 echo "systemd birimleri geçerli."
+
+# K-106, K-124: ağa açık tek servisin sertleştirmesi gevşerse CI kırılır (eşik 0-100 ölçeğinde).
+systemd-analyze security --offline=yes --threshold=20 "$work"/finans-web.service

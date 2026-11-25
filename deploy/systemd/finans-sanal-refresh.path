@@ -1,0 +1,10 @@
+[Unit]
+Description=finans-takip sanal portföy elle fiyat güncelleme isteği
+Documentation=file:/opt/finans/docs/DESIGN.md
+
+[Path]
+PathExists=/var/lib/finans/refresh/sanal.request
+Unit=finans-sanal-refresh.service
+
+[Install]
+WantedBy=paths.target

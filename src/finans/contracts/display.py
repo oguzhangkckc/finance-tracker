@@ -2,6 +2,8 @@
 
 from decimal import ROUND_HALF_EVEN, Decimal
 
+from finans.domain.numeric import canonical_text
+
 
 def _digits(value: Decimal, places: int) -> tuple[str, str]:
     """Banker yuvarlaması; binlik ayırıcı nokta, ondalık ayırıcı virgül."""
@@ -25,3 +27,8 @@ def percent(rate: Decimal, *, places: int = 2, signed: bool = False) -> str:
 def points(deviation: Decimal) -> str:
     sign, text = _digits(deviation * 100, 1)
     return f"{sign}{text} puan"
+
+
+def exact(value: Decimal) -> str:
+    """Fiyat ve adet yuvarlanmadan, ondalık ayırıcı virgülle (ör. 12,83827)."""
+    return canonical_text(value).replace(".", ",")

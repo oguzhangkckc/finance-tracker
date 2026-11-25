@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Alarmlar · finans-takip{% endblock %}
+{% block content %}
+  <h1>Alarmlar</h1>
+  {% if quiet_ended %}
+  <p class="muted">Sessiz dönem {{ quiet_ended }} tarihinde bitti; sapma alarmları açık.</p>
+  {% else %}
+  <p class="note">Portföy henüz küçük; sapma alarmları 3 aylık katkıya ulaşınca başlar.</p>
+  {% endif %}
+  <ul class="cards">
+    {% for alert in report.alerts %}
+    <li>
+      <div class="row"><strong>{{ alert.asset_class }}</strong><span class="num">{% if alert.deviation is not none %}{{ alert.deviation | points }}{% endif %}</span></div>
+      <div class="muted">{% if alert.direction == "above" %}hedefin üstünde{% else %}hedefin altında{% endif %} · açıldı {{ alert.opened_at.date() }}</div>
+    </li>
+    {% else %}
+    <li>Açık alarm yok.</li>
+    {% endfor %}
+  </ul>
+{% endblock %}

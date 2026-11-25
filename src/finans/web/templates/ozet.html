@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% from "_price.html" import price %}
+{% block title %}Özet · finans-takip{% endblock %}
+{% block content %}
+  <h1>Özet</h1>
+  <p class="muted">Değerleme günü {{ report.logical_date }}</p>
+
+  {% for message in stale_all %}
+  <p class="warn">Fiyatlar bayat: {{ message }}.</p>
+  {% endfor %}
+
+  {% if report.missing_prices %}
+  <p class="warn">Fiyatı eksik: {{ report.missing_prices | join(", ") }}. Dağılım ve alarmlar bu yüzden hesaplanmadı.</p>
+  {% endif %}
+
+  <dl class="stats">
+    <div><dt>Toplam değer</dt><dd class="num">{{ report.summary.values.total | money }}</dd></div>
+    <div><dt>Dağılım içi</dt><dd class="num">{{ report.summary.values.in_allocation | money }}</dd></div>
+    {% if report.summary.values.out_of_allocation %}
+    <div><dt>Dağılım dışı</dt><dd class="num">{{ report.summary.values.out_of_allocation | money }}</dd></div>
+    {% endif %}
+    {% if report.summary.change is not none %}
+    <div><dt>Haftalık değişim ({{ report.summary.change_since }} sonrası)</dt><dd class="num">{{ report.summary.change | percent(signed=True) }}</dd></div>
+    {% endif %}
+    {% if report.summary.simple_return is not none %}
+    <div><dt>Basit getiri</dt><dd class="num">{{ report.summary.simple_return | percent }}</dd></div>
+    {% endif %}
+    <div><dt>Gerçekleşmiş K/Z</dt><dd class="num">{{ report.summary.realized_pnl | money }}</dd></div>
+  </dl>
+
+  {% if report.quiet_period %}
+  <p class="note">Portföy henüz küçük; sapma alarmları 3 aylık katkıya ulaşınca başlar.</p>
+  {% endif %}
+
+  <h2>Varlıklar</h2>
+  <ul class="cards">
+    {% for holding in report.holdings %}
+    <li>
+      <div class="row"><strong>{{ holding.instrument }}</strong><span class="num">{% if holding.value is not none %}{{ holding.value | money }}{% endif %}</span></div>
+      <div class="muted">{{ holding.asset_class }}{% if not holding.allocation %} · dağılım dışı{% endif %}</div>
+      <div class="small">{{ price(holding, stale) }}</div>
+    </li>
+    {% else %}
+    <li>Pozisyon yok.</li>
+    {% endfor %}
+  </ul>
+
+  {% if report.alerts %}
+  <p><a class="button" href="/dagilim">Açık sapma alarmı: {{ report.alerts | length }}</a></p>
+  {% endif %}
+  <h2>Fiyatlar</h2>
+  <p class="note">Fonların günde bir fiyatı vardır; gösterilen, açıklanmış son fiyattır ve günüyle yazılır.</p>
+  <p class="muted">Son fiyat güncellemesi: {% if refresh.last_sync is not none %}{{ refresh.last_sync | local }}{% else %}son iki günde yok{% endif %}</p>
+  {% if refresh.decision.allowed %}
+  <form method="post" action="/fiyat-guncelle">
+    <input type="hidden" name="belirtec" value="{{ csrf }}">
+    <button class="button" type="submit">Fiyatları güncelle</button>
+  </form>
+  {% else %}
+  <p class="note">Elle güncelleme şu an kapalı: {{ refresh.decision.reason }}.{% if refresh.decision.earliest is not none %} En erken {{ refresh.decision.earliest | local }}.{% endif %}</p>
+  {% endif %}
+{% endblock %}

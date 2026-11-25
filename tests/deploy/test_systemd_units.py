@@ -1,9 +1,13 @@
 import re
-from datetime import time
+from datetime import UTC, datetime, time
 from pathlib import Path
+from typing import Literal
 
 import pytest
 
+from finans import bootstrap
+from finans.adapters.refresh_request import FileRefreshRequests
+from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.domain.schedule import (
     BACKUP_AT,
     JOBS,
@@ -15,7 +19,7 @@ from finans.domain.schedule import (
     SYNC_PRICES_TIMES,
     WEEKLY_REPORT_AT,
 )
-from finans.settings import Settings
+from finans.settings import Settings, resolve_profile
 
 DEPLOY = Path(__file__).resolve().parents[2] / "deploy"
 UNITS = DEPLOY / "systemd"
@@ -74,6 +78,15 @@ def _one(entries: list[tuple[str, str]], key: str) -> str:
 
 def _calendars(entries: list[tuple[str, str]]) -> tuple[str, ...]:
     return tuple(value for name, value in entries if name == "OnCalendar")
+
+
+def _env() -> dict[str, str]:
+    example = (DEPLOY / "finans.env.example").read_text(encoding="utf-8")
+    return dict(
+        line.split("=", 1)
+        for line in example.splitlines()
+        if "=" in line and not line.startswith("#")
+    )
 
 
 def test_every_job_has_a_persistent_timer_in_istanbul_time() -> None:
@@ -223,3 +236,125 @@ def test_sanal_wrapper_runs_like_the_sanal_service() -> None:
     assert {name: properties.get(name) for name in HARDENING} == HARDENING
     assert loop is not None
     assert loop[1].split() == SANAL_SECRETS
+
+
+WEB_HARDENING = {
+    **HARDENING,
+    # K-106
+    "PrivateNetwork": "yes",
+    "RestrictAddressFamilies": "AF_UNIX",
+    "CapabilityBoundingSet": "",
+    "PrivateDevices": "yes",
+    "ProtectKernelTunables": "yes",
+    "ProtectKernelModules": "yes",
+    "ProtectKernelLogs": "yes",
+    "ProtectControlGroups": "yes",
+    "ProtectProc": "invisible",
+    "SystemCallFilter": "@system-service",
+    "MemoryDenyWriteExecute": "yes",
+    "RuntimeDirectory": "finans-web",
+    "RuntimeDirectoryMode": "0700",
+    "UMask": "0077",
+    # K-124
+    "PrivateMounts": "yes",
+    "ProtectClock": "yes",
+    "ProtectHostname": "yes",
+    "LockPersonality": "yes",
+    "RestrictNamespaces": "yes",
+    "RestrictRealtime": "yes",
+    "RestrictSUIDSGID": "yes",
+    "RemoveIPC": "yes",
+    "SystemCallArchitectures": "native",
+    "SystemCallErrorNumber": "EPERM",
+}
+PROFILES: tuple[Literal["real", "sanal"], ...] = ("real", "sanal")
+
+
+def _profile(profile: Literal["real", "sanal"]) -> Settings:
+    return resolve_profile(Settings(db_path=Path(_env()["FT_DB_PATH"]), profile=profile))
+
+
+def _trigger(settings: Settings) -> Path:
+    requests = bootstrap.refresh_requests(settings)
+    assert isinstance(requests, FileRefreshRequests)
+    return requests.trigger
+
+
+def test_the_web_service_is_networkless_and_sees_only_its_session_key() -> None:
+    service = _unit(UNITS / "finans-web.service")["Service"]
+
+    assert {name: _one(service, name) for name in WEB_HARDENING} == WEB_HARDENING
+    assert (_one(service, "User"), _one(service, "Group")) == ("finans", "finans")
+    assert _one(service, "ExecStart") == "/opt/finans/.venv/bin/finans-web"
+    assert _one(service, "EnvironmentFile") == "/etc/finans/finans.env"
+    loaded = [value for name, value in service if name == "LoadCredential"]
+    assert loaded == ["ft_web_session_key:/etc/finans/credstore/ft_web_session_key"]
+    assert "SecretStr" in str(Settings.model_fields["web_session_key"].annotation)
+    socket = Settings.model_fields["web_socket"].default
+    assert socket.parent == Path("/run") / _one(service, "RuntimeDirectory")
+
+
+def test_the_web_profile_is_chosen_only_in_its_drop_in() -> None:
+    service = _unit(UNITS / "finans-web.service")["Service"]
+    drop_in = _unit(UNITS / "finans-web.service.d" / "profil.conf")
+
+    assert all(name != "Environment" for name, _ in service)
+    assert drop_in == {"Service": [("Environment", "FT_PROFILE=sanal")]}
+
+
+def test_a_read_only_connection_writes_the_shm_file_next_to_the_database(
+    migrated_db: Path,
+) -> None:
+    shm = migrated_db.with_name(f"{migrated_db.name}-shm")
+    assert not shm.exists()
+
+    with SqliteUnitOfWork(migrated_db, readonly=True) as uow:
+        uow.runs.recent(since=datetime(2026, 11, 1, tzinfo=UTC))
+        assert shm.exists()
+
+
+@pytest.mark.parametrize("profile", PROFILES)
+def test_the_web_may_write_the_shm_file_and_the_request_of_its_profile(
+    profile: Literal["real", "sanal"],
+) -> None:
+    # K-123: salt okunur bağlantı da -shm'e yazar; ProtectSystem=strict altında dizin açık olmalı.
+    writable = Path(_one(_unit(UNITS / "finans-web.service")["Service"], "ReadWritePaths"))
+    settings = _profile(profile)
+    shm = settings.db_path.with_name(f"{settings.db_path.name}-shm")
+
+    assert shm.parent.is_relative_to(writable)
+    assert _trigger(settings).parent.is_relative_to(writable)
+
+
+REFRESH_UNITS = {
+    "real": ("finans-refresh", "finans-job@.service"),
+    "sanal": ("finans-sanal-refresh", "finans-sanal-job@.service"),
+}
+
+
+@pytest.mark.parametrize("profile", PROFILES)
+def test_a_refresh_request_runs_the_profiles_price_sync_like_its_jobs(
+    profile: Literal["real", "sanal"],
+) -> None:
+    name, template = REFRESH_UNITS[profile]
+    trigger = _trigger(_profile(profile))
+    watcher = _unit(UNITS / f"{name}.path")
+    service = _unit(UNITS / f"{name}.service")["Service"]
+    job = _unit(UNITS / template)["Service"]
+
+    assert _one(watcher["Path"], "PathExists") == str(trigger)
+    assert _one(watcher["Path"], "Unit") == f"{name}.service"
+    assert _one(watcher["Install"], "WantedBy") == "paths.target"
+    assert _one(service, "ExecStartPre") == f"/usr/bin/rm -f {trigger}"
+    assert _one(service, "ExecStart") == "/opt/finans/.venv/bin/ft job run sync-prices --bugun"
+    exec_lines = {"ExecStart", "ExecStartPre"}
+    assert [entry for entry in service if entry[0] not in exec_lines] == [
+        entry for entry in job if entry[0] not in exec_lines
+    ]
+
+
+def test_web_settings_stay_empty_in_the_example() -> None:
+    env = _env()
+
+    assert (env["FT_WEB_ALLOWED_LOGIN"], env["FT_WEB_ORIGIN"]) == ("", "")
+    assert "FT_WEB_SESSION_KEY" not in env
