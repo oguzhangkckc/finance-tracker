@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_price.html" import price %}
 {% from "_ui.html" import allocation, delta, empty %}
+{% from "_charts.html" import value_history %}
 {% block title %}Özet · finans-takip{% endblock %}
 {% block content %}
   {% set summary = report.summary %}
@@ -9,7 +10,7 @@
     <p class="label" id="toplam">Toplam değer · Değerleme günü {{ report.logical_date | gun }}</p>
     <p class="value num">{{ summary.values.total | money }}</p>
     {% if summary.change is not none %}
-    <p class="change">{{ delta(summary.change, summary.change | percent(signed=True)) }} <span class="muted">{{ summary.change_since }} sonrasında</span></p>
+    <p class="change">{{ delta(summary.change, summary.change | percent(signed=True)) }} <span class="muted">{{ summary.change_since | gun }} sonrasında</span></p>
     {% endif %}
     <dl class="stats">
       <div><dt>Dağılım içi</dt><dd class="num">{{ summary.values.in_allocation | money }}</dd></div>
@@ -22,6 +23,8 @@
       <div><dt>Gerçekleşmiş K/Z</dt><dd class="num">{{ summary.realized_pnl | money }}</dd></div>
     </dl>
   </section>
+
+  {{ value_history(chart, "ozet-deger") }}
 
   {% for message in stale_all %}
   <div class="notice warn" role="status">{{ icon("uyari") }}<p><strong>Fiyatlar bayat: {{ message }}.</strong></p></div>

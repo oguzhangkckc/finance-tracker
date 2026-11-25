@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_charts.html" import value_history %}
 {% block title %}Getiri · finans-takip{% endblock %}
 {% macro figure(item) -%}
   {% if item is none %}—
@@ -22,6 +23,8 @@
   <p class="note">Alımlar ve değerleme aynı TÜFE dönemine düştüğü için reel getiri henüz nominalle aynı.</p>
   {% endif %}
   <p class="note">Para ağırlıklı getiri alım ve satışların tarihini ve tutarını hesaba katar; bir yıldan kısa dönemde yıllığa çevrilmez.</p>
+
+  {{ value_history(chart, "getiri-deger") }}
 
   <h2>Fon bazında</h2>
   <table class="cards">

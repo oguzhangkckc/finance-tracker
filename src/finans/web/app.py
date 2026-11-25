@@ -39,7 +39,7 @@ from finans.web.icons import icon
 from finans.web.lock import Attempt, WriteLock
 from finans.web.security import BodyLimitMiddleware, IdentityMiddleware, SecurityHeadersMiddleware
 from finans.web.session import SessionMiddleware, csrf_token
-from finans.web.svg import allocation_bar
+from finans.web.svg import allocation_bar, value_chart
 from finans.web.table import table
 from finans.web.tables import (
     ALERT_EVENTS,
@@ -68,6 +68,7 @@ from finans.web.views import (
     stale_by_instrument,
     system_view,
     transaction_rows,
+    value_chart_view,
 )
 
 NAV: Final = (
@@ -182,7 +183,7 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
     lock = WriteLock(stored, time)
     assets = Assets(STATIC)
     templates = Jinja2Templates(env=_environment())
-    templates.env.globals.update(asset=assets.url, same_places=same_places)
+    templates.env.globals.update(asset=assets.url, same_places=same_places, value_chart=value_chart)
 
     def day(value: date | str, case: Case = "", year: bool | None = None) -> str:
         """Bugünün yılı uygulamanın saatinden; saatler her zaman İstanbul'a göre (K-99).
@@ -296,10 +297,18 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
             (
                 "/",
                 "ozet.html",
-                lambda: {**report_context("weekly"), "refresh": refresh_view(conf, time)},
+                lambda: {
+                    **report_context("weekly"),
+                    "refresh": refresh_view(conf, time),
+                    "chart": value_chart_view(conf, time),
+                },
             ),
             ("/dagilim", "dagilim.html", lambda: report_context("weekly")),
-            ("/getiri", "getiri.html", lambda: report_context("monthly")),
+            (
+                "/getiri",
+                "getiri.html",
+                lambda: {**report_context("monthly"), "chart": value_chart_view(conf, time)},
+            ),
             ("/raporlar", "raporlar.html", lambda: {}),
             (
                 "/raporlar/haftalik",

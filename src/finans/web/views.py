@@ -8,11 +8,12 @@ from decimal import Decimal
 from finans import bootstrap
 from finans.application.backup import BackupCheck, verify_backups
 from finans.application.doctor import Check
+from finans.application.history import ValuePoint, value_history
 from finans.application.price_refresh import RefreshStatus, refresh_status, request_refresh
 from finans.application.report import ReportKind, build_report, payday_plan
 from finans.contracts.display import class_label
 from finans.contracts.report import HoldingLine, LotLine, Report
-from finans.domain.models import DomainError
+from finans.domain.models import DomainError, YearMonth
 from finans.domain.portfolio import ConfigError, PortfolioConfig
 from finans.domain.schedule import logical_date
 from finans.ports.clock import BUSINESS_TZ, Clock
@@ -198,3 +199,26 @@ def alert_event_rows(settings: Settings) -> list[AlertEventRow]:
         local_day = stored.event.occurred_at.astimezone(BUSINESS_TZ).date()
         rows.append(AlertEventRow(stored, asset_class, class_label(asset_class, labels), local_day))
     return rows
+
+
+@dataclass(frozen=True, slots=True)
+class ValueChart:
+    points: list[ValuePoint]
+    # Son noktada değer - enflasyona göre güncellenmiş yatırım; artıysa reel kazanç (K-129).
+    real_gap: Decimal | None
+    estimated_period: YearMonth | None
+
+
+def value_chart_view(settings: Settings, clock: Clock) -> ValueChart:
+    with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+        points = value_history(uow, end=clock.today(), cpi_series=settings.cpi_series)
+    last = next(
+        (p for p in reversed(points) if p.value is not None and p.adjusted is not None), None
+    )
+    gap = (
+        None
+        if last is None or last.value is None or last.adjusted is None
+        else last.value - last.adjusted
+    )
+    estimated = next((p.cpi_period for p in reversed(points) if p.estimated), None)
+    return ValueChart(points, gap, estimated)

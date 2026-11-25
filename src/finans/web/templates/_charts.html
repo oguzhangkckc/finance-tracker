@@ -1,0 +1,42 @@
+{# Sunucuda SVG grafikler (K-129): çizgiler türüyle ayrılır, her grafiğin tablo karşılığı var. #}
+{% macro key(line) -%}
+<svg class="key" viewBox="0 0 28 8" aria-hidden="true"><line class="{{ line }}" x1="1" y1="4" x2="27" y2="4"/></svg>
+{%- endmacro %}
+
+{% macro value_history(chart, id) -%}
+{% if chart.points %}
+{% set first = chart.points[0].day %}
+{% set last = chart.points[-1].day %}
+<figure class="panel chart">
+  <figcaption>Değerin seyri</figcaption>
+  {{ value_chart(chart.points, chart_id=id, title="Değerin seyri", description="Haftalık portföy değeri, yatırılan para ve enflasyona göre güncellenmiş yatırım; " ~ (first | gun) ~ " ile " ~ (last | gun) ~ " arası.") }}
+  <ul class="legend">
+    <li>{{ key("line-value") }}Portföy değeri</li>
+    <li>{{ key("line-invested") }}Yatırılan para (net katkı)</li>
+    <li>{{ key("line-adjusted") }}Enflasyona göre güncellenmiş yatırım</li>
+  </ul>
+  {% if chart.real_gap is not none %}
+  <p class="chart-verdict">{% if chart.real_gap > 0 %}Değer, enflasyona göre güncellenmiş yatırımın {{ chart.real_gap | money }} üstünde: reel kazanç.{% elif chart.real_gap < 0 %}Değer, enflasyona göre güncellenmiş yatırımın {{ (0 - chart.real_gap) | money }} altında: reel kayıp.{% else %}Değer, enflasyona göre güncellenmiş yatırıma eşit: reel kazanç ya da kayıp yok.{% endif %}</p>
+  {% endif %}
+  {% if chart.estimated_period %}
+  <p class="note">TÜFE'si henüz açıklanmamış haftalarda (tabloda *) son açıklanan dönem, {{ chart.estimated_period | ay }}, kullanıldı.</p>
+  {% endif %}
+  <details>
+    <summary>Tablo olarak göster</summary>
+    <table class="cards">
+      <thead><tr><th>Hafta</th><th class="num">Değer</th><th class="num">Yatırılan para</th><th class="num">Enflasyona göre güncellenmiş</th></tr></thead>
+      <tbody>
+        {% for point in chart.points %}
+        <tr>
+          <td data-label="Hafta">{{ point.day | gun }}</td>
+          <td data-label="Değer" class="num">{% if point.value is not none %}{{ point.value | money }}{% else %}fiyat eksik{% endif %}</td>
+          <td data-label="Yatırılan para" class="num">{{ point.invested | money }}</td>
+          <td data-label="Güncellenmiş yatırım" class="num">{% if point.adjusted is not none %}{{ point.adjusted | money }}{% if point.estimated %} *{% endif %}{% else %}TÜFE yok{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+</figure>
+{% endif %}
+{%- endmacro %}
