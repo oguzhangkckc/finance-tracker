@@ -78,6 +78,7 @@ SAVED: Final = {
     "alis": "Alım #{no} kaydedildi.",
     "satis": "Satış #{no} kaydedildi.",
     "iptal": "#{no} numaralı işlem iptal edildi.",
+    "maas-gunu": "Maaş günü planı uygulandı: {no} sanal alım.",
 }
 
 

@@ -290,6 +290,18 @@ input[type="checkbox"] { width: 22px; height: 22px; min-height: 0; margin: 2px 0
 
 .plain { margin: 8px 0 0; padding-left: 18px; }
 
+.payday { margin: 0 0 16px; padding: 0; list-style: none; }
+
+.payday li { padding: 12px 16px; border-top: 1px solid var(--line); }
+
+.payday li:first-child { border-top: 0; }
+
+.payday p { margin: 4px 0 0; color: var(--ink-2); }
+
+.payday-head { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+
+.payday-head .num { margin-left: auto; font-weight: 600; }
+
 .steps {
   display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 18px; padding: 0;
   list-style: none; color: var(--ink-2); font-size: 0.8125rem; counter-reset: step;

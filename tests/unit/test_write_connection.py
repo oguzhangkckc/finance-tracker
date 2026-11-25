@@ -7,8 +7,11 @@ from pathlib import Path
 import pytest
 
 from finans import bootstrap
+from finans.adapters.sqlite import connection as sqlite_connection
 from finans.adapters.sqlite.connection import connect
 from finans.adapters.sqlite.migrate import apply, bundled, schema_status
+from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
+from finans.ports.unit_of_work import StorageBusyError
 from finans.settings import Settings
 from tests.fakes.clock import FixedClock
 
@@ -41,3 +44,18 @@ def test_a_writer_without_migration_writes_on_a_current_schema(migrated_db: Path
 
     with bootstrap.open_unit_of_work(Settings(db_path=migrated_db), readonly=True) as uow:
         assert uow.submissions.used("c" * 22) == "#1"
+
+
+def test_a_writer_blocked_past_the_busy_timeout_raises_a_storage_busy_error(
+    migrated_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Web bunu 503 sayfasına çevirir; ham sqlite3 hatası adapter dışına çıkmaz (K-126)."""
+    monkeypatch.setattr(sqlite_connection, "BUSY_TIMEOUT_MS", 50)
+    with closing(connect(migrated_db)) as other:
+        other.execute("BEGIN IMMEDIATE")
+        with pytest.raises(StorageBusyError), SqliteUnitOfWork(migrated_db):
+            pass
+        other.execute("ROLLBACK")
+
+    with SqliteUnitOfWork(migrated_db) as uow:
+        assert uow.transactions.list() == []

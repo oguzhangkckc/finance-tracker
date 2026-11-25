@@ -1,5 +1,5 @@
-"""Yazma uçları: işlem girişi ve iptal; form → önizleme → imzalı onay → kayıt
-(K-105, K-116, K-125, K-126). Her uç önce formu ve kilidi denetler."""
+"""Yazma uçları: işlem girişi, iptal ve sanal maaş günü planı; form → önizleme → imzalı onay →
+kayıt (K-105, K-113, K-116, K-125, K-126). Her uç önce formu ve kilidi denetler."""
 
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
@@ -11,23 +11,33 @@ from starlette.responses import PlainTextResponse, RedirectResponse, Response
 from starlette.routing import BaseRoute, Route
 
 from finans.application.transactions import VoidBlockedError
+from finans.contracts.display import class_label
 from finans.domain.models import DomainError
 from finans.ports.clock import Clock
+from finans.ports.unit_of_work import StorageBusyError
 from finans.settings import Profile, Settings
 from finans.web.confirm import sign, verify
 from finans.web.forms import REFUSED, read_form
 from finans.web.lock import WriteLock
-from finans.web.views import PAGE_ERRORS, PageError
+from finans.web.views import PAGE_ERRORS, PageError, load_config
 from finans.web.writes import (
     TRADE_KINDS,
     FormErrors,
+    PaydayRequest,
     Recorded,
     ResultChanged,
     TradeKind,
     choices,
+    default_payday,
+    payday_fields,
+    payday_result,
+    preview_payday,
     preview_trade,
+    read_payday,
     read_reason,
     read_trade,
+    ready,
+    record_payday,
     record_trade,
     record_void,
     trade_fields,
@@ -106,6 +116,12 @@ def write_routes(w: WriteContext) -> list[BaseRoute]:
                 return form
             try:
                 return await run_in_threadpool(body, request, form)
+            except StorageBusyError:
+                # Nonce harcanmadı; aynı form aynı adrese yeniden gönderilebilir.
+                context: dict[str, object] = {"action": request.url.path, "fields": form}
+                response = w.page(request, "mesgul.html", context, status=503)
+                response.headers["Retry-After"] = "5"
+                return response
             except (PageError, *PAGE_ERRORS) as exc:
                 return failure(request, str(exc), 503)
 
@@ -182,9 +198,9 @@ def write_routes(w: WriteContext) -> list[BaseRoute]:
 
     def duplicate(request: Request, kind: str, recorded: Recorded) -> Response:
         if kind == "iptal":
-            message = f"Bu onay zaten kullanıldı; #{recorded.txn_id} numaralı işlem iptal edildi."
+            message = f"Bu onay zaten kullanıldı; #{recorded.number} numaralı işlem iptal edildi."
         else:
-            message = f"Bu onay zaten kullanıldı; işlem #{recorded.txn_id} olarak kaydedildi."
+            message = f"Bu onay zaten kullanıldı; işlem #{recorded.number} olarak kaydedildi."
         return failure(request, message, 409)
 
     def saving_trade(
@@ -208,7 +224,7 @@ def write_routes(w: WriteContext) -> list[BaseRoute]:
             return form_page(request, kind, fields, problem=str(exc), status=409)
         if recorded.duplicate:
             return duplicate(request, kind, recorded)
-        target = f"{prefix}/islemler?islem={kind}&no={recorded.txn_id}"
+        target = f"{prefix}/islemler?islem={kind}&no={recorded.number}"
         return RedirectResponse(target, status_code=303)
 
     def void_page(
@@ -301,6 +317,80 @@ def write_routes(w: WriteContext) -> list[BaseRoute]:
         target = f"{prefix}/islemler?islem=iptal&no={txn_id}"
         return RedirectResponse(target, status_code=303)
 
+    def payday_page(
+        request: Request,
+        payday: PaydayRequest | None,
+        values: dict[str, str],
+        *,
+        errors: dict[str, str] | None = None,
+        changed: bool = False,
+        status: int = 200,
+    ) -> Response:
+        """`payday` yoksa (geçersiz gün) yalnız form gösterilir."""
+        labels = load_config(w.conf).class_labels
+        context: dict[str, object] = {
+            "values": values,
+            "errors": errors or {},
+            "plan": None,
+            "signed": None,
+            "changed": changed,
+            "cls": lambda code: class_label(code, labels),
+        }
+        if payday is not None:
+            plan = preview_payday(w.conf, payday, today=w.time.today())
+            fields = {
+                "profil": w.profile,
+                "islem": "maas-gunu",
+                **payday_fields(payday),
+                "sonuc": payday_result(plan),
+            }
+            context |= {"plan": plan, "ready": len(ready(plan))}
+            if ready(plan):
+                context["signed"] = sign(w.key, request.state.session, fields, now=w.time.now())
+        return w.page(request, "maas_gunu.html", context, status=status)
+
+    def payday_form(request: Request) -> Response:
+        if (denied := gate(request, f"{prefix}/maas-gunu")) is not None:
+            return denied
+        try:
+            payday = default_payday(w.conf, w.time.now())
+            return payday_page(request, payday, payday_fields(payday))
+        except (PageError, *PAGE_ERRORS) as exc:
+            return failure(request, str(exc), 503)
+
+    def payday_preview(request: Request, form: dict[str, str]) -> Response:
+        if (denied := gate(request, f"{prefix}/maas-gunu")) is not None:
+            return denied
+        try:
+            payday = read_payday(form)
+        except FormErrors as exc:
+            return payday_page(request, None, form, errors=exc.fields, status=400)
+        return payday_page(request, payday, payday_fields(payday))
+
+    def saving_payday(request: Request, fields: dict[str, str], nonce: str) -> Response:
+        try:
+            payday = read_payday(fields)
+            recorded = record_payday(
+                w.conf,
+                payday,
+                nonce=nonce,
+                expected=fields.get("sonuc", ""),
+                now=w.time.now(),
+                today=w.time.today(),
+            )
+        except FormErrors:
+            return PlainTextResponse(REFUSED, status_code=403)
+        except ResultChanged:
+            values = payday_fields(payday)
+            return payday_page(request, payday, values, changed=True, status=409)
+        if recorded.duplicate:
+            message = (
+                f"Bu onay zaten kullanıldı; maaş günü planı uygulandı ({recorded.number} alım)."
+            )
+            return failure(request, message, 409)
+        target = f"{prefix}/islemler?islem=maas-gunu&no={recorded.number}"
+        return RedirectResponse(target, status_code=303)
+
     def saving(request: Request, form: dict[str, str]) -> Response:
         if (denied := gate(request, f"{prefix}/islemler")) is not None:
             return denied
@@ -313,6 +403,8 @@ def write_routes(w: WriteContext) -> list[BaseRoute]:
         kind = fields.get("islem")
         if kind == "iptal":
             return saving_void(request, fields, verified.nonce)
+        if kind == "maas-gunu" and sanal:
+            return saving_payday(request, fields, verified.nonce)
         for trade_kind in TRADE_KINDS:
             if kind == trade_kind:
                 return saving_trade(request, trade_kind, fields, verified.nonce)
@@ -328,4 +420,13 @@ def write_routes(w: WriteContext) -> list[BaseRoute]:
         Route(f"{prefix}/islemler/kaydet", posted(saving), methods=["POST"]),
         Route(f"{prefix}/islemler/{{no:int}}/iptal", void_form, methods=["GET"]),
         Route(f"{prefix}/islemler/{{no:int}}/iptal", posted(voiding), methods=["POST"]),
+        # K-113: maaş günü planını uygulamak yalnız sanal profilde; gerçek profilde adres yok.
+        *(
+            [
+                Route(f"{prefix}/maas-gunu", payday_form, methods=["GET"]),
+                Route(f"{prefix}/maas-gunu", posted(payday_preview), methods=["POST"]),
+            ]
+            if sanal
+            else []
+        ),
     ]

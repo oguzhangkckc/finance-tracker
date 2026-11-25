@@ -7,6 +7,7 @@
   <div class="actions page-actions">
     <a class="btn btn-primary" href="{{ prefix }}/islemler/yeni/alis">{% if profile == "sanal" %}Sanal alım{% else %}Alım ekle{% endif %}</a>
     <a class="btn btn-secondary" href="{{ prefix }}/islemler/yeni/satis">{% if profile == "sanal" %}Sanal satış{% else %}Satış ekle{% endif %}</a>
+    {% if profile == "sanal" %}<a class="btn btn-secondary" href="{{ prefix }}/maas-gunu">Maaş günü planı</a>{% endif %}
   </div>
   {% else %}
   <p class="note">Yazma bu cihazda kurulmadı.</p>

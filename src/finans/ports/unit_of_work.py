@@ -14,6 +14,10 @@ from finans.ports.repositories import (
 )
 
 
+class StorageBusyError(Exception):
+    """Başka bir yazma işlemi veritabanını bekleme süresinden uzun tuttu; hiçbir şey yazılmadı."""
+
+
 class UnitOfWork(Protocol):
     """Blok hatasız biterse COMMIT, hata ile biterse ROLLBACK."""
 

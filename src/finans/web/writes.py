@@ -12,13 +12,24 @@ from typing import Final, Literal
 
 from finans import bootstrap
 from finans.application.inputs import InputError, parse_amount, parse_day
-from finans.application.paper import PaperPlan, plan_paper_buy, plan_paper_sell
+from finans.application.paper import (
+    PaperPlan,
+    PaydayPurchase,
+    PaydayPurchasePlan,
+    plan_paper_buy,
+    plan_paper_sell,
+    plan_payday_purchases,
+    record_payday_purchases,
+)
 from finans.application.previews import TradePreview, VoidPreview, preview_transaction, preview_void
 from finans.application.transactions import add_transaction, digest, void_transaction
-from finans.domain.models import Side, Transaction
+from finans.domain.models import DomainError, Side, Transaction
 from finans.domain.numeric import canonical_text
+from finans.domain.schedule import logical_date
+from finans.ports.clock import BUSINESS_TZ
 from finans.ports.unit_of_work import UnitOfWork
 from finans.settings import Settings
+from finans.web.views import load_config
 
 type TradeKind = Literal["alis", "satis"]
 TRADE_KINDS: Final[tuple[TradeKind, ...]] = ("alis", "satis")
@@ -73,7 +84,9 @@ class PlannedTrade:
 
 @dataclass(frozen=True, slots=True)
 class Recorded:
-    txn_id: int
+    """`number`: işlem numarası; maaş günü planında kaydedilen alım sayısı."""
+
+    number: int
     duplicate: bool
 
 
@@ -240,3 +253,89 @@ def record_void(
         uow.submissions.record(nonce, ref=str(txn_id), at=now)
     _LOG.info("İşlem iptal edildi: #%d (%s)", txn_id, conf.profile)
     return Recorded(txn_id, duplicate=False)
+
+
+@dataclass(frozen=True, slots=True)
+class PaydayRequest:
+    payday: date
+    reapply_voided: bool
+
+
+def default_payday(conf: Settings, now: datetime) -> PaydayRequest:
+    config = load_config(conf)
+    if config.payday is None:
+        raise DomainError("portfolio.toml'da [contribution] payday tanımlı değil.")
+    day = logical_date("payday", now.astimezone(BUSINESS_TZ), payday=config.payday)
+    return PaydayRequest(day, reapply_voided=False)
+
+
+def read_payday(form: Mapping[str, str]) -> PaydayRequest:
+    errors: dict[str, str] = {}
+    day = None
+    try:
+        day = parse_day(_field(form, "maas_gunu"))
+    except InputError as exc:
+        errors["maas_gunu"] = str(exc)
+    return PaydayRequest(_checked(errors, day), _field(form, "iptaller") == "1")
+
+
+def payday_fields(request: PaydayRequest) -> dict[str, str]:
+    return {
+        "maas_gunu": request.payday.isoformat(),
+        "iptaller": "1" if request.reapply_voided else "",
+    }
+
+
+def _plan_payday(
+    uow: UnitOfWork, conf: Settings, request: PaydayRequest, today: date
+) -> PaydayPurchasePlan:
+    return plan_payday_purchases(
+        uow,
+        load_config(conf),
+        payday=request.payday,
+        today=today,
+        reapply_voided=request.reapply_voided,
+    )
+
+
+def preview_payday(conf: Settings, request: PaydayRequest, *, today: date) -> PaydayPurchasePlan:
+    with bootstrap.open_unit_of_work(conf, readonly=True) as uow:
+        return _plan_payday(uow, conf, request, today)
+
+
+def ready(plan: PaydayPurchasePlan) -> list[PaydayPurchase]:
+    return [] if plan.missing_prices else [line for line in plan.lines if line.status == "ready"]
+
+
+def payday_result(plan: PaydayPurchasePlan) -> str:
+    def text(value: Decimal | None) -> str:
+        return "" if value is None else canonical_text(value)
+
+    parts = [plan.payday.isoformat(), *plan.missing_prices]
+    parts += [
+        f"{line.ref}|{line.status}|{line.price_day}|{text(line.price)}|{text(line.units)}"
+        for line in plan.lines
+    ]
+    return hashlib.sha256("\n".join(parts).encode()).hexdigest()
+
+
+def record_payday(
+    conf: Settings,
+    request: PaydayRequest,
+    *,
+    nonce: str,
+    expected: str,
+    now: datetime,
+    today: date,
+) -> Recorded:
+    with bootstrap.open_unit_of_work(conf, migrate=False) as uow:
+        used = uow.submissions.used(nonce)
+        if used is not None:
+            return Recorded(int(used), duplicate=True)
+        plan = _plan_payday(uow, conf, request, today)
+        if payday_result(plan) != expected or not ready(plan):
+            raise ResultChanged
+        trades = record_payday_purchases(uow, plan, now=now)
+        uow.submissions.record(nonce, ref=str(len(trades)), at=now)
+    _LOG.info("Maaş günü planı uygulandı: %d alım (%s)", len(trades), conf.profile)
+    return Recorded(len(trades), duplicate=False)

@@ -33,7 +33,7 @@ class SystemView:
     backups: list[BackupCheck]
 
 
-def _config(settings: Settings) -> PortfolioConfig:
+def load_config(settings: Settings) -> PortfolioConfig:
     """Config yalnızca okunur; hedefler ve katkı oradadır (K-123 (10))."""
     if settings.portfolio_path is None:
         raise PageError("FT_PORTFOLIO_PATH tanımlı değil.")
@@ -43,7 +43,7 @@ def _config(settings: Settings) -> PortfolioConfig:
 def load_report(
     settings: Settings, clock: Clock, *, kind: ReportKind = "weekly", on: date | None = None
 ) -> Report:
-    config = _config(settings)
+    config = load_config(settings)
     with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
         return build_report(
             uow,
@@ -77,7 +77,7 @@ def report_text(settings: Settings, clock: Clock, kind: ReportKind) -> str:
 
 
 def payday_text(settings: Settings, clock: Clock) -> str:
-    config = _config(settings)
+    config = load_config(settings)
     if config.payday is None:
         raise PageError("portfolio.toml'da [contribution] payday tanımlı değil.")
     day = logical_date("payday", clock.now().astimezone(BUSINESS_TZ), payday=config.payday)
@@ -94,7 +94,7 @@ def quiet_ended_on(settings: Settings) -> date | None:
 
 
 def class_names(settings: Settings) -> Mapping[str, str]:
-    return _config(settings).class_labels
+    return load_config(settings).class_labels
 
 
 def transactions(settings: Settings) -> list[StoredTransaction]:
