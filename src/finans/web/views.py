@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 
 from finans import bootstrap
@@ -11,12 +11,12 @@ from finans.application.doctor import Check
 from finans.application.price_refresh import RefreshStatus, refresh_status, request_refresh
 from finans.application.report import ReportKind, build_report, payday_plan
 from finans.contracts.display import class_label
-from finans.contracts.report import Report
+from finans.contracts.report import HoldingLine, LotLine, Report
 from finans.domain.models import DomainError
 from finans.domain.portfolio import ConfigError, PortfolioConfig
 from finans.domain.schedule import logical_date
 from finans.ports.clock import BUSINESS_TZ, Clock
-from finans.ports.repositories import StoredRun, StoredTransaction
+from finans.ports.repositories import StoredAlertEvent, StoredRun, StoredTransaction
 from finans.settings import Settings
 
 STALE_CHECK = "bayatlık"
@@ -144,7 +144,57 @@ def system_view(settings: Settings, clock: Clock) -> SystemView:
     """Doctor sırların değerini yazmaz; yalnız tanımlı olup olmadığını (K-92)."""
     checks = bootstrap.run_doctor(settings)
     with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
-        runs = uow.runs.recent(since=clock.now() - timedelta(days=7))
+        # İş geçmişi tablosu bütün kayıtları sayfalar (K-129).
+        runs = uow.runs.recent()
     directory = settings.backup_dir
     backups = verify_backups(directory) if directory is not None and directory.is_dir() else []
     return SystemView(checks, runs, backups)
+
+
+@dataclass(frozen=True, slots=True)
+class HoldingRow:
+    index: int
+    line: HoldingLine
+    class_name: str
+
+
+@dataclass(frozen=True, slots=True)
+class LotRow:
+    index: int
+    line: LotLine
+    # Kâr/zarar = değer - maliyet; fiyatı olmayan lotta yok.
+    gain: Decimal | None
+
+
+@dataclass(frozen=True, slots=True)
+class AlertEventRow:
+    stored: StoredAlertEvent
+    asset_class: str
+    class_name: str
+    day: date
+
+
+def holding_rows(report: Report, labels: Mapping[str, str]) -> list[HoldingRow]:
+    return [
+        HoldingRow(index, line, class_label(line.asset_class, labels))
+        for index, line in enumerate(report.holdings)
+    ]
+
+
+def lot_rows(report: Report) -> list[LotRow]:
+    return [
+        LotRow(index, lot, None if lot.value is None else lot.value - lot.cost)
+        for index, lot in enumerate(report.lots)
+    ]
+
+
+def alert_event_rows(settings: Settings) -> list[AlertEventRow]:
+    labels = class_names(settings)
+    with bootstrap.open_unit_of_work(settings, readonly=True) as uow:
+        events = uow.alerts.events()
+    rows = []
+    for stored in events:
+        asset_class = stored.event.fingerprint.removeprefix("drift:")
+        local_day = stored.event.occurred_at.astimezone(BUSINESS_TZ).date()
+        rows.append(AlertEventRow(stored, asset_class, class_label(asset_class, labels), local_day))
+    return rows

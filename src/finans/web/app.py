@@ -1,11 +1,11 @@
 """finans-web uygulaması; iki profil tek serviste (K-101…K-106, K-122, K-125, K-126)."""
 
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
 from jinja2 import Environment, PackageLoader, StrictUndefined
 from starlette.applications import Starlette
@@ -30,7 +30,7 @@ from finans.contracts.display import (
     points,
     same_places,
 )
-from finans.contracts.report import SANAL_NOTICE
+from finans.contracts.report import SANAL_NOTICE, Report
 from finans.ports.clock import BUSINESS_TZ, Clock
 from finans.settings import PROFILES, Profile, Settings, profile_settings
 from finans.web.assets import Assets
@@ -41,15 +41,26 @@ from finans.web.security import BodyLimitMiddleware, IdentityMiddleware, Securit
 from finans.web.session import SessionMiddleware, csrf_token
 from finans.web.svg import allocation_bar
 from finans.web.table import table
-from finans.web.tables import PAGE_PARAMS, TRANSACTIONS
+from finans.web.tables import (
+    ALERT_EVENTS,
+    HOLDINGS,
+    LOTS,
+    PAGE_PARAMS,
+    RUN_STATUS,
+    RUNS,
+    TRANSACTIONS,
+)
 from finans.web.trade_routes import WriteContext, write_routes
 from finans.web.views import (
     PAGE_ERRORS,
     PageError,
+    alert_event_rows,
     ask_for_refresh,
     class_names,
     general_staleness,
+    holding_rows,
     load_report,
+    lot_rows,
     payday_text,
     quiet_ended_on,
     refresh_view,
@@ -232,15 +243,51 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
 
             return handler
 
-        def report_context(kind: ReportKind) -> dict[str, object]:
+        def report_parts(kind: ReportKind) -> tuple[Report, Mapping[str, str], dict[str, object]]:
             report = load_report(conf, time, kind=kind)
             labels = class_names(conf)
-            return {
+            context: dict[str, object] = {
                 "report": report,
                 "stale": stale_by_instrument(report),
                 "stale_all": general_staleness(report),
                 "cls": lambda code: class_label(code, labels),
             }
+            return report, labels, context
+
+        def report_context(kind: ReportKind) -> dict[str, object]:
+            return report_parts(kind)[2]
+
+        def listing(
+            name: str, load: Callable[[], tuple[Sequence[Any], dict[str, object]]], spec: Any
+        ) -> Callable[[Request], Response]:
+            """Tablolu sayfa: satırlar adres parametreleriyle süzülür ve sıralanır (K-129)."""
+
+            def handler(request: Request) -> Response:
+                try:
+                    rows, context = load()
+                except (PageError, *PAGE_ERRORS) as exc:
+                    return page(request, "hata.html", {"message": str(exc)}, status=503)
+                view = table(rows, request.query_params, spec, passthrough=PAGE_PARAMS)
+                return page(request, name, {**context, "table": view})
+
+            return handler
+
+        def holdings() -> tuple[Sequence[Any], dict[str, object]]:
+            # Lotlar ve para ağırlıklı getiri yalnızca aylık raporda.
+            report, labels, context = report_parts("monthly")
+            return holding_rows(report, labels), context
+
+        def lots() -> tuple[Sequence[Any], dict[str, object]]:
+            report, _, context = report_parts("monthly")
+            return lot_rows(report), context
+
+        def alert_history() -> tuple[Sequence[Any], dict[str, object]]:
+            context = {**report_context("weekly"), "quiet_ended": quiet_ended_on(conf)}
+            return alert_event_rows(conf), context
+
+        def system() -> tuple[Sequence[Any], dict[str, object]]:
+            view = system_view(conf, time)
+            return view.runs, {"system": view, "run_status": RUN_STATUS}
 
         def text(title: str, load: Callable[[], str]) -> Callable[[], dict[str, object]]:
             return lambda: {"title": title, "text": load()}
@@ -251,8 +298,6 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
                 "ozet.html",
                 lambda: {**report_context("weekly"), "refresh": refresh_view(conf, time)},
             ),
-            # Lotlar ve para ağırlıklı getiri yalnızca aylık raporda.
-            ("/varliklar", "varliklar.html", lambda: report_context("monthly")),
             ("/dagilim", "dagilim.html", lambda: report_context("weekly")),
             ("/getiri", "getiri.html", lambda: report_context("monthly")),
             ("/raporlar", "raporlar.html", lambda: {}),
@@ -271,12 +316,6 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
                 "rapor.html",
                 text("Maaş günü", lambda: payday_text(conf, time)),
             ),
-            (
-                "/alarmlar",
-                "alarmlar.html",
-                lambda: {**report_context("weekly"), "quiet_ended": quiet_ended_on(conf)},
-            ),
-            ("/sistem", "sistem.html", lambda: {"system": system_view(conf, time)}),
             ("/daha", "daha.html", lambda: {}),
         ]
 
@@ -333,6 +372,10 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
                 for path, name, load in pages
             ),
             Route(f"{prefix}/islemler", transactions_page, methods=["GET"]),
+            Route(f"{prefix}/varliklar", listing("varliklar.html", holdings, HOLDINGS)),
+            Route(f"{prefix}/varliklar/lotlar", listing("lotlar.html", lots, LOTS)),
+            Route(f"{prefix}/alarmlar", listing("alarmlar.html", alert_history, ALERT_EVENTS)),
+            Route(f"{prefix}/sistem", listing("sistem.html", system, RUNS)),
             Route(f"{prefix}/fiyat-guncelle", refresh, methods=["POST"]),
             Route(f"{prefix}/kilit", unlock_form, methods=["GET"]),
             Route(f"{prefix}/kilit", unlock, methods=["POST"]),

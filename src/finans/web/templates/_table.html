@@ -2,10 +2,12 @@
 {% macro tools(view, action, search_hint) -%}
 <form class="table-tools" method="get" action="{{ action }}">
   <div class="toolbar">
+    {% if view.spec.search %}
     <div class="field">
       <label for="ara">Ara</label>
       <input id="ara" name="ara" type="search" value="{{ view.value('ara') }}" placeholder="{{ search_hint }}" autocomplete="off">
     </div>
+    {% endif %}
     <div class="field">
       <label for="siralama">Sırala</label>
       <select id="siralama" name="siralama">

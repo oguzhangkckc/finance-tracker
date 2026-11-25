@@ -31,6 +31,9 @@ _STATUS: Final[dict[str, JobStatus]] = {
 _DIRECTION: Final[dict[str, Direction]] = {"above": "above", "below": "below"}
 _KIND: Final[dict[str, EventKind]] = {"opened": "opened", "resolved": "resolved"}
 _RUN_SELECT = "SELECT id, job, logical_date, started_at, finished_at, status, detail FROM job_run"
+_EVENT_SELECT = (
+    "SELECT id, fingerprint, kind, direction, deviation, occurred_at, notified_at FROM alert_event"
+)
 _ALERT_SELECT = (
     "SELECT fingerprint, direction, opened_at, resolved_at, last_notified_at, payload FROM alert"
 )
@@ -84,10 +87,13 @@ class SqliteRunRepo:
         ).fetchall()
         return [_run(row) for row in rows]
 
-    def recent(self, *, since: datetime) -> list[StoredRun]:
-        rows = self._conn.execute(
-            _RUN_SELECT + " WHERE started_at >= ? ORDER BY id", (encode_timestamp(since),)
-        ).fetchall()
+    def recent(self, *, since: datetime | None = None) -> list[StoredRun]:
+        if since is None:
+            rows = self._conn.execute(_RUN_SELECT + " ORDER BY id").fetchall()
+        else:
+            rows = self._conn.execute(
+                _RUN_SELECT + " WHERE started_at >= ? ORDER BY id", (encode_timestamp(since),)
+            ).fetchall()
         return [_run(row) for row in rows]
 
     def last_ok(self, job: str) -> StoredRun | None:
@@ -164,10 +170,14 @@ class SqliteAlertRepo:
         return int(cursor.lastrowid or 0)
 
     def pending_events(self) -> list[StoredAlertEvent]:
-        rows = self._conn.execute(
-            "SELECT id, fingerprint, kind, direction, deviation, occurred_at FROM alert_event"
-            " WHERE notified_at IS NULL ORDER BY id"
-        ).fetchall()
+        return self._events(pending_only=True)
+
+    def events(self) -> list[StoredAlertEvent]:
+        return self._events(pending_only=False)
+
+    def _events(self, *, pending_only: bool) -> list[StoredAlertEvent]:
+        where = " WHERE notified_at IS NULL" if pending_only else ""
+        rows = self._conn.execute(_EVENT_SELECT + where + " ORDER BY id").fetchall()
         return [
             StoredAlertEvent(
                 event_id,
@@ -178,9 +188,9 @@ class SqliteAlertRepo:
                     decode_decimal(deviation),
                     decode_timestamp(occurred_at),
                 ),
-                None,
+                None if notified_at is None else decode_timestamp(notified_at),
             )
-            for event_id, fingerprint, kind, direction, deviation, occurred_at in rows
+            for event_id, fingerprint, kind, direction, deviation, occurred_at, notified_at in rows
         ]
 
     def mark_notified(self, event_ids: Sequence[int], *, at: datetime) -> None:

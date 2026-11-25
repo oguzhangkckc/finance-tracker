@@ -100,12 +100,17 @@ def test_holdings_page_has_lots_and_card_labels(migrated_db: Path, tmp_path: Pat
     scenario.seed(migrated_db)
     expected = scenario.report(migrated_db, "monthly", SUNDAY)
 
-    page = _client(migrated_db, tmp_path).get("/gercek/varliklar", headers=ME).text
+    client = _client(migrated_db, tmp_path)
+    page = client.get("/gercek/varliklar", headers=ME).text
+    lots = client.get("/gercek/varliklar/lotlar", headers=ME).text
 
     assert expected.lots
-    assert "<h2>Lotlar</h2>" in page
+    assert '<a href="/gercek/varliklar/lotlar">Lotlar</a>' in page
+    assert '<a href="/gercek/varliklar/lotlar?fon=XHT">Lotlar' in page
     for holding in expected.holdings:
         assert f'data-label="Adet" class="num">{exact(holding.units)}</td>' in page
+    for lot in expected.lots:
+        assert f'data-label="Adet" class="num">{exact(lot.units)}</td>' in lots
 
 
 def test_allocation_page_shows_weights_and_open_alerts(migrated_db: Path, tmp_path: Path) -> None:
@@ -298,4 +303,4 @@ def test_system_page_shows_checks_and_runs_but_no_secret(migrated_db: Path, tmp_
     assert "Telegram" in page
     assert "Veritabanı şeması" in page
     assert "gizli-bot-anahtari" not in page
-    assert "Son 7 günün işleri" in page
+    assert "<h2>İş geçmişi</h2>" in page

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_table.html" import tools, th, pager %}
 {% block title %}Sistem · finans-takip{% endblock %}
 {% block content %}
   <h1>Sistem</h1>
@@ -9,23 +10,31 @@
     {% endfor %}
   </ul>
 
-  <h2>Son 7 günün işleri</h2>
+  <h2>İş geçmişi</h2>
+  {% set view = table %}
+  {% set action = prefix ~ "/sistem" %}
+  {{ tools(view, action, "") }}
+  {% if view.rows %}
   <table class="cards">
-    <thead><tr><th>#</th><th>İş</th><th>Gün</th><th>Sonuç</th><th>Başladı</th></tr></thead>
+    <thead><tr><th>#</th>{{ th(view, "is", "İş") }}<th>Gün</th>{{ th(view, "durum", "Durum") }}{{ th(view, "baslangic", "Başladı") }}</tr></thead>
     <tbody>
-      {% for run in system.runs %}
+      {% for run in view.rows %}
       <tr>
         <td data-label="#">{{ run.id }}</td>
         <td data-label="İş">{{ run.job }}</td>
         <td data-label="Gün">{{ run.logical_date | gun }}</td>
-        <td data-label="Sonuç">{{ run.status }}</td>
+        <td data-label="Durum"><span class="{% if run.status in ('failed', 'partial') %}warn{% endif %}">{{ run_status[run.status] }}</span></td>
         <td data-label="Başladı">{{ run.started_at | local }}</td>
       </tr>
-      {% else %}
-      <tr><td>Son 7 günde iş kaydı yok.</td></tr>
       {% endfor %}
     </tbody>
   </table>
+  {{ pager(view, action) }}
+  {% elif view.active %}
+  <div class="panel empty">{{ icon("bos") }}<p>Bu filtrelerle iş kaydı yok. <a href="{{ action }}">Filtreleri temizle</a></p></div>
+  {% else %}
+  <div class="panel empty">{{ icon("bos") }}<p>Henüz iş kaydı yok.</p></div>
+  {% endif %}
 
   <h2>Yedek özetleri</h2>
   <ul class="cards">
