@@ -1,4 +1,5 @@
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time
 from decimal import Decimal
@@ -110,16 +111,17 @@ def _save(
         uow.alerts.save(replace(stored, direction=None, resolved_at=now, payload=payload))
 
 
-def deliver_alerts(
-    uow: UnitOfWork,
-    notifier: Notifier,
-    renderer: ReportRenderer,
-    *,
-    now: datetime,
-    reminder_days: int,
-) -> int:
-    """Bekleyen geçişleri her zaman, açık alarm hatırlatmasını `reminder_days` sonra gönderir
-    (K-46). Gönderim başarısızsa hiçbir şey işaretlenmez; sonraki çalıştırma yeniden dener."""
+@dataclass(frozen=True, slots=True)
+class AlertOutbox:
+    """Gönderilecek mesaj; gönderim başarılı olunca işaretlenecek olaylar ve alarmlar."""
+
+    notices: tuple[AlertNotice, ...]
+    event_ids: tuple[int, ...]
+    fingerprints: tuple[str, ...]
+
+
+def pending_alerts(uow: UnitOfWork, *, now: datetime, reminder_days: int) -> AlertOutbox:
+    """Bekleyen geçişler her zaman, açık alarm hatırlatması `reminder_days` sonra (K-46)."""
     pending = uow.alerts.pending_events()
     notices = [
         AlertNotice(
@@ -149,15 +151,37 @@ def deliver_alerts(
                 )
             )
             touched.add(state.fingerprint)
-    if not notices:
-        return 0
-    notifier.send(renderer.alerts(notices), silent=is_quiet_hour(now))
-    uow.alerts.mark_notified([item.id for item in pending], at=now)
-    for fingerprint in sorted(touched):
+    return AlertOutbox(tuple(notices), tuple(item.id for item in pending), tuple(sorted(touched)))
+
+
+def mark_delivered(uow: UnitOfWork, outbox: AlertOutbox, *, at: datetime) -> None:
+    uow.alerts.mark_notified(list(outbox.event_ids), at=at)
+    for fingerprint in outbox.fingerprints:
         stored = uow.alerts.get(fingerprint)
         if stored is not None and stored.direction is not None:
-            uow.alerts.save(replace(stored, last_notified_at=now))
-    return len(notices)
+            uow.alerts.save(replace(stored, last_notified_at=at))
+
+
+def deliver_alerts(
+    open_uow: Callable[[], UnitOfWork],
+    notifier: Notifier,
+    renderer: ReportRenderer,
+    *,
+    now: datetime,
+    reminder_days: int,
+) -> int:
+    """Outbox (K-131): okuma ve işaretleme ayrı, kısa işlemlerde; Telegram'a gönderim hiçbir
+    veritabanı işlemi açıkken yapılmaz, yavaş bir yanıt web'i ve diğer işleri bekletmesin.
+    Gönderim başarısızsa hiçbir şey işaretlenmez; sonraki çalıştırma yeniden dener. Teslimci
+    yalnız `sync-prices`tir ve iş kilidi altında çalışır; aynı olay iki kez gönderilmez."""
+    with open_uow() as uow:
+        outbox = pending_alerts(uow, now=now, reminder_days=reminder_days)
+    if not outbox.notices:
+        return 0
+    notifier.send(renderer.alerts(list(outbox.notices)), silent=is_quiet_hour(now))
+    with open_uow() as uow:
+        mark_delivered(uow, outbox, at=now)
+    return len(outbox.notices)
 
 
 def _deviation(payload: str) -> Decimal | None:
