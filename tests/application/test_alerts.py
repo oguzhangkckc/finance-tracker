@@ -1,4 +1,5 @@
-from dataclasses import replace
+from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -6,10 +7,13 @@ from pathlib import Path
 import pytest
 
 from finans.adapters.render.text import TextRenderer
+from finans.adapters.sqlite import connection as sqlite_connection
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.application.alerts import AlertEvaluation, deliver_alerts, evaluate_alerts
+from finans.domain.models import PricePoint
 from finans.domain.portfolio import PortfolioConfig
 from finans.ports.notifier import NotifyError
+from finans.ports.unit_of_work import UnitOfWork
 from tests.fakes.notifier import FakeNotifier
 from tests.support import report_scenario as scenario
 
@@ -29,6 +33,10 @@ APART = replace(
 def _evaluate(db: Path, config: PortfolioConfig, now: datetime = EVENING) -> AlertEvaluation:
     with SqliteUnitOfWork(db) as uow:
         return evaluate_alerts(uow, config, on=SUNDAY, now=now)
+
+
+def _opener(db: Path) -> Callable[[], UnitOfWork]:
+    return lambda: SqliteUnitOfWork(db)
 
 
 def _kinds(result: AlertEvaluation) -> list[tuple[str, str, str]]:
@@ -99,8 +107,7 @@ def test_pending_transitions_go_in_one_message_silently_at_night(migrated_db: Pa
     _evaluate(migrated_db, APART)
     notifier = FakeNotifier()
 
-    with SqliteUnitOfWork(migrated_db) as uow:
-        sent = deliver_alerts(uow, notifier, RENDERER, now=NIGHT, reminder_days=7)
+    sent = deliver_alerts(_opener(migrated_db), notifier, RENDERER, now=NIGHT, reminder_days=7)
 
     assert sent == 2
     [(text, silent)] = notifier.sent
@@ -116,11 +123,10 @@ def test_failed_send_leaves_transitions_pending(migrated_db: Path) -> None:
     scenario.seed(migrated_db)
     _evaluate(migrated_db, APART)
 
-    with (
-        pytest.raises(NotifyError),
-        SqliteUnitOfWork(migrated_db) as uow,
-    ):
-        deliver_alerts(uow, FakeNotifier(fail=True), RENDERER, now=EVENING, reminder_days=7)
+    with pytest.raises(NotifyError):
+        deliver_alerts(
+            _opener(migrated_db), FakeNotifier(fail=True), RENDERER, now=EVENING, reminder_days=7
+        )
 
     with SqliteUnitOfWork(migrated_db, readonly=True) as uow:
         assert len(uow.alerts.pending_events()) == 2
@@ -129,16 +135,66 @@ def test_failed_send_leaves_transitions_pending(migrated_db: Path) -> None:
 def test_open_alarm_is_reminded_after_the_cooldown(migrated_db: Path) -> None:
     scenario.seed(migrated_db)
     _evaluate(migrated_db, APART)
-    with SqliteUnitOfWork(migrated_db) as uow:
-        deliver_alerts(uow, FakeNotifier(), RENDERER, now=EVENING, reminder_days=7)
+    deliver_alerts(_opener(migrated_db), FakeNotifier(), RENDERER, now=EVENING, reminder_days=7)
     notifier = FakeNotifier()
 
     for days in (3, 7):
-        with SqliteUnitOfWork(migrated_db) as uow:
-            deliver_alerts(
-                uow, notifier, RENDERER, now=EVENING + timedelta(days=days), reminder_days=7
-            )
+        later = EVENING + timedelta(days=days)
+        deliver_alerts(_opener(migrated_db), notifier, RENDERER, now=later, reminder_days=7)
 
     [(text, silent)] = notifier.sent
     assert not silent
     assert "Hatırlatma: hisse hâlâ hedefin altında, sapma -14,4 puan" in text
+
+
+@dataclass
+class SlowNotifier:
+    """Telegram yanıtı gecikirken başka bir süreç (ör. web) veritabanına yazar."""
+
+    db: Path
+    sent: list[str] = field(default_factory=list)
+
+    def send(self, text: str, *, silent: bool) -> None:
+        with SqliteUnitOfWork(self.db) as uow:
+            point = PricePoint("XHT", SUNDAY, D("12.000000"), "tefas")
+            uow.prices.upsert(point, fetched_at=EVENING)
+        self.sent.append(text)
+
+
+def test_a_slow_telegram_send_holds_no_database_lock(
+    migrated_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """K-131: olay yazılır ve işlem kapanır; gönderim işlem dışında, işaretleme ayrı ve kısa."""
+    monkeypatch.setattr(sqlite_connection, "BUSY_TIMEOUT_MS", 50)
+    scenario.seed(migrated_db)
+    _evaluate(migrated_db, APART)
+    notifier = SlowNotifier(migrated_db)
+
+    sent = deliver_alerts(_opener(migrated_db), notifier, RENDERER, now=EVENING, reminder_days=7)
+
+    assert sent == 2
+    assert len(notifier.sent) == 1
+    with SqliteUnitOfWork(migrated_db, readonly=True) as uow:
+        assert uow.prices.on("XHT", SUNDAY) is not None
+        assert uow.alerts.pending_events() == []
+
+
+def test_a_failed_send_is_retried_on_the_next_run_and_then_never_repeated(
+    migrated_db: Path,
+) -> None:
+    scenario.seed(migrated_db)
+    _evaluate(migrated_db, APART)
+    notifier = FakeNotifier()
+    later = EVENING + timedelta(hours=1)
+
+    with pytest.raises(NotifyError):
+        deliver_alerts(
+            _opener(migrated_db), FakeNotifier(fail=True), RENDERER, now=EVENING, reminder_days=7
+        )
+    retried = deliver_alerts(_opener(migrated_db), notifier, RENDERER, now=later, reminder_days=7)
+    again = deliver_alerts(_opener(migrated_db), notifier, RENDERER, now=later, reminder_days=7)
+
+    assert (retried, again) == (2, 0)
+    assert len(notifier.sent) == 1
+    with SqliteUnitOfWork(migrated_db, readonly=True) as uow:
+        assert {state.last_notified_at for state in uow.alerts.list_open()} == {later}

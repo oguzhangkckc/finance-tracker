@@ -1,8 +1,11 @@
+from contextlib import closing
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
+from finans.adapters.sqlite.codec import encode_timestamp
+from finans.adapters.sqlite.connection import connect
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.domain.models import Instrument, InstrumentKind
 from finans.ports.repositories import AlertEvent, AlertState, StoredRun
@@ -56,6 +59,20 @@ def test_alert_state_and_events_round_trip(migrated_db: Path) -> None:
         assert uow.alerts.list_open() == []
         assert uow.alerts.get("drift:hisse") == resolved
         assert uow.alerts.get("drift:altin") is None
+
+
+def test_marking_an_event_again_keeps_its_first_delivery_time(migrated_db: Path) -> None:
+    """K-131: işaretleme tekrar çalışsa da ilk teslim zamanı değişmez."""
+    with SqliteUnitOfWork(migrated_db) as uow:
+        event = uow.alerts.add_event(
+            AlertEvent("drift:hisse", "opened", "above", Decimal("0.07"), T1)
+        )
+        uow.alerts.mark_notified([event], at=T2)
+        uow.alerts.mark_notified([event], at=T3)
+
+    with closing(connect(migrated_db, readonly=True)) as conn:
+        row = conn.execute("SELECT notified_at FROM alert_event WHERE id = ?", (event,)).fetchone()
+    assert row == (encode_timestamp(T2),)
 
 
 def test_quiet_period_end_is_recorded_once(migrated_db: Path) -> None:

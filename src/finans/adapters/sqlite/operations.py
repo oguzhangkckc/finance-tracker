@@ -185,7 +185,8 @@ class SqliteAlertRepo:
 
     def mark_notified(self, event_ids: Sequence[int], *, at: datetime) -> None:
         self._conn.executemany(
-            "UPDATE alert_event SET notified_at = ? WHERE id = ?",
+            # İlk teslim zamanı korunur; işaretleme tekrar çalışsa da değişmez (K-131).
+            "UPDATE alert_event SET notified_at = ? WHERE id = ? AND notified_at IS NULL",
             [(encode_timestamp(at), event_id) for event_id in event_ids],
         )
 

@@ -167,9 +167,9 @@ def _deliver(ctx: JobContext, detail: dict[str, object]) -> bool:
         detail["bildirim"] = "Telegram tanımlı değil"
         return True
     try:
-        with ctx.notifier() as notifier, ctx.open_uow() as uow:
+        with ctx.notifier() as notifier:
             sent = deliver_alerts(
-                uow,
+                ctx.open_uow,
                 notifier,
                 ctx.renderer,
                 now=ctx.clock.now(),
