@@ -29,8 +29,27 @@
     <dt>{{ tx.instrument }} payın</dt><dd class="num">{{ preview.units_before | entered }} → {{ preview.units_after | entered }}</dd>
   </dl>
 </div>
+{# K-64: uyarı yapısal gelir; web virgülle biçimlendirir, önerilen gün tek dokunuşla düzelir. #}
 {% for issue in preview.warnings %}
-<div class="notice {% if issue.level == 'info' %}info{% else %}warn{% endif %}" role="status">{{ icon("uyari" if issue.level != "info" else "bilgi") }}<p>{{ issue.message }}{% if issue.level != "info" %} <span class="muted">Bu bir uyarı; emin isen olduğu gibi kaydedebilirsin.</span>{% endif %}</p></div>
+{% set found = issue.price %}
+<div class="notice {% if issue.level == 'info' %}info{% else %}warn{% endif %}" role="status">{{ icon("uyari" if issue.level != "info" else "bilgi") }}<div>
+  {% if found %}
+  <p>{% if found.published is not none %}Girdiğin fiyat {{ found.entered | entered }} TL; {{ tx.trade_date }} günü yayımlanan fiyat {{ found.published | entered }} TL (fark %{{ found.difference_percent | exact }}).{% else %}{{ tx.trade_date }} günü yayımlanmış fiyat yok; hafta sonu ya da tatil olabilir.{% endif %}</p>
+  {% if found.suggested %}
+  <p>Girdiğin fiyat {{ found.suggested }} gününün fiyatıyla ({{ found.suggested_price | entered }} TL) tutuyor; işlem günü büyük olasılıkla {{ found.suggested }}.</p>
+  <form class="actions" method="post" action="{{ prefix }}/islemler/yeni/{{ kind }}">
+    <input type="hidden" name="belirtec" value="{{ csrf }}">
+    {% for name, value in edit.items() %}
+    <input type="hidden" name="{{ name }}" value="{{ found.suggested if name == 'gun' else value }}">
+    {% endfor %}
+    <button class="btn btn-secondary" type="submit">İşlem gününü {{ found.suggested }} yap</button>
+  </form>
+  {% endif %}
+  {% else %}
+  <p>{{ issue.message }}</p>
+  {% endif %}
+  {% if issue.level != "info" %}<p class="muted">Bu bir uyarı; emin isen olduğu gibi kaydedebilirsin.</p>{% endif %}
+</div></div>
 {% endfor %}
 <form class="actions" method="post" action="{{ prefix }}/islemler/kaydet">
   <input type="hidden" name="belirtec" value="{{ csrf }}">

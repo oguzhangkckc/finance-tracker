@@ -423,3 +423,24 @@ def test_a_save_while_a_job_holds_the_database_is_refused_and_can_be_retried(
     retried = post_confirm(me, "real", busy)
     assert retried.status_code == 303
     assert len(site.rows("real")) == len(scenario.TRADES) + 1
+
+
+def test_a_price_from_another_day_is_shown_with_commas_and_one_tap_moves_the_day(
+    site: Site,
+) -> None:
+    """K-64: uyarı yapısal; web virgülle biçimlendirir, önerilen gün tek dokunuşla düzelir."""
+    me = site.browser()
+
+    preview = post_preview(me, "real", "alis", {**REAL_BUY, "fiyat": "10,500000"})
+
+    assert (
+        "Girdiğin fiyat 10,500000 TL; 2026-11-25 günü yayımlanan fiyat 11 TL (fark %4,55)."
+        in preview.text
+    )
+    assert "2026-11-20 gününün fiyatıyla (10,5 TL) tutuyor" in preview.text
+    fix = hidden_fields(preview.text, "/gercek/islemler/yeni/alis")
+    assert fix == {**REAL_BUY, "fiyat": "10,500000", "gun": "2026-11-20"}
+    moved = me.post("/gercek/islemler/yeni/alis", fix)
+    assert moved.status_code == 200
+    assert "<dt>İşlem günü</dt><dd>2026-11-20</dd>" in moved.text
+    assert 'class="notice warn"' not in moved.text
