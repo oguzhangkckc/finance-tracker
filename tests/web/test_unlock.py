@@ -12,60 +12,13 @@ import pytest
 from finans.application.password import hash_password
 from finans.settings import Settings
 from finans.web.app import WebSetupError, create_app
-from finans.web.session import csrf_token
 from tests.fakes.clock import FixedClock
+from tests.support.web_browser import LOGIN, ORIGIN, SAME_ORIGIN, SESSION_KEY, Browser
 from tests.support.web_client import WebClient
 
-LOGIN = "kisi@example.com"
-ORIGIN = "https://cihaz.ornek.ts.net"
-ME = {"Tailscale-User-Login": LOGIN}
-SAME_ORIGIN = {"Origin": ORIGIN, "Sec-Fetch-Site": "same-origin"}
-SESSION_KEY = "k" * 64
 PASSWORD = "uzun bir parola cümlesi"  # noqa: S105 - sahte test değeri
 STORED = hash_password(PASSWORD)
 WRONG = "yanlış bir parola cümlesi"
-
-
-class Browser:
-    """Tek bir tarayıcı oturumu: ilk yanıttaki çerezi saklar."""
-
-    def __init__(self, client: WebClient) -> None:
-        self.client = client
-        self.cookie = ""
-
-    def get(self, path: str) -> httpx.Response:
-        response = self.client.get(path, headers={**ME, "Cookie": self.cookie})
-        if not self.cookie:
-            self.cookie = response.headers["set-cookie"].split(";", 1)[0]
-        return response
-
-    def token(self) -> str:
-        """Kilitliyken sayfada form yok; deneme yine de gönderilebilmeli."""
-        if not self.cookie:
-            self.get("/gercek/daha")
-        session = self.cookie.split("=", 1)[1].split(".", 1)[0]
-        return csrf_token(SESSION_KEY.encode(), session)
-
-    def unlock(
-        self,
-        password: str,
-        *,
-        sonra: str = "/gercek/islemler",
-        profile: str = "gercek",
-        headers: dict[str, str] = SAME_ORIGIN,
-        token: str | None = None,
-    ) -> httpx.Response:
-        body = {"belirtec": token or self.token(), "sifre": password, "sonra": sonra}
-        return self.client.post(
-            f"/{profile}/kilit",
-            headers={
-                **ME,
-                **headers,
-                "Cookie": self.cookie,
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
-            content=urlencode(body).encode(),
-        )
 
 
 def _app(tmp_path: Path, stored: str | None = STORED) -> tuple[WebClient, FixedClock]:

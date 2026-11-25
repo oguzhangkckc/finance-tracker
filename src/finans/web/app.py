@@ -1,18 +1,18 @@
 """finans-web uygulaması; iki profil tek serviste (K-101…K-106, K-122, K-125, K-126)."""
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Final
-from urllib.parse import parse_qs
 
 from jinja2 import Environment, PackageLoader, StrictUndefined
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware import Middleware
 from starlette.requests import Request
-from starlette.responses import PlainTextResponse, RedirectResponse, Response
+from starlette.responses import RedirectResponse, Response
 from starlette.routing import BaseRoute, Route
 from starlette.templating import Jinja2Templates
 
@@ -24,16 +24,13 @@ from finans.contracts.report import SANAL_NOTICE
 from finans.ports.clock import BUSINESS_TZ, Clock
 from finans.settings import PROFILES, Profile, Settings, profile_settings
 from finans.web.assets import Assets
+from finans.web.forms import read_form
 from finans.web.icons import icon
 from finans.web.lock import Attempt, WriteLock
-from finans.web.security import (
-    BodyLimitMiddleware,
-    IdentityMiddleware,
-    SecurityHeadersMiddleware,
-    same_origin,
-)
-from finans.web.session import CSRF_FIELD, SessionMiddleware, csrf_token, valid_csrf
+from finans.web.security import BodyLimitMiddleware, IdentityMiddleware, SecurityHeadersMiddleware
+from finans.web.session import SessionMiddleware, csrf_token
 from finans.web.svg import allocation_bar
+from finans.web.trade_routes import WriteContext, write_routes
 from finans.web.views import (
     PAGE_ERRORS,
     PageError,
@@ -67,7 +64,6 @@ STATIC: Final = Path(__file__).parent / "static"
 SLUGS: Final[dict[Profile, str]] = {"real": "gercek", "sanal": "sanal"}
 PROFILE_LABELS: Final[dict[Profile, str]] = {"real": "Gerçek", "sanal": "Sanal"}
 MIN_SESSION_KEY: Final = 32
-REFUSED: Final = "İstek reddedildi."
 # Kilitten sonra yalnız bu uygulamanın bir sayfasına dönülür; sorgu ve `..` taşınmaz.
 NEXT_PAGE: Final = re.compile(rf"/(?:{'|'.join(SLUGS.values())})(?:/[a-z0-9-]+)*/?")
 ATTEMPT_STATUS: Final = {"wrong": 403, "locked": 429, "disabled": 403}
@@ -78,10 +74,31 @@ NOTICES: Final = {
         "Bugünün fiyatları zaten tamamsa TEFAS'a istek atılmaz."
     ),
 }
+SAVED: Final = {
+    "alis": "Alım #{no} kaydedildi.",
+    "satis": "Satış #{no} kaydedildi.",
+    "iptal": "#{no} numaralı işlem iptal edildi.",
+}
 
 
 class WebSetupError(Exception):
     pass
+
+
+def _notice(params: Mapping[str, str]) -> str | None:
+    """Kayıttan sonra işlem numarası yalnız rakamsa gösterilir; başka metin sayfaya yansımaz."""
+    if (text := NOTICES.get(params.get("istek", ""))) is not None:
+        return text
+    number = params.get("no", "")
+    template = SAVED.get(params.get("islem", ""))
+    if template is None or not (number.isascii() and number.isdigit() and len(number) <= 9):
+        return None
+    return template.format(no=int(number))
+
+
+def _entered(value: Decimal) -> str:
+    """Girilen basamaklarla; dekonttaki fiyat önizlemede aynen görünsün (K-64)."""
+    return f"{value:f}".replace(".", ",")
 
 
 def _local(moment: datetime) -> str:
@@ -106,7 +123,9 @@ def _environment() -> Environment:
         autoescape=True,
         undefined=StrictUndefined,
     )
-    env.filters.update(money=money, percent=percent, points=points, exact=exact, local=_local)
+    env.filters.update(
+        money=money, percent=percent, points=points, exact=exact, local=_local, entered=_entered
+    )
     env.globals.update(
         icon=icon,
         allocation_bar=allocation_bar,
@@ -173,7 +192,7 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
                     "csrf": csrf_token(key, request.state.session),
                     "lock": lock.state(request.state.session),
                     "lock_href": f"{prefix}/kilit?sonra={here}",
-                    "notice": NOTICES.get(request.query_params.get("istek", "")),
+                    "notice": _notice(request.query_params),
                     **context,
                 },
                 status_code=status,
@@ -240,15 +259,9 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
         ]
 
         async def refresh(request: Request) -> Response:
-            if not same_origin(request.headers, origin):
-                return PlainTextResponse(REFUSED, status_code=403)
-            try:
-                form = parse_qs((await request.body()).decode("ascii"), max_num_fields=4)
-            except ValueError:
-                return PlainTextResponse("Form okunamadı.", status_code=400)
-            tokens = form.get(CSRF_FIELD, [])
-            if len(tokens) != 1 or not valid_csrf(key, request.state.session, tokens[0]):
-                return PlainTextResponse(REFUSED, status_code=403)
+            form = await read_form(request, origin=origin, key=key, max_fields=4)
+            if isinstance(form, Response):
+                return form
             try:
                 status = await run_in_threadpool(ask_for_refresh, conf, time)
             except (PageError, *PAGE_ERRORS) as exc:
@@ -273,20 +286,13 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
             return unlock_page(request, next_page(request.query_params.get("sonra")))
 
         async def unlock(request: Request) -> Response:
-            if not same_origin(request.headers, origin):
-                return PlainTextResponse(REFUSED, status_code=403)
-            try:
-                form = parse_qs((await request.body()).decode("ascii"), max_num_fields=4)
-            except ValueError:
-                return PlainTextResponse("Form okunamadı.", status_code=400)
-            tokens, passwords = form.get(CSRF_FIELD, []), form.get("sifre", [])
-            if len(tokens) != 1 or not valid_csrf(key, request.state.session, tokens[0]):
-                return PlainTextResponse(REFUSED, status_code=403)
-            if len(passwords) != 1:
-                return PlainTextResponse("Form okunamadı.", status_code=400)
-            back = next_page(form.get("sonra", [""])[0])
+            form = await read_form(request, origin=origin, key=key, max_fields=4)
+            if isinstance(form, Response):
+                return form
+            back = next_page(form.get("sonra"))
             # scrypt yavaş; olay döngüsünü bekletmesin.
-            attempt = await run_in_threadpool(lock.try_unlock, request.state.session, passwords[0])
+            password = form.get("sifre", "")
+            attempt = await run_in_threadpool(lock.try_unlock, request.state.session, password)
             if attempt.status == "ok":
                 return RedirectResponse(back, status_code=303)
             return unlock_page(request, back, attempt, status=ATTEMPT_STATUS[attempt.status])
@@ -299,6 +305,9 @@ def create_app(settings: Settings, *, clock: Clock | None = None) -> Starlette:
             Route(f"{prefix}/fiyat-guncelle", refresh, methods=["POST"]),
             Route(f"{prefix}/kilit", unlock_form, methods=["GET"]),
             Route(f"{prefix}/kilit", unlock, methods=["POST"]),
+            *write_routes(
+                WriteContext(profile, prefix, conf, key, origin, lock, time, page, unlock_page)
+            ),
         ]
 
     def home(_request: Request) -> Response:

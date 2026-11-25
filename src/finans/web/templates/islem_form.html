@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "_ui.html" import steps, field, fund %}
+{% block title %}{{ heading }} · finans-takip{% endblock %}
+{% block content %}
+<h1>{{ heading }}</h1>
+<p class="muted">{{ lead }}</p>
+{{ steps(1) }}
+{% if problem %}
+<div class="notice error" role="alert">{{ icon("hata") }}<p>{{ problem }}</p></div>
+{% elif errors %}
+<div class="notice error" role="alert">{{ icon("hata") }}<p><strong>Bir alan düzeltilmeli.</strong> Aşağıda işaretli.</p></div>
+{% endif %}
+<form class="form" method="post" action="{{ prefix }}/islemler/yeni/{{ kind }}">
+  <input type="hidden" name="belirtec" value="{{ csrf }}">
+  {{ fund(values, errors, choices) }}
+  {% set decimal_hint = "Ondalık ayırıcı virgül; binlik ayırıcı yazma." %}
+  {% if profile == "sanal" %}
+  {{ field("gun", "Fiyat günü", values, errors, type="date", hint="Fiyat yalnız bu günün kayıtlı fiyatından alınır; gün kaydırılmaz.") }}
+  {% if kind == "alis" %}
+  {{ field("tutar", "Tutar", values, errors, affix="TL", inputmode="decimal", hint="Adet aşağı yuvarlanır; artan tutar fona girmez. " ~ decimal_hint) }}
+  {{ field("komisyon", "Komisyon", values, errors, affix="TL", inputmode="decimal", optional=true) }}
+  {% else %}
+  {{ field("adet", "Adet", values, errors, affix="pay", inputmode="decimal", optional=true, hint="Eldeki payın tümü için boş bırakıp aşağıdaki kutuyu işaretle.") }}
+  <div class="field">
+    <label class="check"><input type="checkbox" name="tumu" value="1"{% if values.get("tumu") == "1" %} checked{% endif %}><span>Eldeki payın tümünü sat</span></label>
+  </div>
+  {% endif %}
+  {% else %}
+  {{ field("gun", "İşlem günü", values, errors, type="date", hint="Dekonttaki işlem günü; fiyatın açıklandığı gün.") }}
+  {{ field("adet", "Adet", values, errors, affix="pay", inputmode="decimal") }}
+  {{ field("fiyat", "Birim fiyat", values, errors, affix="TL", inputmode="decimal", hint="Dekonttaki bütün basamaklarla (ör. 1,744322). " ~ decimal_hint) }}
+  {{ field("komisyon", "Komisyon", values, errors, affix="TL", inputmode="decimal", optional=true) }}
+  {{ field("dekont", "Dekont no", values, errors, optional=true, maxlength=64, hint="Aynı dekontun iki kez girilmesini engeller, ekstre mutabakatını kolaylaştırır.") }}
+  {% endif %}
+  <div class="actions"><button class="btn btn-primary" type="submit">Önizle</button><a class="btn btn-secondary" href="{{ prefix }}/islemler">Vazgeç</a></div>
+</form>
+{% endblock %}

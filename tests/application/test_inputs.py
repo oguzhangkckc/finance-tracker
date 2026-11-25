@@ -46,3 +46,36 @@ def test_period_must_be_a_real_month() -> None:
         parse_period("2026-13")
 
     assert str(caught.value) == "Dönem YYYY-AA biçiminde geçerli bir ay olmalı, '2026-13' verildi."
+
+
+@pytest.mark.parametrize(
+    ("text", "value"), [("1,744322", "1.744322"), ("573", "573"), ("0,50", "0.50")]
+)
+def test_the_web_form_uses_a_decimal_comma_and_keeps_the_places(text: str, value: str) -> None:
+    result = parse_amount("Birim fiyat", text, decimal=",")
+
+    assert result.as_tuple() == Decimal(value).as_tuple()
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        (
+            "1.5",
+            "Adet: nokta kullanılmaz; ondalık ayırıcı virgüldür (1,5), "
+            "binlik ayırıcı yazılmaz (5000).",
+        ),
+        (
+            "5.000",
+            "Adet: nokta kullanılmaz; ondalık ayırıcı virgüldür (1,5), "
+            "binlik ayırıcı yazılmaz (5000).",
+        ),
+        ("1,2,3", "Adet: sayı olmalı, '1,2,3' verildi."),
+        ("2E-2", "Adet: üstel gösterim kullanılamaz; 2E-2 yerine 0,02 yaz."),
+    ],
+)
+def test_the_web_form_refuses_a_dot_so_thousands_are_never_misread(text: str, message: str) -> None:
+    with pytest.raises(InputError) as caught:
+        parse_amount("Adet", text, decimal=",")
+
+    assert str(caught.value) == message
