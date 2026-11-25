@@ -1,0 +1,26 @@
+{# Ortak parçalar (K-128): anlam yalnız renkle taşınmaz; ok ve ekran okuyucu metni de var. #}
+{% macro delta(value, text) -%}
+  {%- if value > 0 -%}
+  <span class="delta gain"><span aria-hidden="true">▲</span>{{ text }}<span class="sr"> artış</span></span>
+  {%- elif value < 0 -%}
+  <span class="delta loss"><span aria-hidden="true">▼</span>{{ text }}<span class="sr"> azalış</span></span>
+  {%- else -%}
+  <span class="delta flat">{{ text }}</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro allocation(lines, cls) -%}
+  <div class="panel alloc">
+    {% for line in lines %}
+    <div class="alloc-row">
+      <div class="alloc-top"><span class="name">{{ cls(line.asset_class) }}</span><span class="num">{{ line.weight | percent(places=1) }} <span class="muted">· hedef {{ line.target | percent(places=1) }}</span></span></div>
+      {{ allocation_bar(line.weight, line.target) }}
+      <div class="alloc-dev">{% if line.deviation > 0 %}▲{% elif line.deviation < 0 %}▼{% endif %} {{ line.deviation | points }}</div>
+    </div>
+    {% endfor %}
+  </div>
+{%- endmacro %}
+
+{% macro empty(text) -%}
+  <div class="panel empty">{{ icon("bos") }}<p>{{ text }}</p></div>
+{%- endmacro %}

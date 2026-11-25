@@ -46,7 +46,7 @@ def _client(db: Path, now: datetime = WEDNESDAY) -> WebClient:
 
 
 def _open(client: WebClient) -> tuple[str, str]:
-    page = client.get("/", headers=ME)
+    page = client.get("/gercek/", headers=ME)
     match = TOKEN.search(page.text)
     assert match is not None, page.text
     return page.headers["set-cookie"].split(";", 1)[0], match.group(1)
@@ -54,7 +54,7 @@ def _open(client: WebClient) -> tuple[str, str]:
 
 def _signed_session(client: WebClient) -> tuple[str, str, str]:
     """Düğme kapalıyken sayfada belirteç yok; isteği yine de gönderip reddini görmek için."""
-    page = client.get("/", headers=ME)
+    page = client.get("/gercek/", headers=ME)
     cookie = page.headers["set-cookie"].split(";", 1)[0]
     session = cookie.split("=", 1)[1].split(".", 1)[0]
     return page.text, cookie, csrf_token(SESSION_KEY.encode(), session)
@@ -64,7 +64,7 @@ def _post(
     client: WebClient, cookie: str, body: str, headers: dict[str, str] = SAME_ORIGIN
 ) -> httpx.Response:
     return client.post(
-        "/fiyat-guncelle",
+        "/gercek/fiyat-guncelle",
         headers={
             **ME,
             **headers,
@@ -78,9 +78,9 @@ def _post(
 def test_the_session_cookie_is_host_only_strict_and_kept(migrated_db: Path) -> None:
     client = _client(migrated_db)
 
-    first = client.get("/", headers=ME)
+    first = client.get("/gercek/", headers=ME)
     cookie = first.headers["set-cookie"]
-    again = client.get("/", headers={**ME, "Cookie": cookie.split(";", 1)[0]})
+    again = client.get("/gercek/", headers={**ME, "Cookie": cookie.split(";", 1)[0]})
 
     assert cookie.startswith(f"{SESSION_COOKIE}=")
     assert cookie.endswith("; Path=/; Secure; HttpOnly; SameSite=Strict")
@@ -95,12 +95,12 @@ def test_an_accepted_request_leaves_the_file_and_closes_the_button(migrated_db: 
     response = _post(client, cookie, f"belirtec={token}")
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/?istek=alindi"
+    assert response.headers["location"] == "/gercek/?istek=alindi"
     request = migrated_db.parent / "refresh" / "real.request"
     assert request.read_text(encoding="utf-8") == f"{WEDNESDAY.isoformat()}\n"
-    after = client.get("/?istek=alindi", headers={**ME, "Cookie": cookie})
+    after = client.get("/gercek/?istek=alindi", headers={**ME, "Cookie": cookie})
     assert "Güncelleme isteği alındı" in after.text
-    assert 'action="/fiyat-guncelle"' not in after.text
+    assert 'action="/gercek/fiyat-guncelle"' not in after.text
     assert (
         "Elle güncelleme şu an kapalı: son güncellemeden bu yana 1 saat geçmedi. "
         "En erken 2026-11-25 13:30."
@@ -173,7 +173,7 @@ def test_an_unreadable_form_is_rejected(migrated_db: Path, body: bytes) -> None:
     cookie, _ = _open(client)
 
     response = client.post(
-        "/fiyat-guncelle", headers={**ME, **SAME_ORIGIN, "Cookie": cookie}, content=body
+        "/gercek/fiyat-guncelle", headers={**ME, **SAME_ORIGIN, "Cookie": cookie}, content=body
     )
 
     assert response.status_code == 400
@@ -186,12 +186,12 @@ def test_weekends_close_the_button_and_refuse_the_request(migrated_db: Path) -> 
 
     response = _post(client, cookie, f"belirtec={token}")
 
-    assert 'action="/fiyat-guncelle"' not in page
+    assert 'action="/gercek/fiyat-guncelle"' not in page
     assert (
         "Elle güncelleme şu an kapalı: hafta sonu fiyat yayımlanmaz. En erken 2026-11-30 00:00."
     ) in page
     assert response.status_code == 303
-    assert response.headers["location"] == "/"
+    assert response.headers["location"] == "/gercek/"
     assert not (migrated_db.parent / "refresh" / "real.request").exists()
 
 
@@ -206,7 +206,7 @@ def test_the_daily_limit_refuses_without_touching_the_log(migrated_db: Path) -> 
     response = _post(client, cookie, f"belirtec={token}")
 
     assert "bugünkü 6 elle güncelleme kullanıldı. En erken 2026-11-26 00:00." in page
-    assert response.headers["location"] == "/"
+    assert response.headers["location"] == "/gercek/"
     assert log.read_text(encoding="utf-8") == six
     assert not (log.parent / "real.request").exists()
 
@@ -217,7 +217,7 @@ def test_the_last_price_sync_is_shown_and_starts_the_wait(migrated_db: Path) -> 
         run = uow.runs.start("sync-prices", date(2026, 11, 25), at=synced)
         uow.runs.finish(run, "ok", "{}", at=synced)
 
-    page = _client(migrated_db).get("/", headers=ME)
+    page = _client(migrated_db).get("/gercek/", headers=ME)
 
     assert "Son fiyat güncellemesi: 2026-11-25 12:15" in page.text
     assert "En erken 2026-11-25 13:15." in page.text
@@ -231,4 +231,4 @@ def test_an_unwritable_request_directory_is_reported(migrated_db: Path) -> None:
     response = _post(client, cookie, f"belirtec={token}")
 
     assert response.status_code == 503
-    assert "Güncelleme isteği yazılamadı; /sistem sayfasına bakın." in response.text
+    assert "Güncelleme isteği yazılamadı; Sistem sayfasına bakın." in response.text

@@ -1,29 +1,45 @@
 <!doctype html>
-<html lang="tr">
+<html lang="tr" data-profile="{{ profile }}">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
   <title>{% block title %}finans-takip{% endblock %}</title>
-  <link rel="stylesheet" href="/static/site.css">
+  <link rel="stylesheet" href="{{ asset('site.css') }}">
 </head>
 <body>
+  <a class="skip" href="#icerik">İçeriğe geç</a>
   {% if profile == "sanal" %}
   <div class="band" role="status">{{ sanal_notice }}</div>
   {% endif %}
-  <header>
-    <nav aria-label="Sayfalar">
-      {% for href, label in nav %}
-      <a href="{{ href }}"{% if href == path %} aria-current="page"{% endif %}>{{ label }}</a>
+  <div class="shell">
+    <nav class="sidebar" aria-label="Sayfalar">
+      <div class="brand">finans-takip <span>· {{ profile_label }}</span></div>
+      {% for href, label, name in nav %}
+      <a href="{{ prefix }}{{ href }}"{% if is_current(href, subpath) %} aria-current="page"{% endif %}>{{ icon(name) }}<span>{{ label }}</span></a>
       {% endfor %}
     </nav>
-    <span class="viewer">{{ viewer }}</span>
-  </header>
-  <main>
-    {% if notice %}
-    <p class="notice" role="status">{{ notice }}</p>
-    {% endif %}
-    {% block content %}{% endblock %}
-  </main>
+    <div class="content">
+      <header class="topbar">
+        <nav class="profile-switch" aria-label="Portföy">
+          {% for label, href, current in switch %}
+          <a href="{{ href }}"{% if current %} aria-current="page"{% endif %}>{{ label }}</a>
+          {% endfor %}
+        </nav>
+        <span class="viewer">{{ viewer }}</span>
+      </header>
+      <main id="icerik">
+        {% if notice %}
+        <div class="notice ok" role="status">{{ icon("tamam") }}<p>{{ notice }}</p></div>
+        {% endif %}
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+  <nav class="tabbar" aria-label="Sayfalar (kısa)">
+    {% for href, label, name in tabs %}
+    <a href="{{ prefix }}{{ href }}"{% if is_tab_current(href, subpath) %} aria-current="page"{% endif %}>{{ icon(name) }}<span>{{ label }}</span></a>
+    {% endfor %}
+  </nav>
 </body>
 </html>

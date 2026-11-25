@@ -76,6 +76,9 @@ class SecurityHeadersMiddleware:
             if message["type"] == "http.response.start":
                 headers = MutableHeaders(scope=message)
                 for name, value in SECURITY_HEADERS.items():
+                    # Özetli statik dosya kendi önbellek süresini taşır (K-128); sayfalar no-store.
+                    if name == "Cache-Control" and name in headers:
+                        continue
                     headers[name] = value
             await send(message)
 

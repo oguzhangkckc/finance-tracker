@@ -10,7 +10,7 @@
   <ul class="cards">
     {% for alert in report.alerts %}
     <li>
-      <div class="row"><strong>{{ alert.asset_class }}</strong><span class="num">{% if alert.deviation is not none %}{{ alert.deviation | points }}{% endif %}</span></div>
+      <div class="row"><strong>{{ cls(alert.asset_class) }}</strong><span class="num">{% if alert.deviation is not none %}{{ alert.deviation | points }}{% endif %}</span></div>
       <div class="muted">{% if alert.direction == "above" %}hedefin üstünde{% else %}hedefin altında{% endif %} · açıldı {{ alert.opened_at.date() }}</div>
     </li>
     {% else %}

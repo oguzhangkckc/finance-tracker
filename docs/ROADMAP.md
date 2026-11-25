@@ -81,11 +81,36 @@ Cihaz testi (DESIGN, Kurulum adım 11): HTTPS'ten önce tailnet adı rastgele ve
 Geliştirme kapısı: kimlik, güvenlik başlıkları, salt okuma, CSRF, HTML kaçışı ve birim testleri yeşil; CI'da `systemd-analyze security` eşiği (K-124); cihazda Mac'ten ve telefondan 200, Pi'nin kendisinden 403, etiketli cihazlar politika gereği 443'e ulaşamaz, Funnel kapalı.
 Not: kabul süresi başlamadan cihaza alınması önerilir; kabul süresince `/opt/finans` güncellemesi kabul edilen sistemi değiştirir.
 
-## W2 · Web'den işlem girişi
-İşlem girişi (önizleme → onay) ve iptali; CSRF; yazma için şifre kilidi (K-105).
-Ön koşul: paylaşılan cihazın sertleştirmesi açık sorusu kapanmış.
-Geliştirme kapısı: CSRF, CLI ile eşlik, şifre ve çift gönderim testleri yeşil.
+## W2 · Panelden yönetim (W2a–W2d)
+İşlemler, ayarlar ve tablolar panelden; tasarım sistemi (K-105, K-125…K-130). Sıra W2a → W2b → W2c → W2d; yazma, 15 Aralık maaş günü hedefi yüzünden tablolardan önce gelir.
+Ön koşul (W2b Pi'ye kurulmadan önce): paylaşılan cihazın sertleştirmesinin kolay maddeleri tamam (K-130).
+
+### W2a · Tasarım sistemi ve iskelet
+Renk belirteçleri (gerçek profil Petrol, sanal profil Mürdüm), sistem yazı tipi ve ölçek, bileşenler; statik dosyalar içerik özetli adla ve uzun önbellekle; iki profil tek serviste `/gercek/` ve `/sanal/`; sınıf adları `[sinif_adlari]`; mevcut sayfalar yeni düzende; boş ve hata durumları (K-125, K-128).
+Geliştirme kapısı: CSS belirteçlerinden kontrast testi (AA); her sayfada tek `h1`, etiketli alanlar, `aria-current` ve `data-profile`; sanal sayfada bant; satır içi stil ve betik yok; statik dosya özeti ve önbellek başlığı; mevcut rakam testleri yeşil.
+Takvim: geliştirme 26 Kasım – 2 Aralık; Pi'ye W2b ile.
+
+### W2b · Panelden yazma
+Şifre kilidi, imzalı önizleme ve tek kullanımlık nonce, yazma bağlantısı (K-126). Sanal profilde tutarla alım, adetle satış ve maaş günü planı; gerçek profilde dekonttan alım ve satış; gerekçeli iptal. CLI'yla aynı application fonksiyonları ve kurallar (K-51, K-58, K-64, K-109, K-113, K-119).
+Geliştirme kapısı: CLI ile eşlik (aynı satır), önizleme = kayıt, çift gönderim, imza süresi, şifre ve kilit, yazma kurulmamışken kapalı, log'da tutar yok; her önizleme ve onay ekranında doğru profil satırı ("GERÇEK/SANAL portföye kaydedilecek") var, öbürü yok.
+Cihaz testi: sanal profilde bir alım ve iptali. Gerçek `sync-prices` timer'ı ilk gerçek alım günü açılır (K-121).
+Takvim: geliştirme 3–9 Aralık; Pi'ye W2a ile 10–12 Aralık (M4 kabulünden ve sertleştirmeden sonra); hedef 15 Aralık maaş günü.
 Kabul kapısı: web'den girilen ilk gerçek işlemler aracı kurum ekstresiyle ±0,01 TL/kalem mutabık.
+
+### W2c · Tablolar ve grafikler
+Sunucuda sıralama, filtre ve sayfalama (adres parametreleri); `app.js` yalnız kolaylık; `value_history` ve üç SVG grafik (K-129).
+Geliştirme kapısı: sıralama, filtre ve sayfalama birim testleri (Decimal, sınırlar, bilinmeyen parametre); SVG snapshot'ları; JavaScript kapalıyken bütün akışlar.
+Takvim: geliştirme 10–18 Aralık; Pi'ye 15 Aralık'tan sonra.
+
+### W2d · Ayarlar
+Maaş günü, aylık katkı ve hedef dağılım veritabanında, yürürlük tarihli; `portfolio.toml` ilk değer; değişiklik geçmişi (K-127).
+Geliştirme kapısı: migration öncesi ve sonrası bütün rapor türleri aynı; Ocak'tan geçerli katkı Ekim raporunu değiştirmez; geriye tarih ve toplamı 1 olmayan hedef reddedilir; TOML sınıf kuralları; CLI ile eşlik.
+Takvim: geliştirme 19 Aralık – 4 Ocak; Pi'ye M3 kabulünden sonra, Ocak maaş gününden önce.
+
+## D1 · Otomatik deploy
+GitHub Actions → Tailscale (`tag:ci`) → yalnız tek bir betiği çalıştırabilen deploy kullanıcısı → sürüm dizinleri, sağlık kontrolü, otomatik geri dönüş, Telegram bildirimi, dondurma anahtarı. Birim dosyası, deploy betiği ya da migration değişirse otomatik kurulum durur ve elle kurulum istenir. Karar satırları D1 dalında yazılır; imzalı commit doğrulaması şimdilik yok.
+Geliştirme kapısı: kalıp ve doğrulama, dondurma, zamanlayıcı penceresi ve kilit, geri dönüş testleri; `deploy.yml`'nin yapısı (tetikleyici koşulları, izinler, SHA sabitleri); birim sertleştirmesi.
+Takvim: geliştirme W2b'den sonra; Pi'ye 26–30 Aralık.
 
 ## M5 · OpenClaw ve güvenlik sertleştirmesi
 JSON anlık görüntüleri ve rrsync ile aktarımı (yalnızca çekirdekten dışarı), ft-agent (boru hattı ve veri tazeliği için iki ayrı bayatlık sinyali), JSON Schema kontratı, SKILL.md, PPK özeti akışı (oranlar kodla çıkarılır), asistan botu; iki makine, ayrı OS kullanıcıları, systemd sertleştirmesinin geri kalanı (LoadCredential K-92 ve beş ayar K-98 ile M4'te geldi), makine bazında egress allowlist.

@@ -2,7 +2,7 @@ from decimal import Decimal
 
 import pytest
 
-from finans.contracts.display import exact, money, percent, points
+from finans.contracts.display import class_label, exact, money, percent, points
 
 D = Decimal
 
@@ -34,3 +34,19 @@ def test_exact_keeps_every_digit_with_a_decimal_comma() -> None:
     assert exact(D("12.838270")) == "12,83827"
     assert exact(D("4050")) == "4050"
     assert exact(D("0.000001")) == "0,000001"
+
+
+@pytest.mark.parametrize(
+    ("code", "labels", "expected"),
+    [
+        ("hisse_tr", {"hisse_tr": "Türkiye hisse"}, "Türkiye hisse"),
+        ("dusuk_risk", {}, "Dusuk risk"),
+        ("istanbul_hisse", {}, "İstanbul hisse"),
+        ("ılık_fon", {}, "Ilık fon"),
+        ("altin", {"hisse": "Hisse"}, "Altin"),
+    ],
+)
+def test_class_label_prefers_the_configured_name_and_otherwise_turkish_capitalizes(
+    code: str, labels: dict[str, str], expected: str
+) -> None:
+    assert class_label(code, labels) == expected

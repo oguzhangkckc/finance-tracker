@@ -9,6 +9,14 @@ hisse_yabanci = 0.15
 dusuk_risk = 0.40
 altin = 0.15
 
+# İsteğe bağlı: sınıfların arayüzde görünen adları (K-128). Yazılmayan sınıfın adı koddan
+# türetilir ("altin" → "Altin"); Türkçe karakter ve büyük harf için burada yaz. En çok 40 karakter.
+[sinif_adlari]
+hisse_tr = "Türkiye hisse"
+hisse_yabanci = "Yurt dışı hisse"
+dusuk_risk = "Düşük risk"
+altin = "Altın"
+
 # Aylık katkı (TL) ve maaş günü (1–31; ay daha kısaysa ayın son günü).
 # monthly yazılmazsa katkı "tanımlı değil" sayılır (K-56); payday için monthly zorunludur (K-83).
 [contribution]

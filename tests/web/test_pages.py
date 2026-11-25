@@ -19,22 +19,25 @@ ME = {"Tailscale-User-Login": "kisi@example.com"}
 SUNDAY = date(2026, 11, 29)
 SUNDAY_EVENING = FixedClock(datetime(2026, 11, 29, 17, 30, tzinfo=UTC))
 PAGES = (
-    "/",
-    "/varliklar",
-    "/dagilim",
-    "/getiri",
-    "/raporlar",
-    "/raporlar/haftalik",
-    "/raporlar/aylik",
-    "/raporlar/maas-gunu",
-    "/alarmlar",
-    "/islemler",
-    "/sistem",
+    "/gercek/",
+    "/gercek/varliklar",
+    "/gercek/dagilim",
+    "/gercek/getiri",
+    "/gercek/raporlar",
+    "/gercek/raporlar/haftalik",
+    "/gercek/raporlar/aylik",
+    "/gercek/raporlar/maas-gunu",
+    "/gercek/alarmlar",
+    "/gercek/islemler",
+    "/gercek/sistem",
 )
 PORTFOLIO = """
 [targets]
 hisse = 0.6
 dusuk_risk = 0.4
+
+[sinif_adlari]
+dusuk_risk = "Düşük risk"
 
 [contribution]
 monthly = 1000
@@ -81,7 +84,7 @@ def test_summary_shows_the_same_numbers_as_the_text_report(
     scenario.seed(migrated_db)
     expected = scenario.report(migrated_db, "weekly", SUNDAY)
 
-    page = _client(migrated_db, tmp_path).get("/", headers=ME).text
+    page = _client(migrated_db, tmp_path).get("/gercek/", headers=ME).text
 
     assert f"Değerleme günü {SUNDAY}" in page
     assert money(expected.summary.values.total) in page
@@ -95,7 +98,7 @@ def test_holdings_page_has_lots_and_card_labels(migrated_db: Path, tmp_path: Pat
     scenario.seed(migrated_db)
     expected = scenario.report(migrated_db, "monthly", SUNDAY)
 
-    page = _client(migrated_db, tmp_path).get("/varliklar", headers=ME).text
+    page = _client(migrated_db, tmp_path).get("/gercek/varliklar", headers=ME).text
 
     assert expected.lots
     assert "<h2>Lotlar</h2>" in page
@@ -107,7 +110,7 @@ def test_allocation_page_shows_weights_and_open_alerts(migrated_db: Path, tmp_pa
     scenario.seed(migrated_db, alarm=True)
     expected = scenario.report(migrated_db, "weekly", SUNDAY)
 
-    page = _client(migrated_db, tmp_path).get("/dagilim", headers=ME).text
+    page = _client(migrated_db, tmp_path).get("/gercek/dagilim", headers=ME).text
 
     for line in expected.allocation:
         assert percent(line.weight, places=1) in page
@@ -122,8 +125,8 @@ def test_a_missing_price_is_stated_and_allocation_is_skipped(
     scenario.seed(migrated_db, priced=("XHT", "XAC"))
     client = _client(migrated_db, tmp_path)
 
-    summary = client.get("/", headers=ME).text
-    allocation = client.get("/dagilim", headers=ME).text
+    summary = client.get("/gercek/", headers=ME).text
+    allocation = client.get("/gercek/dagilim", headers=ME).text
 
     assert "Fiyatı eksik: XPP" in summary
     assert "fiyat yok" in summary
@@ -145,7 +148,7 @@ def test_a_manual_price_and_a_stale_fund_are_marked(migrated_db: Path, tmp_path:
         manual = PricePoint("XAC", date(2026, 12, 15), scenario.D("50.6"), "manual")
         uow.prices.upsert(manual, fetched_at=scenario.NOW)
 
-    page = _client(migrated_db, tmp_path, LATER).get("/", headers=ME).text
+    page = _client(migrated_db, tmp_path, LATER).get("/gercek/", headers=ME).text
 
     assert '50,6</span> TL (2026-12-15) <span class="tag">elle</span>' in page
     assert '20,2</span> TL (2026-11-27) <span class="warn">bayat:' in page
@@ -157,7 +160,7 @@ def test_when_no_fund_gets_a_price_the_general_rule_is_shown(
 ) -> None:
     scenario.seed(migrated_db)
 
-    page = _client(migrated_db, tmp_path, LATER).get("/", headers=ME).text
+    page = _client(migrated_db, tmp_path, LATER).get("/gercek/", headers=ME).text
 
     assert "Fiyatlar bayat: hiçbir fona 18 gündür yeni fiyat gelmedi." in page
 
@@ -168,7 +171,7 @@ def test_dates_follow_istanbul_not_the_system_zone(migrated_db: Path, tmp_path: 
     # İstanbul'da 30 Kasım 00:30, UTC'de hâlâ 29 Kasım.
     midnight = FixedClock(datetime(2026, 11, 29, 21, 30, tzinfo=UTC))
 
-    page = _client(migrated_db, tmp_path, midnight).get("/", headers=ME).text
+    page = _client(migrated_db, tmp_path, midnight).get("/gercek/", headers=ME).text
 
     assert "Değerleme günü 2026-11-30" in page
 
@@ -194,7 +197,7 @@ def test_a_missing_portfolio_shows_an_error_page(migrated_db: Path) -> None:
         web_session_key="k" * 64,
     )
 
-    response = WebClient(create_app(settings, clock=SUNDAY_EVENING)).get("/", headers=ME)
+    response = WebClient(create_app(settings, clock=SUNDAY_EVENING)).get("/gercek/", headers=ME)
 
     assert response.status_code == 503
     assert "FT_PORTFOLIO_PATH tanımlı değil." in response.text
@@ -217,7 +220,7 @@ def test_returns_page_shows_the_monthly_figures(migrated_db: Path, tmp_path: Pat
     expected = scenario.report(migrated_db, "monthly", SUNDAY)
     figure = expected.summary.money_weighted
 
-    page = _client(migrated_db, tmp_path).get("/getiri", headers=ME).text
+    page = _client(migrated_db, tmp_path).get("/gercek/getiri", headers=ME).text
 
     assert figure is not None
     assert figure.status == "ok"
@@ -226,7 +229,8 @@ def test_returns_page_shows_the_monthly_figures(migrated_db: Path, tmp_path: Pat
 
 
 @pytest.mark.parametrize(
-    ("path", "kind"), [("/raporlar/haftalik", "weekly"), ("/raporlar/aylik", "monthly")]
+    ("path", "kind"),
+    [("/gercek/raporlar/haftalik", "weekly"), ("/gercek/raporlar/aylik", "monthly")],
 )
 def test_report_pages_show_the_text_sent_to_telegram(
     migrated_db: Path, tmp_path: Path, path: str, kind: str
@@ -245,7 +249,7 @@ def test_report_pages_show_the_text_sent_to_telegram(
 def test_payday_page_shows_the_last_payday_plan(migrated_db: Path, tmp_path: Path) -> None:
     scenario.seed(migrated_db)
 
-    page = _client(migrated_db, tmp_path).get("/raporlar/maas-gunu", headers=ME).text
+    page = _client(migrated_db, tmp_path).get("/gercek/raporlar/maas-gunu", headers=ME).text
 
     assert "Maaş günü (2026-11-15)" in page
 
@@ -255,7 +259,7 @@ def test_alerts_page_shows_open_alerts_and_the_quiet_period_end(
 ) -> None:
     scenario.seed(migrated_db, alarm=True)
 
-    page = _client(migrated_db, tmp_path).get("/alarmlar", headers=ME).text
+    page = _client(migrated_db, tmp_path).get("/gercek/alarmlar", headers=ME).text
 
     assert "Sessiz dönem" in page
     assert "tarihinde bitti" in page
@@ -271,7 +275,7 @@ def test_transactions_are_listed_with_voids_and_notes_are_escaped(
         txn_id = add_transaction(uow, tx, ref=None, note="<script>x</script>", now=scenario.NOW)
         void_transaction(uow, txn_id, reason="yanlış <b>gün</b>", now=scenario.NOW)
 
-    page = _client(migrated_db, tmp_path).get("/islemler", headers=ME).text
+    page = _client(migrated_db, tmp_path).get("/gercek/islemler", headers=ME).text
 
     assert "<script>" not in page
     assert "&lt;script&gt;x&lt;/script&gt;" in page
@@ -285,7 +289,7 @@ def test_system_page_shows_checks_and_runs_but_no_secret(migrated_db: Path, tmp_
 
     page = (
         _client(migrated_db, tmp_path, telegram_bot_token=secret, telegram_chat_id="42")
-        .get("/sistem", headers=ME)
+        .get("/gercek/sistem", headers=ME)
         .text
     )
 

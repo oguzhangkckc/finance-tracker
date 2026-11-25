@@ -1,4 +1,4 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 
@@ -6,6 +6,7 @@ from finans.domain.models import ZERO, DomainError, Instrument
 from finans.domain.numeric import in_domain_context
 
 ONE = Decimal(1)
+CLASS_LABEL_MAX = 40
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +43,7 @@ class PortfolioConfig:
     alerts: AlertThresholds
     quality: QualityThresholds = field(default_factory=QualityThresholds)
     payday: int | None = None
+    class_labels: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,6 +183,25 @@ def _alert_issues(alerts: AlertThresholds | None) -> list[ConfigIssue]:
         issues.append(
             ConfigIssue("alerts.reminder_days", f"en az 1 olmalı; {alerts.reminder_days} verildi.")
         )
+    return issues
+
+
+@in_domain_context
+def validate_class_labels(labels: Mapping[str, str], classes: Collection[str]) -> list[ConfigIssue]:
+    """`[sinif_adlari]` yalnız var olan sınıflara ad verir; sınıf eklemez (K-128)."""
+    known = ", ".join(sorted(classes))
+    issues: list[ConfigIssue] = []
+    for code, label in labels.items():
+        path = f"sinif_adlari.{code}"
+        if code not in classes:
+            issues.append(
+                ConfigIssue(path, f'"{code}" bilinen bir sınıf değil. Sınıflar: {known}.')
+            )
+        elif not label.strip():
+            issues.append(ConfigIssue(path, "boş olamaz."))
+        elif len(label) > CLASS_LABEL_MAX:
+            message = f"en çok {CLASS_LABEL_MAX} karakter olmalı; {len(label)} verildi."
+            issues.append(ConfigIssue(path, message))
     return issues
 
 
