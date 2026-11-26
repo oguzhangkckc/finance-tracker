@@ -53,6 +53,9 @@ class Table[R](Model):
     page_size: int
     sort: str
     descending: bool
+    # İstemci sütun bağlantısını web'deki gibi kurar: varsayılan sütuna dönüş varsayılan yönle.
+    default_sort: str
+    default_descending: bool
     params: dict[str, str]
     active: list[TableChip]
     ignored: str
@@ -72,6 +75,8 @@ def table_data[R, I](view: TableView[R], item: Callable[[R], I]) -> Table[I]:
         page_size=spec.page_size,
         sort=view.sort,
         descending=view.descending,
+        default_sort=spec.default_sort,
+        default_descending=spec.default_descending,
         params=view.params,
         active=[TableChip(key=c.key, name=c.name, value=c.value, day=c.day) for c in view.active],
         ignored=view.misunderstood,

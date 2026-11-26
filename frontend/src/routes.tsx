@@ -6,7 +6,6 @@ import { Shell } from "./layout/Shell";
 import { MorePage } from "./pages/MorePage";
 import { NotFound } from "./pages/NotFound";
 import { OpenDefaultProfile } from "./pages/OpenDefaultProfile";
-import { Page } from "./pages/Page";
 import { isProfileSlug } from "./profile";
 import { cssVariablesResolver, THEMES } from "./theme";
 
@@ -25,6 +24,24 @@ const ReportsPage = lazy(() =>
 );
 const ReportPage = lazy(() =>
   import("./pages/ReportsPage").then((module) => ({ default: module.ReportPage })),
+);
+const HoldingsPage = lazy(() =>
+  import("./pages/HoldingsPage").then((module) => ({ default: module.HoldingsPage })),
+);
+const LotsPage = lazy(() =>
+  import("./pages/HoldingsPage").then((module) => ({ default: module.LotsPage })),
+);
+const TransactionsPage = lazy(() =>
+  import("./pages/TransactionsPage").then((module) => ({ default: module.TransactionsPage })),
+);
+const AlertsPage = lazy(() =>
+  import("./pages/AlertsPage").then((module) => ({ default: module.AlertsPage })),
+);
+const SystemPage = lazy(() =>
+  import("./pages/SystemPage").then((module) => ({ default: module.SystemPage })),
+);
+const SettingsPage = lazy(() =>
+  import("./pages/SettingsPage").then((module) => ({ default: module.SettingsPage })),
 );
 
 function Root() {
@@ -85,16 +102,16 @@ export const routes: RouteObject[] = [
             element: <ProfileRoute />,
             children: [
               { index: true, element: <OverviewPage /> },
-              { path: "varliklar", element: <Page title="Varlıklar" /> },
-              { path: "varliklar/lotlar", element: <Page title="Lotlar" /> },
-              { path: "islemler", element: <Page title="İşlemler" /> },
+              { path: "varliklar", element: <HoldingsPage /> },
+              { path: "varliklar/lotlar", element: <LotsPage /> },
+              { path: "islemler", element: <TransactionsPage /> },
               { path: "dagilim", element: <AllocationPage /> },
               { path: "getiri", element: <ReturnsPage /> },
               { path: "raporlar", element: <ReportsPage /> },
               { path: "raporlar/:tur", element: <ReportPage /> },
-              { path: "alarmlar", element: <Page title="Alarmlar" /> },
-              { path: "ayarlar", element: <Page title="Ayarlar" /> },
-              { path: "sistem", element: <Page title="Sistem" /> },
+              { path: "alarmlar", element: <AlertsPage /> },
+              { path: "ayarlar", element: <SettingsPage /> },
+              { path: "sistem", element: <SystemPage /> },
               { path: "daha", element: <MorePage /> },
               { path: "*", element: <NotFound /> },
             ],

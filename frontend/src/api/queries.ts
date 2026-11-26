@@ -1,4 +1,4 @@
-import { QueryClient, queryOptions } from "@tanstack/react-query";
+import { keepPreviousData, QueryClient, queryOptions } from "@tanstack/react-query";
 import type { ProfileSlug } from "../profile";
 import { type Api, unwrap } from "./client";
 
@@ -42,6 +42,59 @@ export function reportTextQuery(api: Api, profil: ProfileSlug, tur: ReportSlug) 
     queryKey: ["sayfa", profil, "rapor", tur],
     queryFn: () =>
       unwrap(api.GET("/api/{profil}/raporlar/{tur}", { params: { path: { profil, tur } } })),
+  });
+}
+
+// K-129: adresteki parametreler olduğu gibi gider; anlaşılmayanı API yok sayar ve adıyla bildirir.
+function tableRequest(profil: ProfileSlug, query: string) {
+  return { params: { path: { profil } }, querySerializer: () => query };
+}
+
+export function holdingsQuery(api: Api, profil: ProfileSlug, query: string) {
+  return queryOptions({
+    queryKey: ["sayfa", profil, "varliklar", query],
+    queryFn: () => unwrap(api.GET("/api/{profil}/varliklar", tableRequest(profil, query))),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function lotsQuery(api: Api, profil: ProfileSlug, query: string) {
+  return queryOptions({
+    queryKey: ["sayfa", profil, "lotlar", query],
+    queryFn: () => unwrap(api.GET("/api/{profil}/varliklar/lotlar", tableRequest(profil, query))),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function transactionsQuery(api: Api, profil: ProfileSlug, query: string) {
+  return queryOptions({
+    queryKey: ["sayfa", profil, "islemler", query],
+    queryFn: () => unwrap(api.GET("/api/{profil}/islemler", tableRequest(profil, query))),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function alertsQuery(api: Api, profil: ProfileSlug, query: string) {
+  return queryOptions({
+    queryKey: ["sayfa", profil, "alarmlar", query],
+    queryFn: () => unwrap(api.GET("/api/{profil}/alarmlar", tableRequest(profil, query))),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function systemQuery(api: Api, profil: ProfileSlug, query: string) {
+  return queryOptions({
+    queryKey: ["sayfa", profil, "sistem", query],
+    queryFn: () => unwrap(api.GET("/api/{profil}/sistem", tableRequest(profil, query))),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function settingsQuery(api: Api, profil: ProfileSlug, query: string) {
+  return queryOptions({
+    queryKey: ["sayfa", profil, "ayarlar", query],
+    queryFn: () => unwrap(api.GET("/api/{profil}/ayarlar", tableRequest(profil, query))),
+    placeholderData: keepPreviousData,
   });
 }
 

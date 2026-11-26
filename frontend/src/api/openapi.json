@@ -5352,6 +5352,14 @@
             "type": "boolean",
             "title": "Descending"
           },
+          "default_sort": {
+            "type": "string",
+            "title": "Default Sort"
+          },
+          "default_descending": {
+            "type": "boolean",
+            "title": "Default Descending"
+          },
           "params": {
             "additionalProperties": {
               "type": "string"
@@ -5403,6 +5411,8 @@
           "page_size",
           "sort",
           "descending",
+          "default_sort",
+          "default_descending",
           "params",
           "active",
           "ignored",
@@ -5446,6 +5456,14 @@
             "type": "boolean",
             "title": "Descending"
           },
+          "default_sort": {
+            "type": "string",
+            "title": "Default Sort"
+          },
+          "default_descending": {
+            "type": "boolean",
+            "title": "Default Descending"
+          },
           "params": {
             "additionalProperties": {
               "type": "string"
@@ -5497,6 +5515,8 @@
           "page_size",
           "sort",
           "descending",
+          "default_sort",
+          "default_descending",
           "params",
           "active",
           "ignored",
@@ -5540,6 +5560,14 @@
             "type": "boolean",
             "title": "Descending"
           },
+          "default_sort": {
+            "type": "string",
+            "title": "Default Sort"
+          },
+          "default_descending": {
+            "type": "boolean",
+            "title": "Default Descending"
+          },
           "params": {
             "additionalProperties": {
               "type": "string"
@@ -5591,6 +5619,8 @@
           "page_size",
           "sort",
           "descending",
+          "default_sort",
+          "default_descending",
           "params",
           "active",
           "ignored",
@@ -5634,6 +5664,14 @@
             "type": "boolean",
             "title": "Descending"
           },
+          "default_sort": {
+            "type": "string",
+            "title": "Default Sort"
+          },
+          "default_descending": {
+            "type": "boolean",
+            "title": "Default Descending"
+          },
           "params": {
             "additionalProperties": {
               "type": "string"
@@ -5685,6 +5723,8 @@
           "page_size",
           "sort",
           "descending",
+          "default_sort",
+          "default_descending",
           "params",
           "active",
           "ignored",
@@ -5728,6 +5768,14 @@
             "type": "boolean",
             "title": "Descending"
           },
+          "default_sort": {
+            "type": "string",
+            "title": "Default Sort"
+          },
+          "default_descending": {
+            "type": "boolean",
+            "title": "Default Descending"
+          },
           "params": {
             "additionalProperties": {
               "type": "string"
@@ -5779,6 +5827,8 @@
           "page_size",
           "sort",
           "descending",
+          "default_sort",
+          "default_descending",
           "params",
           "active",
           "ignored",
@@ -5822,6 +5872,14 @@
             "type": "boolean",
             "title": "Descending"
           },
+          "default_sort": {
+            "type": "string",
+            "title": "Default Sort"
+          },
+          "default_descending": {
+            "type": "boolean",
+            "title": "Default Descending"
+          },
           "params": {
             "additionalProperties": {
               "type": "string"
@@ -5873,6 +5931,8 @@
           "page_size",
           "sort",
           "descending",
+          "default_sort",
+          "default_descending",
           "params",
           "active",
           "ignored",

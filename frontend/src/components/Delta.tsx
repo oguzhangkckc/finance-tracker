@@ -7,8 +7,7 @@ export function Delta({ value, text }: { value: string; text: string }) {
     return (
       <span className="ft-delta ft-gain">
         <span aria-hidden="true">▲</span>
-        {text}
-        <span className="ft-sr"> artış</span>
+        {text} <span className="ft-sr">artış</span>
       </span>
     );
   }
@@ -16,8 +15,7 @@ export function Delta({ value, text }: { value: string; text: string }) {
     return (
       <span className="ft-delta ft-loss">
         <span aria-hidden="true">▼</span>
-        {text}
-        <span className="ft-sr"> azalış</span>
+        {text} <span className="ft-sr">azalış</span>
       </span>
     );
   }

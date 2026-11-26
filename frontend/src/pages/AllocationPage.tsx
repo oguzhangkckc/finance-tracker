@@ -1,4 +1,4 @@
-import { Paper, Stack, Table, Text, Title } from "@mantine/core";
+import { Stack, Table, Text, Title } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import { useApi } from "../api/context";
 import { allocationQuery } from "../api/queries";
@@ -6,9 +6,9 @@ import type { AllocationData } from "../api/types";
 import { useToday } from "../clock";
 import { AllocationBars } from "../components/AllocationBars";
 import { EmptyState, Warning } from "../components/Notice";
+import { OpenAlerts } from "../components/OpenAlerts";
 import { QueryView } from "../components/QueryView";
 import { dayLabel, money, percent, points } from "../format/display";
-import { localDay } from "../format/time";
 import { useProfile } from "../profile";
 import { QUIET_PERIOD } from "./OverviewPage";
 import { classLabels, Page } from "./Page";
@@ -74,31 +74,7 @@ function Allocation({ data }: { data: AllocationData }) {
       <Title order={2} mt="md">
         Açık alarmlar
       </Title>
-      {report.alerts.length > 0 ? (
-        <ul className="ft-cards" aria-label="Açık alarmlar">
-          {report.alerts.map((alert) => (
-            <li key={alert.asset_class}>
-              <Paper withBorder p="sm" className="ft-surface">
-                <Text fw={700}>
-                  {label(alert.asset_class)}
-                  {alert.deviation !== null && (
-                    <Text span className="ft-num" fw={400}>
-                      {" "}
-                      · {points(alert.deviation)}
-                    </Text>
-                  )}
-                </Text>
-                <Text size="sm" c="dimmed">
-                  {alert.direction === "above" ? "hedefin üstünde" : "hedefin altında"} · açıldı{" "}
-                  {localDay(alert.opened_at, today)}
-                </Text>
-              </Paper>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <Text>Açık alarm yok.</Text>
-      )}
+      <OpenAlerts alerts={report.alerts} label={label} />
     </Stack>
   );
 }

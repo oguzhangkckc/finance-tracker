@@ -58,6 +58,11 @@ export function exact(value: string): string {
   return plainText(canonical(parseDecimal(value)));
 }
 
+// Oran yüzde olarak, yuvarlamadan (sunum/setting_writes.percent_text): 0.175 → "17,5".
+export function ratioPercent(ratio: string): string {
+  return plainText(canonical(scaleBy(parseDecimal(ratio), 2)));
+}
+
 // Karşılaştırılan fiyatlar aynı basamak sayısıyla, en uzunun basamağıyla (K-128).
 export function samePlaces(...values: (string | null)[]): (string | null)[] {
   const parsed = values.map((value) => (value === null ? null : parseDecimal(value)));

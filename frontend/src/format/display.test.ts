@@ -8,6 +8,7 @@ import {
   monthLabel,
   percent,
   points,
+  ratioPercent,
   samePlaces,
 } from "./display";
 import parity from "./parity.json";
@@ -58,6 +59,20 @@ describe("contracts/display ile eşlik", () => {
 
   it.each(parity.month)("ay $period ($case) → $text", ({ period, case: grammaticalCase, text }) => {
     expect(monthLabel(period, asCase(grammaticalCase))).toBe(text);
+  });
+});
+
+// sunum/setting_writes.percent_text ile aynı; fikstürde değil, referans değerler burada.
+describe("oranın yüzdesi", () => {
+  it.each([
+    ["0.175", "17,5"],
+    ["0.625", "62,5"],
+    ["0.6", "60"],
+    ["1", "100"],
+    ["0", "0"],
+    ["0.333333", "33,3333"],
+  ])("%s → %s", (ratio, text) => {
+    expect(ratioPercent(ratio)).toBe(text);
   });
 });
 

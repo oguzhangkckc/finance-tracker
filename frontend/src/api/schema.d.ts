@@ -1407,6 +1407,10 @@ export interface components {
             sort: string;
             /** Descending */
             descending: boolean;
+            /** Default Sort */
+            default_sort: string;
+            /** Default Descending */
+            default_descending: boolean;
             /** Params */
             params: {
                 [key: string]: string;
@@ -1440,6 +1444,10 @@ export interface components {
             sort: string;
             /** Descending */
             descending: boolean;
+            /** Default Sort */
+            default_sort: string;
+            /** Default Descending */
+            default_descending: boolean;
             /** Params */
             params: {
                 [key: string]: string;
@@ -1473,6 +1481,10 @@ export interface components {
             sort: string;
             /** Descending */
             descending: boolean;
+            /** Default Sort */
+            default_sort: string;
+            /** Default Descending */
+            default_descending: boolean;
             /** Params */
             params: {
                 [key: string]: string;
@@ -1506,6 +1518,10 @@ export interface components {
             sort: string;
             /** Descending */
             descending: boolean;
+            /** Default Sort */
+            default_sort: string;
+            /** Default Descending */
+            default_descending: boolean;
             /** Params */
             params: {
                 [key: string]: string;
@@ -1539,6 +1555,10 @@ export interface components {
             sort: string;
             /** Descending */
             descending: boolean;
+            /** Default Sort */
+            default_sort: string;
+            /** Default Descending */
+            default_descending: boolean;
             /** Params */
             params: {
                 [key: string]: string;
@@ -1572,6 +1592,10 @@ export interface components {
             sort: string;
             /** Descending */
             descending: boolean;
+            /** Default Sort */
+            default_sort: string;
+            /** Default Descending */
+            default_descending: boolean;
             /** Params */
             params: {
                 [key: string]: string;
