@@ -1,6 +1,7 @@
 """Hata biçimi (K-138): `{"error": ileti, "fields": {alan: ileti}}`; ayrıntı yalnız günlükte."""
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from typing import Final
 
 from fastapi import FastAPI, Request
@@ -10,6 +11,7 @@ from starlette.responses import Response
 
 from finans.api.encoding import error_response
 from finans.api.middleware import SECURITY_HEADERS
+from finans.sunum.views import PAGE_ERRORS, PageError
 
 INVALID: Final = "Girdi geçersiz."
 UNREADABLE: Final = "İstek gövdesi JSON olarak okunamadı."
@@ -66,9 +68,27 @@ def field_errors(errors: list[dict[str, object]]) -> tuple[bool, dict[str, str]]
     return unreadable, fields
 
 
+@contextmanager
+def page_errors() -> Iterator[None]:
+    """Sayfa verisi yüklenemezse (ör. hatalı portföy dosyası) 503 ve nedeni; web'deki gibi."""
+    try:
+        yield
+    except (PageError, *PAGE_ERRORS) as exc:
+        raise ApiError(503, str(exc)) from exc
+
+
 async def _invalid(_request: Request, exc: RequestValidationError) -> Response:
-    unreadable, fields = field_errors(list(exc.errors()))
+    errors = list(exc.errors())
+    # Adresin kendisi geçersizse (bilinmeyen profil ya da sayı olmayan numara) adres yoktur.
+    if any(_location(error) == "path" for error in errors):
+        return error_response(404, HTTP_MESSAGES[404])
+    unreadable, fields = field_errors(errors)
     return error_response(422, UNREADABLE if unreadable else INVALID, fields)
+
+
+def _location(error: Mapping[str, object]) -> str:
+    location = error.get("loc", ())
+    return str(location[0]) if isinstance(location, tuple | list) and location else ""
 
 
 async def _http(_request: Request, exc: HTTPException) -> Response:

@@ -67,10 +67,1742 @@
           }
         }
       }
+    },
+    "/api/{profil}/ozet": {
+      "get": {
+        "tags": [
+          "okuma"
+        ],
+        "summary": "Overview",
+        "operationId": "overview_api__profil__ozet_get",
+        "parameters": [
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverviewPage"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/{profil}/dagilim": {
+      "get": {
+        "tags": [
+          "okuma"
+        ],
+        "summary": "Allocation",
+        "operationId": "allocation_api__profil__dagilim_get",
+        "parameters": [
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportPage"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/{profil}/getiri": {
+      "get": {
+        "tags": [
+          "okuma"
+        ],
+        "summary": "Returns",
+        "description": "Para ağırlıklı getiri ve lotlar yalnız aylık raporda.",
+        "operationId": "returns_api__profil__getiri_get",
+        "parameters": [
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReturnsPage"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/{profil}/raporlar/{tur}": {
+      "get": {
+        "tags": [
+          "okuma"
+        ],
+        "summary": "Report",
+        "description": "Telegram'a giden metnin aynısı; TL tutarları burada gizlenmez.",
+        "operationId": "report_api__profil__raporlar__tur__get",
+        "parameters": [
+          {
+            "name": "tur",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "haftalik",
+                "aylik",
+                "maas-gunu"
+              ],
+              "type": "string",
+              "title": "Tur"
+            }
+          },
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportText"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/{profil}/varliklar": {
+      "get": {
+        "tags": [
+          "okuma"
+        ],
+        "summary": "Holdings",
+        "operationId": "holdings_api__profil__varliklar_get",
+        "parameters": [
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          },
+          {
+            "name": "sirala",
+            "in": "query",
+            "required": false,
+            "description": "Sıralama sütunu",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "deger",
+                "fon",
+                "sinif",
+                "adet",
+                "maliyet",
+                "getiri"
+              ]
+            }
+          },
+          {
+            "name": "yon",
+            "in": "query",
+            "required": false,
+            "description": "Sıralama yönü",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "artan",
+                "azalan"
+              ]
+            }
+          },
+          {
+            "name": "siralama",
+            "in": "query",
+            "required": false,
+            "description": "Sütun ve yön birlikte",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "deger.artan",
+                "deger.azalan",
+                "fon.artan",
+                "fon.azalan",
+                "sinif.artan",
+                "sinif.azalan",
+                "adet.artan",
+                "adet.azalan",
+                "maliyet.artan",
+                "maliyet.azalan",
+                "getiri.artan",
+                "getiri.azalan"
+              ]
+            }
+          },
+          {
+            "name": "sayfa",
+            "in": "query",
+            "required": false,
+            "description": "Sayfa (1'den başlar)",
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "ara",
+            "in": "query",
+            "required": false,
+            "description": "Arama (İ, I, ı ve i aynı sayılır)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sinif",
+            "in": "query",
+            "required": false,
+            "description": "Sınıf",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dagilim",
+            "in": "query",
+            "required": false,
+            "description": "Dağılım",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldingsPage"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/{profil}/varliklar/lotlar": {
+      "get": {
+        "tags": [
+          "okuma"
+        ],
+        "summary": "Lots",
+        "operationId": "lots_api__profil__varliklar_lotlar_get",
+        "parameters": [
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          },
+          {
+            "name": "sirala",
+            "in": "query",
+            "required": false,
+            "description": "Sıralama sütunu",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "alis",
+                "fon",
+                "adet",
+                "maliyet",
+                "kar"
+              ]
+            }
+          },
+          {
+            "name": "yon",
+            "in": "query",
+            "required": false,
+            "description": "Sıralama yönü",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "artan",
+                "azalan"
+              ]
+            }
+          },
+          {
+            "name": "siralama",
+            "in": "query",
+            "required": false,
+            "description": "Sütun ve yön birlikte",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "alis.artan",
+                "alis.azalan",
+                "fon.artan",
+                "fon.azalan",
+                "adet.artan",
+                "adet.azalan",
+                "maliyet.artan",
+                "maliyet.azalan",
+                "kar.artan",
+                "kar.azalan"
+              ]
+            }
+          },
+          {
+            "name": "sayfa",
+            "in": "query",
+            "required": false,
+            "description": "Sayfa (1'den başlar)",
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "bas",
+            "in": "query",
+            "required": false,
+            "description": "Başlangıç günü",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "bit",
+            "in": "query",
+            "required": false,
+            "description": "Bitiş günü",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "fon",
+            "in": "query",
+            "required": false,
+            "description": "Fon",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LotsPage"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/{profil}/islemler": {
+      "get": {
+        "tags": [
+          "okuma"
+        ],
+        "summary": "Transactions",
+        "operationId": "transactions_api__profil__islemler_get",
+        "parameters": [
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          },
+          {
+            "name": "sirala",
+            "in": "query",
+            "required": false,
+            "description": "Sıralama sütunu",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "tarih",
+                "fon",
+                "tur",
+                "adet",
+                "tutar",
+                "no"
+              ]
+            }
+          },
+          {
+            "name": "yon",
+            "in": "query",
+            "required": false,
+            "description": "Sıralama yönü",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "artan",
+                "azalan"
+              ]
+            }
+          },
+          {
+            "name": "siralama",
+            "in": "query",
+            "required": false,
+            "description": "Sütun ve yön birlikte",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "tarih.artan",
+                "tarih.azalan",
+                "fon.artan",
+                "fon.azalan",
+                "tur.artan",
+                "tur.azalan",
+                "adet.artan",
+                "adet.azalan",
+                "tutar.artan",
+                "tutar.azalan",
+                "no.artan",
+                "no.azalan"
+              ]
+            }
+          },
+          {
+            "name": "sayfa",
+            "in": "query",
+            "required": false,
+            "description": "Sayfa (1'den başlar)",
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "ara",
+            "in": "query",
+            "required": false,
+            "description": "Arama (İ, I, ı ve i aynı sayılır)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "bas",
+            "in": "query",
+            "required": false,
+            "description": "Başlangıç günü",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "bit",
+            "in": "query",
+            "required": false,
+            "description": "Bitiş günü",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "fon",
+            "in": "query",
+            "required": false,
+            "description": "Fon",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sinif",
+            "in": "query",
+            "required": false,
+            "description": "Sınıf",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tur",
+            "in": "query",
+            "required": false,
+            "description": "Tür",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "iptal",
+            "in": "query",
+            "required": false,
+            "description": "İptal edilenler",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionsPage"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/{profil}/alarmlar": {
+      "get": {
+        "tags": [
+          "okuma"
+        ],
+        "summary": "Alerts",
+        "operationId": "alerts_api__profil__alarmlar_get",
+        "parameters": [
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          },
+          {
+            "name": "sirala",
+            "in": "query",
+            "required": false,
+            "description": "Sıralama sütunu",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "tarih",
+                "sinif",
+                "sapma"
+              ]
+            }
+          },
+          {
+            "name": "yon",
+            "in": "query",
+            "required": false,
+            "description": "Sıralama yönü",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "artan",
+                "azalan"
+              ]
+            }
+          },
+          {
+            "name": "siralama",
+            "in": "query",
+            "required": false,
+            "description": "Sütun ve yön birlikte",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "tarih.artan",
+                "tarih.azalan",
+                "sinif.artan",
+                "sinif.azalan",
+                "sapma.artan",
+                "sapma.azalan"
+              ]
+            }
+          },
+          {
+            "name": "sayfa",
+            "in": "query",
+            "required": false,
+            "description": "Sayfa (1'den başlar)",
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "bas",
+            "in": "query",
+            "required": false,
+            "description": "Başlangıç günü",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "bit",
+            "in": "query",
+            "required": false,
+            "description": "Bitiş günü",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "olay",
+            "in": "query",
+            "required": false,
+            "description": "Olay",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sinif",
+            "in": "query",
+            "required": false,
+            "description": "Sınıf",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertsPage"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/{profil}/sistem": {
+      "get": {
+        "tags": [
+          "okuma"
+        ],
+        "summary": "System",
+        "description": "Doctor sırların değerini yazmaz, yalnız tanımlı olup olmadığını (K-92).",
+        "operationId": "system_api__profil__sistem_get",
+        "parameters": [
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          },
+          {
+            "name": "sirala",
+            "in": "query",
+            "required": false,
+            "description": "Sıralama sütunu",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "baslangic",
+                "is",
+                "durum"
+              ]
+            }
+          },
+          {
+            "name": "yon",
+            "in": "query",
+            "required": false,
+            "description": "Sıralama yönü",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "artan",
+                "azalan"
+              ]
+            }
+          },
+          {
+            "name": "siralama",
+            "in": "query",
+            "required": false,
+            "description": "Sütun ve yön birlikte",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "baslangic.artan",
+                "baslangic.azalan",
+                "is.artan",
+                "is.azalan",
+                "durum.artan",
+                "durum.azalan"
+              ]
+            }
+          },
+          {
+            "name": "sayfa",
+            "in": "query",
+            "required": false,
+            "description": "Sayfa (1'den başlar)",
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "bas",
+            "in": "query",
+            "required": false,
+            "description": "Başlangıç günü",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "bit",
+            "in": "query",
+            "required": false,
+            "description": "Bitiş günü",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "is",
+            "in": "query",
+            "required": false,
+            "description": "İş",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "durum",
+            "in": "query",
+            "required": false,
+            "description": "Durum",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemPage"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/{profil}/ayarlar": {
+      "get": {
+        "tags": [
+          "okuma"
+        ],
+        "summary": "Settings",
+        "operationId": "settings_api__profil__ayarlar_get",
+        "parameters": [
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          },
+          {
+            "name": "sirala",
+            "in": "query",
+            "required": false,
+            "description": "Sıralama sütunu",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "kayit",
+                "yururluk",
+                "no"
+              ]
+            }
+          },
+          {
+            "name": "yon",
+            "in": "query",
+            "required": false,
+            "description": "Sıralama yönü",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "artan",
+                "azalan"
+              ]
+            }
+          },
+          {
+            "name": "siralama",
+            "in": "query",
+            "required": false,
+            "description": "Sütun ve yön birlikte",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "kayit.artan",
+                "kayit.azalan",
+                "yururluk.artan",
+                "yururluk.azalan",
+                "no.artan",
+                "no.azalan"
+              ]
+            }
+          },
+          {
+            "name": "sayfa",
+            "in": "query",
+            "required": false,
+            "description": "Sayfa (1'den başlar)",
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "bas",
+            "in": "query",
+            "required": false,
+            "description": "Başlangıç günü",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "bit",
+            "in": "query",
+            "required": false,
+            "description": "Bitiş günü",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "durum",
+            "in": "query",
+            "required": false,
+            "description": "Durum",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kaynak",
+            "in": "query",
+            "required": false,
+            "description": "Kaynak",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsPage"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/{profil}/secenekler": {
+      "get": {
+        "tags": [
+          "okuma"
+        ],
+        "summary": "Options",
+        "operationId": "options_api__profil__secenekler_get",
+        "parameters": [
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FundOptions"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AlertEventItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "day": {
+            "type": "string",
+            "format": "date",
+            "title": "Day"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "opened",
+              "resolved"
+            ],
+            "title": "Kind"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "above",
+              "below"
+            ],
+            "title": "Direction"
+          },
+          "deviation": {
+            "type": "string",
+            "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$",
+            "title": "Deviation"
+          },
+          "asset_class": {
+            "type": "string",
+            "title": "Asset Class"
+          },
+          "class_name": {
+            "type": "string",
+            "title": "Class Name"
+          },
+          "notified_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notified At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "occurred_at",
+          "day",
+          "kind",
+          "direction",
+          "deviation",
+          "asset_class",
+          "class_name",
+          "notified_at"
+        ],
+        "title": "AlertEventItem"
+      },
+      "AlertLine": {
+        "properties": {
+          "asset_class": {
+            "type": "string",
+            "title": "Asset Class"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "above",
+              "below"
+            ],
+            "title": "Direction"
+          },
+          "deviation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deviation"
+          },
+          "opened_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Opened At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "asset_class",
+          "direction",
+          "deviation",
+          "opened_at"
+        ],
+        "title": "AlertLine"
+      },
+      "AlertsPage": {
+        "properties": {
+          "table": {
+            "$ref": "#/components/schemas/Table_AlertEventItem_"
+          },
+          "alerts": {
+            "items": {
+              "$ref": "#/components/schemas/AlertLine"
+            },
+            "type": "array",
+            "title": "Alerts"
+          },
+          "quiet_ended": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet Ended"
+          },
+          "class_names": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Class Names"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "table",
+          "alerts",
+          "quiet_ended",
+          "class_names"
+        ],
+        "title": "AlertsPage"
+      },
+      "AllocationLine": {
+        "properties": {
+          "asset_class": {
+            "type": "string",
+            "title": "Asset Class"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "weight": {
+            "type": "string",
+            "title": "Weight"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "deviation": {
+            "type": "string",
+            "title": "Deviation"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "asset_class",
+          "value",
+          "weight",
+          "target",
+          "deviation"
+        ],
+        "title": "AllocationLine"
+      },
+      "BackupItem": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "ok",
+          "message"
+        ],
+        "title": "BackupItem"
+      },
+      "CheckItem": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "warn",
+              "fail"
+            ],
+            "title": "Status"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "status",
+          "detail"
+        ],
+        "title": "CheckItem"
+      },
+      "ContributionItem": {
+        "properties": {
+          "month": {
+            "type": "string",
+            "title": "Month"
+          },
+          "invested": {
+            "type": "string",
+            "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$",
+            "title": "Invested"
+          },
+          "planned": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Planned"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "month",
+          "invested",
+          "planned"
+        ],
+        "title": "ContributionItem"
+      },
+      "DataIssueLine": {
+        "properties": {
+          "check": {
+            "type": "string",
+            "title": "Check"
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "warn",
+              "info"
+            ],
+            "title": "Level"
+          },
+          "instrument": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instrument"
+          },
+          "day": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "check",
+          "level",
+          "instrument",
+          "day",
+          "message"
+        ],
+        "title": "DataIssueLine"
+      },
       "ErrorBody": {
         "properties": {
           "error": {
@@ -92,6 +1824,51 @@
         ],
         "title": "ErrorBody"
       },
+      "FundOption": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "FundOption"
+      },
+      "FundOptions": {
+        "properties": {
+          "buy": {
+            "items": {
+              "$ref": "#/components/schemas/FundOption"
+            },
+            "type": "array",
+            "title": "Buy"
+          },
+          "sell": {
+            "items": {
+              "$ref": "#/components/schemas/FundOption"
+            },
+            "type": "array",
+            "title": "Sell"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "buy",
+          "sell"
+        ],
+        "title": "FundOptions",
+        "description": "Alışta yalnız etkin fonlar, satışta pasif fonlar da (K-51)."
+      },
       "Health": {
         "properties": {
           "status": {
@@ -106,6 +1883,490 @@
           "status"
         ],
         "title": "Health"
+      },
+      "HoldingItem": {
+        "properties": {
+          "instrument": {
+            "type": "string",
+            "title": "Instrument"
+          },
+          "asset_class": {
+            "type": "string",
+            "title": "Asset Class"
+          },
+          "allocation": {
+            "type": "boolean",
+            "title": "Allocation"
+          },
+          "units": {
+            "type": "string",
+            "title": "Units"
+          },
+          "cost": {
+            "type": "string",
+            "title": "Cost"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "price_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Date"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "simple_return": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Simple Return"
+          },
+          "real_return": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Real Return"
+          },
+          "class_name": {
+            "type": "string",
+            "title": "Class Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "instrument",
+          "asset_class",
+          "allocation",
+          "units",
+          "cost",
+          "value",
+          "price",
+          "price_date",
+          "source",
+          "simple_return",
+          "class_name"
+        ],
+        "title": "HoldingItem"
+      },
+      "HoldingLine": {
+        "properties": {
+          "instrument": {
+            "type": "string",
+            "title": "Instrument"
+          },
+          "asset_class": {
+            "type": "string",
+            "title": "Asset Class"
+          },
+          "allocation": {
+            "type": "boolean",
+            "title": "Allocation"
+          },
+          "units": {
+            "type": "string",
+            "title": "Units"
+          },
+          "cost": {
+            "type": "string",
+            "title": "Cost"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "price_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Date"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "simple_return": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Simple Return"
+          },
+          "real_return": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Real Return"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "instrument",
+          "asset_class",
+          "allocation",
+          "units",
+          "cost",
+          "value",
+          "price",
+          "price_date",
+          "source",
+          "simple_return"
+        ],
+        "title": "HoldingLine"
+      },
+      "HoldingsPage": {
+        "properties": {
+          "table": {
+            "$ref": "#/components/schemas/Table_HoldingItem_"
+          },
+          "logical_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Logical Date"
+          },
+          "stale": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Stale"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "table",
+          "logical_date",
+          "stale"
+        ],
+        "title": "HoldingsPage"
+      },
+      "Inflation": {
+        "properties": {
+          "cpi_series": {
+            "type": "string",
+            "title": "Cpi Series"
+          },
+          "valuation_period": {
+            "type": "string",
+            "title": "Valuation Period"
+          },
+          "annual_inflation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annual Inflation"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "cpi_series",
+          "valuation_period",
+          "annual_inflation"
+        ],
+        "title": "Inflation"
+      },
+      "LotItem": {
+        "properties": {
+          "instrument": {
+            "type": "string",
+            "title": "Instrument"
+          },
+          "acquired": {
+            "type": "string",
+            "format": "date",
+            "title": "Acquired"
+          },
+          "units": {
+            "type": "string",
+            "title": "Units"
+          },
+          "cost": {
+            "type": "string",
+            "title": "Cost"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "real_return": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Real Return"
+          },
+          "cpi_period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cpi Period"
+          },
+          "gain": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gain"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "instrument",
+          "acquired",
+          "units",
+          "cost",
+          "value",
+          "real_return",
+          "cpi_period",
+          "gain"
+        ],
+        "title": "LotItem"
+      },
+      "LotLine": {
+        "properties": {
+          "instrument": {
+            "type": "string",
+            "title": "Instrument"
+          },
+          "acquired": {
+            "type": "string",
+            "format": "date",
+            "title": "Acquired"
+          },
+          "units": {
+            "type": "string",
+            "title": "Units"
+          },
+          "cost": {
+            "type": "string",
+            "title": "Cost"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "real_return": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Real Return"
+          },
+          "cpi_period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cpi Period"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "instrument",
+          "acquired",
+          "units",
+          "cost",
+          "value",
+          "real_return",
+          "cpi_period"
+        ],
+        "title": "LotLine"
+      },
+      "LotsPage": {
+        "properties": {
+          "table": {
+            "$ref": "#/components/schemas/Table_LotItem_"
+          },
+          "logical_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Logical Date"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "table",
+          "logical_date"
+        ],
+        "title": "LotsPage"
+      },
+      "OverviewPage": {
+        "properties": {
+          "report": {
+            "$ref": "#/components/schemas/Report"
+          },
+          "stale": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Stale"
+          },
+          "stale_all": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Stale All"
+          },
+          "class_names": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Class Names"
+          },
+          "refresh": {
+            "$ref": "#/components/schemas/RefreshInfo"
+          },
+          "chart": {
+            "$ref": "#/components/schemas/ValueChartData"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "report",
+          "stale",
+          "stale_all",
+          "class_names",
+          "refresh",
+          "chart"
+        ],
+        "title": "OverviewPage"
       },
       "ProfileLink": {
         "properties": {
@@ -132,6 +2393,480 @@
           "sanal"
         ]
       },
+      "Provenance": {
+        "properties": {
+          "price_dates": {
+            "additionalProperties": {
+              "type": "string",
+              "format": "date"
+            },
+            "type": "object",
+            "title": "Price Dates"
+          },
+          "cpi_period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cpi Period"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "price_dates",
+          "cpi_period",
+          "generated_at"
+        ],
+        "title": "Provenance"
+      },
+      "RebalanceLine": {
+        "properties": {
+          "asset_class": {
+            "type": "string",
+            "title": "Asset Class"
+          },
+          "instrument": {
+            "type": "string",
+            "title": "Instrument"
+          },
+          "amount": {
+            "type": "string",
+            "title": "Amount"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "asset_class",
+          "instrument",
+          "amount"
+        ],
+        "title": "RebalanceLine"
+      },
+      "RebalancePlan": {
+        "properties": {
+          "contribution": {
+            "type": "string",
+            "title": "Contribution"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/RebalanceLine"
+            },
+            "type": "array",
+            "title": "Lines"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "contribution",
+          "lines"
+        ],
+        "title": "RebalancePlan",
+        "description": "Katkı tanımlı değilse rapordaki plan None'dır (K-56); katkı 0 ise satırsızdır (K-59)."
+      },
+      "RefreshInfo": {
+        "properties": {
+          "allowed": {
+            "type": "boolean",
+            "title": "Allowed"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "earliest": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Earliest"
+          },
+          "last_sync": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "allowed",
+          "reason",
+          "earliest",
+          "last_sync"
+        ],
+        "title": "RefreshInfo"
+      },
+      "Report": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "const": "1.0",
+            "title": "Schema Version",
+            "default": "1.0"
+          },
+          "profile": {
+            "type": "string",
+            "enum": [
+              "real",
+              "sanal"
+            ],
+            "title": "Profile",
+            "default": "real"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "weekly",
+              "monthly"
+            ],
+            "title": "Kind"
+          },
+          "logical_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Logical Date"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/Summary"
+          },
+          "holdings": {
+            "items": {
+              "$ref": "#/components/schemas/HoldingLine"
+            },
+            "type": "array",
+            "title": "Holdings"
+          },
+          "lots": {
+            "items": {
+              "$ref": "#/components/schemas/LotLine"
+            },
+            "type": "array",
+            "title": "Lots"
+          },
+          "allocation": {
+            "items": {
+              "$ref": "#/components/schemas/AllocationLine"
+            },
+            "type": "array",
+            "title": "Allocation"
+          },
+          "quiet_period": {
+            "type": "boolean",
+            "title": "Quiet Period"
+          },
+          "missing_prices": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Prices"
+          },
+          "allocation_skipped": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allocation Skipped"
+          },
+          "rebalance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RebalancePlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "alerts": {
+            "items": {
+              "$ref": "#/components/schemas/AlertLine"
+            },
+            "type": "array",
+            "title": "Alerts"
+          },
+          "data_issues": {
+            "items": {
+              "$ref": "#/components/schemas/DataIssueLine"
+            },
+            "type": "array",
+            "title": "Data Issues"
+          },
+          "inflation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Inflation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/Provenance"
+          },
+          "health": {
+            "$ref": "#/components/schemas/SystemHealth"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "logical_date",
+          "summary",
+          "holdings",
+          "allocation",
+          "quiet_period",
+          "rebalance",
+          "alerts",
+          "data_issues",
+          "provenance",
+          "health"
+        ],
+        "title": "Report"
+      },
+      "ReportPage": {
+        "properties": {
+          "report": {
+            "$ref": "#/components/schemas/Report"
+          },
+          "stale": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Stale"
+          },
+          "stale_all": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Stale All"
+          },
+          "class_names": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Class Names"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "report",
+          "stale",
+          "stale_all",
+          "class_names"
+        ],
+        "title": "ReportPage"
+      },
+      "ReportText": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "text"
+        ],
+        "title": "ReportText"
+      },
+      "ReturnFigure": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "out_of_range",
+              "undefined",
+              "missing_price"
+            ],
+            "title": "Status"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate"
+          },
+          "annualized": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annualized"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "ReturnFigure",
+        "description": "K-44: \"out_of_range\" kök aralık dışında, \"undefined\" hesaplanamadı; \"missing_price\"\ndağılım içi bir varlığın fiyatı yok (K-95)."
+      },
+      "ReturnsPage": {
+        "properties": {
+          "report": {
+            "$ref": "#/components/schemas/Report"
+          },
+          "stale": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Stale"
+          },
+          "stale_all": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Stale All"
+          },
+          "class_names": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Class Names"
+          },
+          "chart": {
+            "$ref": "#/components/schemas/ValueChartData"
+          },
+          "contributions": {
+            "items": {
+              "$ref": "#/components/schemas/ContributionItem"
+            },
+            "type": "array",
+            "title": "Contributions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "report",
+          "stale",
+          "stale_all",
+          "class_names",
+          "chart",
+          "contributions"
+        ],
+        "title": "ReturnsPage"
+      },
+      "RunItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "job": {
+            "type": "string",
+            "title": "Job"
+          },
+          "logical_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Logical Date"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "ok",
+              "partial",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "status_label": {
+            "type": "string",
+            "title": "Status Label"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "job",
+          "logical_date",
+          "started_at",
+          "finished_at",
+          "status",
+          "status_label"
+        ],
+        "title": "RunItem",
+        "description": "İş kaydının ayrıntı metni (`detail`) verilmez; web'de de gösterilmez."
+      },
       "Session": {
         "properties": {
           "email": {
@@ -157,6 +2892,1331 @@
           "default_profile"
         ],
         "title": "Session"
+      },
+      "SettingChange": {
+        "properties": {
+          "setting": {
+            "type": "string",
+            "title": "Setting"
+          },
+          "change": {
+            "type": "string",
+            "title": "Change"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "setting",
+          "change"
+        ],
+        "title": "SettingChange"
+      },
+      "SettingItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Recorded At"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "source_label": {
+            "type": "string",
+            "title": "Source Label"
+          },
+          "effective_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective From"
+          },
+          "initial": {
+            "type": "boolean",
+            "title": "Initial"
+          },
+          "values": {
+            "$ref": "#/components/schemas/SettingValuesData"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "in_force",
+              "past",
+              "planned",
+              "replaced",
+              "cancelled"
+            ],
+            "title": "State"
+          },
+          "state_label": {
+            "type": "string",
+            "title": "State Label"
+          },
+          "cancelled_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancelled At"
+          },
+          "cancel_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancel Reason"
+          },
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/SettingChange"
+            },
+            "type": "array",
+            "title": "Changes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "recorded_at",
+          "source",
+          "source_label",
+          "effective_from",
+          "initial",
+          "values",
+          "state",
+          "state_label",
+          "cancelled_at",
+          "cancel_reason",
+          "changes"
+        ],
+        "title": "SettingItem",
+        "description": "`initial`: `ft config apply`'ın yazdığı başlangıç sürümü; yürürlük günü yoktur."
+      },
+      "SettingValuesData": {
+        "properties": {
+          "payday": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payday"
+          },
+          "monthly_contribution": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Contribution"
+          },
+          "targets": {
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$"
+            },
+            "type": "object",
+            "title": "Targets"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "payday",
+          "monthly_contribution",
+          "targets"
+        ],
+        "title": "SettingValuesData"
+      },
+      "SettingsPage": {
+        "properties": {
+          "table": {
+            "$ref": "#/components/schemas/Table_SettingItem_"
+          },
+          "current": {
+            "$ref": "#/components/schemas/SettingValuesData"
+          },
+          "current_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Id"
+          },
+          "current_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current From"
+          },
+          "planned": {
+            "items": {
+              "$ref": "#/components/schemas/SettingItem"
+            },
+            "type": "array",
+            "title": "Planned"
+          },
+          "classes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Classes"
+          },
+          "class_names": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Class Names"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "table",
+          "current",
+          "current_id",
+          "current_from",
+          "planned",
+          "classes",
+          "class_names"
+        ],
+        "title": "SettingsPage",
+        "description": "`current`: bugün geçerli değerler; sürüm yoksa portfolio.toml'dakiler (K-127)."
+      },
+      "Summary": {
+        "properties": {
+          "values": {
+            "$ref": "#/components/schemas/ValueSplit"
+          },
+          "change_since": {
+            "type": "string",
+            "format": "date",
+            "title": "Change Since"
+          },
+          "previous_total": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Total"
+          },
+          "change": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change"
+          },
+          "simple_return": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Simple Return"
+          },
+          "realized_pnl": {
+            "type": "string",
+            "title": "Realized Pnl"
+          },
+          "money_weighted": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReturnFigure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "real_money_weighted": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReturnFigure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "real_same_as_nominal": {
+            "type": "boolean",
+            "title": "Real Same As Nominal",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "values",
+          "change_since",
+          "previous_total",
+          "change",
+          "simple_return",
+          "realized_pnl"
+        ],
+        "title": "Summary",
+        "description": "`change` `change_since`ten bu yana Modified Dietz değişimi (K-94); haftalıkta 7 gün,\naylıkta önceki ayın son gününden itibaren (K-95)."
+      },
+      "SystemHealth": {
+        "properties": {
+          "last_price_sync": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Price Sync"
+          },
+          "last_cpi_sync": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Cpi Sync"
+          },
+          "failed_jobs_7d": {
+            "type": "integer",
+            "title": "Failed Jobs 7D"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "last_price_sync",
+          "last_cpi_sync",
+          "failed_jobs_7d"
+        ],
+        "title": "SystemHealth"
+      },
+      "SystemPage": {
+        "properties": {
+          "table": {
+            "$ref": "#/components/schemas/Table_RunItem_"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/CheckItem"
+            },
+            "type": "array",
+            "title": "Checks"
+          },
+          "backups": {
+            "items": {
+              "$ref": "#/components/schemas/BackupItem"
+            },
+            "type": "array",
+            "title": "Backups"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "table",
+          "checks",
+          "backups"
+        ],
+        "title": "SystemPage"
+      },
+      "TableChip": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "day": {
+            "type": "boolean",
+            "title": "Day"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "name",
+          "value",
+          "day"
+        ],
+        "title": "TableChip"
+      },
+      "TableChoice": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/TableOption"
+            },
+            "type": "array",
+            "title": "Options"
+          },
+          "default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "options",
+          "default"
+        ],
+        "title": "TableChoice"
+      },
+      "TableColumn": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "directions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Directions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "directions"
+        ],
+        "title": "TableColumn"
+      },
+      "TableOption": {
+        "properties": {
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "TableOption"
+      },
+      "Table_AlertEventItem_": {
+        "properties": {
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/AlertEventItem"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pages": {
+            "type": "integer",
+            "title": "Pages"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "sort": {
+            "type": "string",
+            "title": "Sort"
+          },
+          "descending": {
+            "type": "boolean",
+            "title": "Descending"
+          },
+          "params": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Params"
+          },
+          "active": {
+            "items": {
+              "$ref": "#/components/schemas/TableChip"
+            },
+            "type": "array",
+            "title": "Active"
+          },
+          "ignored": {
+            "type": "string",
+            "title": "Ignored"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/TableColumn"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/TableChoice"
+            },
+            "type": "array",
+            "title": "Choices"
+          },
+          "day_filter": {
+            "type": "boolean",
+            "title": "Day Filter"
+          },
+          "search": {
+            "type": "boolean",
+            "title": "Search"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "rows",
+          "total",
+          "page",
+          "pages",
+          "page_size",
+          "sort",
+          "descending",
+          "params",
+          "active",
+          "ignored",
+          "columns",
+          "choices",
+          "day_filter",
+          "search"
+        ],
+        "title": "Table[AlertEventItem]"
+      },
+      "Table_HoldingItem_": {
+        "properties": {
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/HoldingItem"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pages": {
+            "type": "integer",
+            "title": "Pages"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "sort": {
+            "type": "string",
+            "title": "Sort"
+          },
+          "descending": {
+            "type": "boolean",
+            "title": "Descending"
+          },
+          "params": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Params"
+          },
+          "active": {
+            "items": {
+              "$ref": "#/components/schemas/TableChip"
+            },
+            "type": "array",
+            "title": "Active"
+          },
+          "ignored": {
+            "type": "string",
+            "title": "Ignored"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/TableColumn"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/TableChoice"
+            },
+            "type": "array",
+            "title": "Choices"
+          },
+          "day_filter": {
+            "type": "boolean",
+            "title": "Day Filter"
+          },
+          "search": {
+            "type": "boolean",
+            "title": "Search"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "rows",
+          "total",
+          "page",
+          "pages",
+          "page_size",
+          "sort",
+          "descending",
+          "params",
+          "active",
+          "ignored",
+          "columns",
+          "choices",
+          "day_filter",
+          "search"
+        ],
+        "title": "Table[HoldingItem]"
+      },
+      "Table_LotItem_": {
+        "properties": {
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/LotItem"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pages": {
+            "type": "integer",
+            "title": "Pages"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "sort": {
+            "type": "string",
+            "title": "Sort"
+          },
+          "descending": {
+            "type": "boolean",
+            "title": "Descending"
+          },
+          "params": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Params"
+          },
+          "active": {
+            "items": {
+              "$ref": "#/components/schemas/TableChip"
+            },
+            "type": "array",
+            "title": "Active"
+          },
+          "ignored": {
+            "type": "string",
+            "title": "Ignored"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/TableColumn"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/TableChoice"
+            },
+            "type": "array",
+            "title": "Choices"
+          },
+          "day_filter": {
+            "type": "boolean",
+            "title": "Day Filter"
+          },
+          "search": {
+            "type": "boolean",
+            "title": "Search"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "rows",
+          "total",
+          "page",
+          "pages",
+          "page_size",
+          "sort",
+          "descending",
+          "params",
+          "active",
+          "ignored",
+          "columns",
+          "choices",
+          "day_filter",
+          "search"
+        ],
+        "title": "Table[LotItem]"
+      },
+      "Table_RunItem_": {
+        "properties": {
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/RunItem"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pages": {
+            "type": "integer",
+            "title": "Pages"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "sort": {
+            "type": "string",
+            "title": "Sort"
+          },
+          "descending": {
+            "type": "boolean",
+            "title": "Descending"
+          },
+          "params": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Params"
+          },
+          "active": {
+            "items": {
+              "$ref": "#/components/schemas/TableChip"
+            },
+            "type": "array",
+            "title": "Active"
+          },
+          "ignored": {
+            "type": "string",
+            "title": "Ignored"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/TableColumn"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/TableChoice"
+            },
+            "type": "array",
+            "title": "Choices"
+          },
+          "day_filter": {
+            "type": "boolean",
+            "title": "Day Filter"
+          },
+          "search": {
+            "type": "boolean",
+            "title": "Search"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "rows",
+          "total",
+          "page",
+          "pages",
+          "page_size",
+          "sort",
+          "descending",
+          "params",
+          "active",
+          "ignored",
+          "columns",
+          "choices",
+          "day_filter",
+          "search"
+        ],
+        "title": "Table[RunItem]"
+      },
+      "Table_SettingItem_": {
+        "properties": {
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/SettingItem"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pages": {
+            "type": "integer",
+            "title": "Pages"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "sort": {
+            "type": "string",
+            "title": "Sort"
+          },
+          "descending": {
+            "type": "boolean",
+            "title": "Descending"
+          },
+          "params": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Params"
+          },
+          "active": {
+            "items": {
+              "$ref": "#/components/schemas/TableChip"
+            },
+            "type": "array",
+            "title": "Active"
+          },
+          "ignored": {
+            "type": "string",
+            "title": "Ignored"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/TableColumn"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/TableChoice"
+            },
+            "type": "array",
+            "title": "Choices"
+          },
+          "day_filter": {
+            "type": "boolean",
+            "title": "Day Filter"
+          },
+          "search": {
+            "type": "boolean",
+            "title": "Search"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "rows",
+          "total",
+          "page",
+          "pages",
+          "page_size",
+          "sort",
+          "descending",
+          "params",
+          "active",
+          "ignored",
+          "columns",
+          "choices",
+          "day_filter",
+          "search"
+        ],
+        "title": "Table[SettingItem]"
+      },
+      "Table_TransactionItem_": {
+        "properties": {
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/TransactionItem"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pages": {
+            "type": "integer",
+            "title": "Pages"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "sort": {
+            "type": "string",
+            "title": "Sort"
+          },
+          "descending": {
+            "type": "boolean",
+            "title": "Descending"
+          },
+          "params": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Params"
+          },
+          "active": {
+            "items": {
+              "$ref": "#/components/schemas/TableChip"
+            },
+            "type": "array",
+            "title": "Active"
+          },
+          "ignored": {
+            "type": "string",
+            "title": "Ignored"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/TableColumn"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/TableChoice"
+            },
+            "type": "array",
+            "title": "Choices"
+          },
+          "day_filter": {
+            "type": "boolean",
+            "title": "Day Filter"
+          },
+          "search": {
+            "type": "boolean",
+            "title": "Search"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "rows",
+          "total",
+          "page",
+          "pages",
+          "page_size",
+          "sort",
+          "descending",
+          "params",
+          "active",
+          "ignored",
+          "columns",
+          "choices",
+          "day_filter",
+          "search"
+        ],
+        "title": "Table[TransactionItem]"
+      },
+      "TransactionItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "instrument": {
+            "type": "string",
+            "title": "Instrument"
+          },
+          "trade_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Trade Date"
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "BUY",
+              "SELL"
+            ],
+            "title": "Side"
+          },
+          "units": {
+            "type": "string",
+            "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$",
+            "title": "Units"
+          },
+          "unit_price": {
+            "type": "string",
+            "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$",
+            "title": "Unit Price"
+          },
+          "fee": {
+            "type": "string",
+            "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$",
+            "title": "Fee"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$",
+            "title": "Amount"
+          },
+          "asset_class": {
+            "type": "string",
+            "title": "Asset Class"
+          },
+          "class_name": {
+            "type": "string",
+            "title": "Class Name"
+          },
+          "external_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Ref"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "voided_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voided At"
+          },
+          "void_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Void Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "instrument",
+          "trade_date",
+          "side",
+          "units",
+          "unit_price",
+          "fee",
+          "amount",
+          "asset_class",
+          "class_name",
+          "external_ref",
+          "note",
+          "created_at",
+          "voided_at",
+          "void_reason"
+        ],
+        "title": "TransactionItem"
+      },
+      "TransactionsPage": {
+        "properties": {
+          "table": {
+            "$ref": "#/components/schemas/Table_TransactionItem_"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "table"
+        ],
+        "title": "TransactionsPage"
+      },
+      "ValueChartData": {
+        "properties": {
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/ValuePointItem"
+            },
+            "type": "array",
+            "title": "Points"
+          },
+          "real_gap": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Real Gap"
+          },
+          "estimated_period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Period"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "points",
+          "real_gap",
+          "estimated_period"
+        ],
+        "title": "ValueChartData",
+        "description": "Değerin seyri üç çizgidir: değer, yatırılan para, enflasyona göre güncellenmiş yatırım."
+      },
+      "ValuePointItem": {
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date",
+            "title": "Day"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "invested": {
+            "type": "string",
+            "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$",
+            "title": "Invested"
+          },
+          "adjusted": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adjusted"
+          },
+          "cpi_period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cpi Period"
+          },
+          "estimated": {
+            "type": "boolean",
+            "title": "Estimated"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "day",
+          "value",
+          "invested",
+          "adjusted",
+          "cpi_period",
+          "estimated"
+        ],
+        "title": "ValuePointItem"
+      },
+      "ValueSplit": {
+        "properties": {
+          "in_allocation": {
+            "type": "string",
+            "title": "In Allocation"
+          },
+          "out_of_allocation": {
+            "type": "string",
+            "title": "Out Of Allocation"
+          },
+          "total": {
+            "type": "string",
+            "title": "Total"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "in_allocation",
+          "out_of_allocation",
+          "total"
+        ],
+        "title": "ValueSplit"
       }
     }
   }

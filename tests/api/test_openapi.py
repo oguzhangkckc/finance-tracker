@@ -10,6 +10,7 @@ from finans.api.app import openapi_document
 from finans.api.openapi import main, render
 
 SCHEMA = Path(__file__).resolve().parents[2] / "frontend" / "src" / "api" / "openapi.json"
+QUERY = ("sirala", "yon", "siralama", "sayfa", "ara", "bas", "bit", "fon", "sinif", "tur", "iptal")
 
 
 def test_the_schema_in_the_repository_is_current() -> None:
@@ -55,3 +56,23 @@ def test_errors_use_the_api_error_body_not_fastapis() -> None:
 def test_main_prints_the_schema(capsys: pytest.CaptureFixture[str]) -> None:
     main()
     assert capsys.readouterr().out == render()
+
+
+def test_table_parameters_and_the_profile_are_documented_for_the_client() -> None:
+    operation = openapi_document()["paths"]["/api/{profil}/islemler"]["get"]
+    parameters = {(p["name"], p["in"]): p for p in operation["parameters"]}
+
+    assert set(parameters) == {
+        ("profil", "path"),
+        *((name, "query") for name in QUERY),
+    }
+    assert parameters[("sirala", "query")]["schema"]["enum"] == [
+        "tarih",
+        "fon",
+        "tur",
+        "adet",
+        "tutar",
+        "no",
+    ]
+    assert parameters[("profil", "path")]["schema"]["$ref"] == "#/components/schemas/ProfileSlug"
+    assert set(operation["responses"]) == {"200", "403", "404", "422", "503"}

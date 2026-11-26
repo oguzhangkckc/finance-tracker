@@ -57,6 +57,8 @@ class TableSpec[R]:
 
 @dataclass(frozen=True, slots=True)
 class Chip:
+    # Kaldırmak için adres parametresinin adı; web `remove` bağlantısını, API bunu kullanır.
+    key: str
     name: str
     value: str
     remove: str
@@ -225,7 +227,7 @@ def table[R](
         spec=spec,
     )
     view.active.extend(
-        Chip(name, value, view.url(**{key: None, PAGE: None}), day)
+        Chip(key, name, value, view.url(**{key: None, PAGE: None}), day)
         for key, name, value, day in chips
     )
     return view
