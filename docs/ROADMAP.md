@@ -146,7 +146,10 @@ Kurulum (2026-11-25):
 - Pi'de Kurulum adım 12 yapıldı: betik ve wrapper kopyaları, sudoers, ayrı deploy anahtarı (`from="100.64.0.0/10",restrict`), host anahtarı, ayrı Tailscale OAuth istemcisi, `production` environment'ında altı secret.
 - İlk `workflow_dispatch` denemesi kurulu commit'le yeşil bitti ("zaten kurulu"); günlükte cihaz bilgisi yok.
 - Olay: betiğin ilk kopyasında shebang yoktu. sudo onu `/bin/sh` ile çalıştırdı ve betik kendini sonsuz kez çağırdı; süreçler durduruldu, veriye dokunulmadı. Düzeltme PR #33: shebang, ters tırnaksız betik ve doğrudan çalıştırma testi.
-- Kabul kapısı: bu belge değişikliğinin otomatik deploy'u ve ardından geri dönüş denemesi.
+- Kabul kapısı geçti (2026-11-25):
+  - #34'ün merge'ü kendiliğinden kuruldu (e18ac53, önceki 471fde8);
+  - `workflow_dispatch` ile `geri=true` 471fde8'e dönüldü, ardından e18ac53'e yeniden ileri alındı;
+  - üçünde de web yeniden başladı ve iki profilde `doctor` temiz geçti; günlüklerde cihaz bilgisi yok; deploy başına yaklaşık 20 saniye.
 
 ### G2 · JSON API
 `finans.api` (FastAPI): Access JWT doğrulaması ve anahtar istemcisi, CSRF, bütün okuma ve yazma uçları, OpenAPI şeması ve eşitlik testi (K-136…K-138). Eski web canlıda kalır. Yeni bağımlılıklar: `fastapi`, `pyjwt[crypto]`.
