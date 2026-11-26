@@ -11,7 +11,7 @@ describe("yönlendirme", () => {
 
     expect(await screen.findByRole("heading", { level: 1, name: "Özet" })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/sanal");
-    expect(screen.getByRole("status")).toHaveTextContent(SANAL_NOTICE);
+    expect(screen.getByText(SANAL_NOTICE)).toHaveAttribute("role", "status");
   });
 
   it("bilinmeyen profil için bulunamadı sayfası gösterir", async () => {
@@ -27,7 +27,7 @@ describe("yönlendirme", () => {
 
     expect(await screen.findByRole("heading", { name: "Sayfa bulunamadı" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Özete dön" })).toHaveAttribute("href", "/sanal");
-    expect(screen.getByRole("status")).toHaveTextContent(SANAL_NOTICE);
+    expect(screen.getByText(SANAL_NOTICE)).toHaveAttribute("role", "status");
   });
 
   it("erişim reddedilirse iletiyi gösterir, yeniden deneme önermez", async () => {

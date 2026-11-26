@@ -24,7 +24,7 @@ describe("kabuk", () => {
   it("sanal profilde her sayfada bant gösterir", async () => {
     renderApp("/sanal/islemler");
 
-    expect(await screen.findByRole("status")).toHaveTextContent(SANAL_NOTICE);
+    expect(await screen.findByText(SANAL_NOTICE)).toHaveAttribute("role", "status");
   });
 
   it("gerçek profilde bant göstermez", async () => {

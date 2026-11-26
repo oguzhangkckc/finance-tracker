@@ -1,5 +1,6 @@
 import { Button, Container, MantineProvider, Stack, Text, Title } from "@mantine/core";
 import { Notifications } from "@mantine/notifications";
+import { lazy } from "react";
 import { Outlet, type RouteObject, useMatch, useParams } from "react-router";
 import { Shell } from "./layout/Shell";
 import { MorePage } from "./pages/MorePage";
@@ -8,6 +9,23 @@ import { OpenDefaultProfile } from "./pages/OpenDefaultProfile";
 import { Page } from "./pages/Page";
 import { isProfileSlug } from "./profile";
 import { cssVariablesResolver, THEMES } from "./theme";
+
+// Grafik kütüphanesi yalnız onu kullanan sayfanın parçasına girer.
+const OverviewPage = lazy(() =>
+  import("./pages/OverviewPage").then((module) => ({ default: module.OverviewPage })),
+);
+const AllocationPage = lazy(() =>
+  import("./pages/AllocationPage").then((module) => ({ default: module.AllocationPage })),
+);
+const ReturnsPage = lazy(() =>
+  import("./pages/ReturnsPage").then((module) => ({ default: module.ReturnsPage })),
+);
+const ReportsPage = lazy(() =>
+  import("./pages/ReportsPage").then((module) => ({ default: module.ReportsPage })),
+);
+const ReportPage = lazy(() =>
+  import("./pages/ReportsPage").then((module) => ({ default: module.ReportPage })),
+);
 
 function Root() {
   const candidate = useMatch("/:profil/*")?.params.profil;
@@ -66,13 +84,14 @@ export const routes: RouteObject[] = [
             path: ":profil",
             element: <ProfileRoute />,
             children: [
-              { index: true, element: <Page title="Özet" /> },
+              { index: true, element: <OverviewPage /> },
               { path: "varliklar", element: <Page title="Varlıklar" /> },
               { path: "varliklar/lotlar", element: <Page title="Lotlar" /> },
               { path: "islemler", element: <Page title="İşlemler" /> },
-              { path: "dagilim", element: <Page title="Dağılım" /> },
-              { path: "getiri", element: <Page title="Getiri" /> },
-              { path: "raporlar", element: <Page title="Raporlar" /> },
+              { path: "dagilim", element: <AllocationPage /> },
+              { path: "getiri", element: <ReturnsPage /> },
+              { path: "raporlar", element: <ReportsPage /> },
+              { path: "raporlar/:tur", element: <ReportPage /> },
               { path: "alarmlar", element: <Page title="Alarmlar" /> },
               { path: "ayarlar", element: <Page title="Ayarlar" /> },
               { path: "sistem", element: <Page title="Sistem" /> },

@@ -1,8 +1,10 @@
 import { AppShell, Button, Group, NavLink, Text, UnstyledButton } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
+import { Suspense } from "react";
 import { Link, Outlet, useLocation } from "react-router";
 import { useApi } from "../api/context";
 import { sessionQuery } from "../api/queries";
+import { Loading } from "../components/QueryView";
 import { PROFILE_LABELS, PROFILES, type ProfileSlug, SANAL_NOTICE } from "../profile";
 import { Icon } from "./icons";
 import { href, isCurrent, isTabCurrent, NAV, subpath, TABS } from "./nav";
@@ -87,7 +89,9 @@ export function Shell({ profile }: { profile: ProfileSlug }) {
           })}
         </AppShell.Navbar>
         <AppShell.Main id="icerik" tabIndex={-1}>
-          <Outlet />
+          <Suspense fallback={<Loading />}>
+            <Outlet />
+          </Suspense>
         </AppShell.Main>
         <AppShell.Footer hiddenFrom="sm">
           <nav aria-label="Sayfalar (kısa)" className="ft-tabs">

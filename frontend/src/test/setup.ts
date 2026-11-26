@@ -1,6 +1,9 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { afterEach } from "vitest";
+
+// Sayfalar tembel yüklenir; grafikli sayfanın ilk dönüştürülmesi soğuk önbellekte bir saniyeyi aşabilir.
+configure({ asyncUtilTimeout: 5000 });
 
 afterEach(() => {
   cleanup();
@@ -30,3 +33,5 @@ class ResizeObserverStub {
 }
 window.ResizeObserver = ResizeObserverStub;
 Element.prototype.scrollIntoView = () => undefined;
+// jsdom düzen hesaplamaz; Recharts ölçemediği grafiği çizmez ve uyarı yazar.
+Element.prototype.getBoundingClientRect = () => DOMRect.fromRect({ width: 800, height: 300 });

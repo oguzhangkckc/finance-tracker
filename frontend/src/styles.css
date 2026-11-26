@@ -1,8 +1,174 @@
 /* K-128: kart ve çubuklar Kâğıt zeminin üstünde ayrı bir yüzeydir. */
 .mantine-AppShell-header,
 .mantine-AppShell-navbar,
-.mantine-AppShell-footer {
+.mantine-AppShell-footer,
+.ft-surface {
   background-color: var(--ft-surface);
+}
+
+.ft-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* K-128: rakamlar eşit genişlikte. */
+.ft-num {
+  font-variant-numeric: tabular-nums;
+}
+
+.ft-hero {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.ft-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 12px;
+  margin: 12px 0 0;
+}
+
+.ft-stats dt {
+  color: var(--mantine-color-dimmed);
+  font-size: var(--mantine-font-size-sm);
+}
+
+.ft-stats dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.ft-cards {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ft-delta {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.ft-gain {
+  color: var(--ft-gain);
+}
+
+.ft-loss {
+  color: var(--ft-loss);
+}
+
+.ft-warn {
+  color: var(--ft-warn);
+}
+
+/* K-129: dağılım çubuğu; alarmda Kehribar, sapma renkle anlatılmaz. */
+.ft-bar {
+  position: relative;
+  height: 14px;
+  margin: 6px 0 2px;
+}
+
+.ft-bar::before {
+  position: absolute;
+  inset: 3px 0;
+  border-radius: 4px;
+  background-color: var(--ft-line);
+  content: "";
+}
+
+.ft-bar-fill {
+  position: absolute;
+  top: 3px;
+  left: 0;
+  height: 8px;
+  border-radius: 4px;
+  background-color: var(--mantine-primary-color-filled);
+}
+
+.ft-bar-fill[data-alarm] {
+  background-color: var(--ft-warn);
+}
+
+.ft-bar-target {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 14px;
+  margin-left: -1px;
+  background-color: var(--mantine-color-text);
+}
+
+.ft-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  padding: 0;
+  color: var(--mantine-color-dimmed);
+  font-size: var(--mantine-font-size-sm);
+  list-style: none;
+}
+
+.ft-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ft-key {
+  width: 28px;
+  height: 8px;
+}
+
+.ft-key line {
+  fill: none;
+  stroke-linecap: round;
+}
+
+.ft-key-value {
+  stroke: var(--mantine-primary-color-filled);
+  stroke-width: 2.5;
+}
+
+.ft-key-invested {
+  stroke: var(--mantine-color-dimmed);
+  stroke-width: 1.75;
+  stroke-dasharray: 6 4;
+}
+
+.ft-key-adjusted {
+  stroke: var(--mantine-color-text);
+  stroke-width: 1.75;
+  stroke-dasharray: 1 4;
+}
+
+.ft-key-planned {
+  fill: none;
+  stroke: var(--mantine-color-dimmed);
+  stroke-width: 1.5;
+}
+
+.ft-key-actual {
+  fill: var(--mantine-primary-color-filled);
+}
+
+.ft-details summary {
+  min-height: 44px;
+  padding: 10px 0;
+  cursor: pointer;
+  font-size: var(--mantine-font-size-sm);
+}
+
+.ft-report {
+  white-space: pre-wrap;
+  font-size: var(--mantine-font-size-sm);
 }
 
 .ft-skip {
