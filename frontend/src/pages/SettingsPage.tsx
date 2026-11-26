@@ -1,5 +1,6 @@
-import { Code, Group, Paper, Text, Title } from "@mantine/core";
+import { Anchor, Button, Code, Group, Paper, Text, Title } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router";
 import { useApi } from "../api/context";
 import { settingsQuery } from "../api/queries";
 import type { SettingItem, SettingsData } from "../api/types";
@@ -8,7 +9,8 @@ import { type DataColumn, DataTable, useTableQuery } from "../components/DataTab
 import { QueryView } from "../components/QueryView";
 import { dayLabel, money, ratioPercent } from "../format/display";
 import { localTime } from "../format/time";
-import { useProfile } from "../profile";
+import { href } from "../layout/nav";
+import { type ProfileSlug, useProfile } from "../profile";
 import { classLabels, Page } from "./Page";
 
 const INITIAL = "Başlangıç (portfolio.toml)";
@@ -71,7 +73,15 @@ function Current({ data, today }: { data: SettingsData; today: string }) {
   );
 }
 
-function Settings({ data }: { data: SettingsData }) {
+function CancelLink({ profile, id }: { profile: ProfileSlug; id: number }) {
+  return (
+    <Anchor component={Link} to={href(profile, `ayarlar/${id}/vazgec`)}>
+      Vazgeç <span className="ft-sr">(#{id})</span>
+    </Anchor>
+  );
+}
+
+function Settings({ data, profile }: { data: SettingsData; profile: ProfileSlug }) {
   const today = useToday();
   const effective = (item: SettingItem) =>
     item.initial ? INITIAL : `${dayLabel(item.effective_from, { today, case: "den" })} itibaren`;
@@ -83,8 +93,18 @@ function Settings({ data }: { data: SettingsData }) {
     {
       key: "durum",
       label: "Durum",
-      cell: (row) =>
-        `${row.state_label}${row.cancel_reason === null ? "" : `: ${row.cancel_reason}`}`,
+      cell: (row) => (
+        <>
+          {row.state_label}
+          {row.cancel_reason === null ? "" : `: ${row.cancel_reason}`}
+          {row.state === "planned" && (
+            <>
+              {" · "}
+              <CancelLink profile={profile} id={row.id} />
+            </>
+          )}
+        </>
+      ),
     },
     { key: "kaynak", label: "Kaynak", cell: (row) => row.source_label },
   ];
@@ -94,6 +114,11 @@ function Settings({ data }: { data: SettingsData }) {
         Maaş günü, aylık katkı ve hedef dağılım yürürlük tarihli sürümlerdir; geçmiş raporlar o
         dönemin ayarıyla üretilir. Sınıflar ve fonlar portfolio.toml'dadır.
       </Text>
+      <Group>
+        <Button component={Link} to={href(profile, "ayarlar/yeni")}>
+          Yeni ayar sürümü
+        </Button>
+      </Group>
       <Title order={2} mt="md">
         Geçerli ayar
       </Title>
@@ -112,6 +137,7 @@ function Settings({ data }: { data: SettingsData }) {
                     <Text c="dimmed">#{item.id}</Text>
                   </Group>
                   <Changes item={item} />
+                  <CancelLink profile={profile} id={item.id} />
                 </Paper>
               </li>
             ))}
@@ -134,10 +160,11 @@ function Settings({ data }: { data: SettingsData }) {
 }
 
 export function SettingsPage() {
-  const query = useQuery(settingsQuery(useApi(), useProfile(), useTableQuery()));
+  const profile = useProfile();
+  const query = useQuery(settingsQuery(useApi(), profile, useTableQuery()));
   return (
     <Page title="Ayarlar">
-      <QueryView query={query}>{(data) => <Settings data={data} />}</QueryView>
+      <QueryView query={query}>{(data) => <Settings data={data} profile={profile} />}</QueryView>
     </Page>
   );
 }

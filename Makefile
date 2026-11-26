@@ -1,6 +1,6 @@
 RUN := uv run --frozen
 
-.PHONY: sync fmt lint typecheck imports test live audit check deploy-py312 openapi bicim frontend frontend-node
+.PHONY: sync fmt lint typecheck imports test live audit check deploy-py312 openapi bicim frontend frontend-node yerel
 
 sync:
 	uv sync --locked
@@ -61,3 +61,8 @@ openapi: frontend-node frontend/node_modules/.package-lock.json
 bicim: frontend-node frontend/node_modules/.package-lock.json
 	$(RUN) python -m finans.api.parity > frontend/src/format/parity.json
 	cd frontend && npx --no-install biome format --write src/format/parity.json
+
+# Yerel geliştirmede API: Access yerine yerel anahtar ve 24 saatlik jeton (K-139).
+# Arayüz: frontend/ içinde npm run dev (ya da derlenmiş paketle npm run preview).
+yerel:
+	$(RUN) python scripts/yerel_api.py

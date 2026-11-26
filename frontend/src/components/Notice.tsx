@@ -10,6 +10,30 @@ export function Warning({ children }: { children: ReactNode }) {
   );
 }
 
+export function Info({ children }: { children: ReactNode }) {
+  return (
+    <Alert color="gray" variant="light" icon={<Icon name="bilgi" />} role="status">
+      {children}
+    </Alert>
+  );
+}
+
+export function Success({ children }: { children: ReactNode }) {
+  return (
+    <Alert color="yaprak" variant="light" icon={<Icon name="tamam" />} role="status">
+      {children}
+    </Alert>
+  );
+}
+
+export function Failure({ children }: { children: ReactNode }) {
+  return (
+    <Alert color="kiremit" variant="light" icon={<Icon name="hata" />} role="alert">
+      {children}
+    </Alert>
+  );
+}
+
 // K-128: boş sayfa yapılacak işi söyler.
 export function EmptyState({ children }: { children: ReactNode }) {
   return (

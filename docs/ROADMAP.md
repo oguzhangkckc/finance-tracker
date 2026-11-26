@@ -183,7 +183,7 @@ Geliştirme kapısı:
   - fiyatsız gün ve iptali engelleyen satışlar;
   - grafiklerin tablo karşılıkları.
 
-Kabul kapısı: Mac'te yerel API'ye karşı, derlenmiş paketle elle tur: iki profil, her yazma akışı, dar ekran.
+Kabul kapısı: Mac'te yerel API'ye karşı (`make yerel`, `frontend/` içinde `npm run build` ve `npm run preview`), derlenmiş paketle elle tur: iki profil, her yazma akışı, dar ekran.
 
 ### G4 · Geçiş
 - Web birimi 127.0.0.1'e ve `finans-api`'ye geçer; `finans.env`'e Access ayarları ve `FT_WEB_PORT` eklenir, `FT_WEB_ORIGIN` alan adına döner.

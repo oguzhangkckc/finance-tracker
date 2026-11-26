@@ -10,6 +10,11 @@ export type PaydayPlan = Schemas["PaydayPreviewBody"];
 export type PaydayLine = Schemas["PaydayLine"];
 export type Saved = Schemas["Saved"];
 export type FundOption = Schemas["FundOption"];
+export type SettingPreview = Schemas["SettingPreviewBody"];
+export type ProfileProposal = Schemas["ProfileProposal"];
+export type SettingSaved = Schemas["SettingSaved"];
+export type ProfileResult = Schemas["ProfileResult"];
+export type CancelPreview = Schemas["CancelPreviewBody"];
 
 export interface Outcome<T> {
   status: number;

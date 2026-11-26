@@ -49,6 +49,12 @@ const VoidPage = lazy(() =>
 const PaydayPage = lazy(() =>
   import("./pages/PaydayPage").then((module) => ({ default: module.PaydayPage })),
 );
+const SettingFormPage = lazy(() =>
+  import("./pages/SettingFormPage").then((module) => ({ default: module.SettingFormPage })),
+);
+const SettingCancelPage = lazy(() =>
+  import("./pages/SettingCancelPage").then((module) => ({ default: module.SettingCancelPage })),
+);
 const SettingsPage = lazy(() =>
   import("./pages/SettingsPage").then((module) => ({ default: module.SettingsPage })),
 );
@@ -123,6 +129,8 @@ export const routes: RouteObject[] = [
               { path: "raporlar/:tur", element: <ReportPage /> },
               { path: "alarmlar", element: <AlertsPage /> },
               { path: "ayarlar", element: <SettingsPage /> },
+              { path: "ayarlar/yeni", element: <SettingFormPage /> },
+              { path: "ayarlar/:no/vazgec", element: <SettingCancelPage /> },
               { path: "sistem", element: <SystemPage /> },
               { path: "daha", element: <MorePage /> },
               { path: "*", element: <NotFound /> },

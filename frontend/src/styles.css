@@ -320,3 +320,7 @@
 .ft-muted {
   color: var(--mantine-color-dimmed);
 }
+
+.ft-block {
+  display: block;
+}

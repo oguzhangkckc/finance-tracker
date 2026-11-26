@@ -130,9 +130,17 @@ describe("ayarlar", () => {
       "1 Kasım 10:00",
       "1 Aralık'tan itibaren",
       "Aylık katkı: 4.000,00 TL → 5.000,00 TL",
-      "planlandı",
+      "planlandı · Vazgeç (#3)",
       "web",
     ]);
+    expect(
+      within(rows[0] as HTMLElement).getByRole("link", { name: "Vazgeç (#3)" }),
+    ).toHaveAttribute("href", "/gercek/ayarlar/3/vazgec");
+    expect(within(rows[2] as HTMLElement).queryByRole("link", { name: /Vazgeç/ })).toBeNull();
+    expect(screen.getByRole("link", { name: "Yeni ayar sürümü" })).toHaveAttribute(
+      "href",
+      "/gercek/ayarlar/yeni",
+    );
     expect(rows[1]).toHaveTextContent("Başlangıç (portfolio.toml)");
     expect(rows[1]).toHaveTextContent("değişiklik yok");
     expect(rows[1]).toHaveTextContent("komut satırı");
