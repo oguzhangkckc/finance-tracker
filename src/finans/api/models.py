@@ -45,3 +45,8 @@ ERROR_RESPONSES: Final[dict[int | str, dict[str, object]]] = {
     403: {"model": ErrorBody, "description": "Erişim reddedildi"},
     422: {"model": ErrorBody, "description": "Girdi geçersiz"},
 }
+PAGE_RESPONSES: Final[dict[int | str, dict[str, object]]] = {
+    **ERROR_RESPONSES,
+    404: {"model": ErrorBody, "description": "Bulunamadı"},
+    503: {"model": ErrorBody, "description": "Sayfa verisi yüklenemedi"},
+}

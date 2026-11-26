@@ -13,7 +13,7 @@ from finans.api.context import ApiContext
 from finans.api.encoding import CanonicalJSONResponse
 from finans.api.errors import install_error_handlers
 from finans.api.middleware import BodyLimit, RequireAccess, RequireSameOrigin, SecurityHeaders
-from finans.api.routes import okuma, ortak
+from finans.api.routes import islem, okuma, ortak
 from finans.ports.access import AccessKeySource
 from finans.ports.clock import Clock
 from finans.settings import ApiSettings, Settings, profile_settings
@@ -37,6 +37,7 @@ def _application(lifespan: Lifespan | None = None) -> FastAPI:
     app.include_router(ortak.public)
     app.include_router(ortak.router)
     app.include_router(okuma.router)
+    app.include_router(islem.router)
     install_error_handlers(app)
     return app
 

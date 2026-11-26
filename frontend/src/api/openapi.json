@@ -1470,6 +1470,795 @@
           }
         }
       }
+    },
+    "/api/{profil}/islemler/{tur}/onizle": {
+      "post": {
+        "tags": [
+          "yazma"
+        ],
+        "summary": "Trade Preview",
+        "operationId": "trade_preview_api__profil__islemler__tur__onizle_post",
+        "parameters": [
+          {
+            "name": "tur",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "alis",
+                "satis"
+              ],
+              "type": "string",
+              "title": "Tur"
+            }
+          },
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradeInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradePreviewBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz ya da işlem yapılamaz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradeError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/{profil}/islemler/kaydet": {
+      "post": {
+        "tags": [
+          "yazma"
+        ],
+        "summary": "Trade Save",
+        "operationId": "trade_save_api__profil__islemler_kaydet_post",
+        "parameters": [
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Saved"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz ya da işlem yapılamaz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradeError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Sonuç değişti; yeni önizleme",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradePreviewBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/{profil}/islemler/{no}/iptal": {
+      "get": {
+        "tags": [
+          "yazma"
+        ],
+        "summary": "Void Info",
+        "operationId": "void_info_api__profil__islemler__no__iptal_get",
+        "parameters": [
+          {
+            "name": "no",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "No"
+            }
+          },
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoidTarget"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz ya da iptali satışlar engelliyor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoidBlocked"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/{profil}/islemler/{no}/iptal/onizle": {
+      "post": {
+        "tags": [
+          "yazma"
+        ],
+        "summary": "Void Preview Endpoint",
+        "operationId": "void_preview_endpoint_api__profil__islemler__no__iptal_onizle_post",
+        "parameters": [
+          {
+            "name": "no",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "No"
+            }
+          },
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReasonInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoidPreviewBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz ya da iptali satışlar engelliyor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoidBlocked"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/{profil}/islemler/{no}/iptal/kaydet": {
+      "post": {
+        "tags": [
+          "yazma"
+        ],
+        "summary": "Void Save",
+        "operationId": "void_save_api__profil__islemler__no__iptal_kaydet_post",
+        "parameters": [
+          {
+            "name": "no",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "No"
+            }
+          },
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Saved"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz ya da iptali satışlar engelliyor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoidBlocked"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Sonuç değişti; yeni önizleme",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoidPreviewBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/{profil}/maas-gunu": {
+      "get": {
+        "tags": [
+          "yazma"
+        ],
+        "summary": "Payday Default",
+        "description": "Son maaş gününün planı; her ay kendi ayarındaki maaş gününe göre (K-127).",
+        "operationId": "payday_default_api__profil__maas_gunu_get",
+        "parameters": [
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaydayPreviewBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/{profil}/maas-gunu/onizle": {
+      "post": {
+        "tags": [
+          "yazma"
+        ],
+        "summary": "Payday Preview Endpoint",
+        "operationId": "payday_preview_endpoint_api__profil__maas_gunu_onizle_post",
+        "parameters": [
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaydayInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaydayPreviewBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/{profil}/maas-gunu/kaydet": {
+      "post": {
+        "tags": [
+          "yazma"
+        ],
+        "summary": "Payday Save",
+        "operationId": "payday_save_api__profil__maas_gunu_kaydet_post",
+        "parameters": [
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Saved"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Sonuç değişti; yeni önizleme",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaydayPreviewBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/{profil}/fiyat-guncelle": {
+      "post": {
+        "tags": [
+          "yazma"
+        ],
+        "summary": "Refresh",
+        "description": "Fiyat çekilmez; istek dosyası bırakılır, işi systemd başlatır (K-122, K-123).",
+        "operationId": "refresh_api__profil__fiyat_guncelle_post",
+        "parameters": [
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshResult"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1688,6 +2477,37 @@
         ],
         "title": "BackupItem"
       },
+      "BlockingSale": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "instrument": {
+            "type": "string",
+            "title": "Instrument"
+          },
+          "trade_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Trade Date"
+          },
+          "units": {
+            "type": "string",
+            "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$",
+            "title": "Units"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "instrument",
+          "trade_date",
+          "units"
+        ],
+        "title": "BlockingSale"
+      },
       "CheckItem": {
         "properties": {
           "name": {
@@ -1716,6 +2536,23 @@
           "detail"
         ],
         "title": "CheckItem"
+      },
+      "ConfirmInput": {
+        "properties": {
+          "confirmation": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Confirmation"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "confirmation"
+        ],
+        "title": "ConfirmInput"
       },
       "ContributionItem": {
         "properties": {
@@ -2368,6 +3205,223 @@
         ],
         "title": "OverviewPage"
       },
+      "PaydayInput": {
+        "properties": {
+          "payday": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Payday",
+            "default": ""
+          },
+          "reapply_voided": {
+            "type": "boolean",
+            "title": "Reapply Voided",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "PaydayInput"
+      },
+      "PaydayLine": {
+        "properties": {
+          "asset_class": {
+            "type": "string",
+            "title": "Asset Class"
+          },
+          "class_name": {
+            "type": "string",
+            "title": "Class Name"
+          },
+          "instrument": {
+            "type": "string",
+            "title": "Instrument"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$",
+            "title": "Amount"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "nothing",
+              "pending",
+              "expired",
+              "applied",
+              "voided",
+              "skipped"
+            ],
+            "title": "Status"
+          },
+          "price_day": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Day"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "units": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Units"
+          },
+          "spent": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spent"
+          },
+          "leftover": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leftover"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "asset_class",
+          "class_name",
+          "instrument",
+          "amount",
+          "status",
+          "price_day",
+          "price",
+          "units",
+          "spent",
+          "leftover",
+          "reason"
+        ],
+        "title": "PaydayLine"
+      },
+      "PaydayPreviewBody": {
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/ProfileSlug"
+          },
+          "payday": {
+            "type": "string",
+            "format": "date",
+            "title": "Payday"
+          },
+          "reapply_voided": {
+            "type": "boolean",
+            "title": "Reapply Voided"
+          },
+          "window_end": {
+            "type": "string",
+            "format": "date",
+            "title": "Window End"
+          },
+          "retry_after": {
+            "type": "string",
+            "format": "date",
+            "title": "Retry After"
+          },
+          "missing_prices": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Prices"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/PaydayLine"
+            },
+            "type": "array",
+            "title": "Lines"
+          },
+          "ready": {
+            "type": "integer",
+            "title": "Ready"
+          },
+          "confirmation": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation"
+          },
+          "changed": {
+            "type": "boolean",
+            "title": "Changed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "profile",
+          "payday",
+          "reapply_voided",
+          "window_end",
+          "retry_after",
+          "missing_prices",
+          "lines",
+          "ready",
+          "confirmation",
+          "changed"
+        ],
+        "title": "PaydayPreviewBody",
+        "description": "`confirmation` yalnız uygulanabilir alım varsa verilir (K-113)."
+      },
       "ProfileLink": {
         "properties": {
           "slug": {
@@ -2428,6 +3482,19 @@
           "generated_at"
         ],
         "title": "Provenance"
+      },
+      "ReasonInput": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Reason",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ReasonInput"
       },
       "RebalanceLine": {
         "properties": {
@@ -2527,6 +3594,25 @@
           "last_sync"
         ],
         "title": "RefreshInfo"
+      },
+      "RefreshResult": {
+        "properties": {
+          "accepted": {
+            "type": "boolean",
+            "title": "Accepted"
+          },
+          "refresh": {
+            "$ref": "#/components/schemas/RefreshInfo"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "accepted",
+          "refresh"
+        ],
+        "title": "RefreshResult",
+        "description": "`accepted`: istek bırakıldı, fiyat işini systemd başlatır (K-122, K-123)."
       },
       "Report": {
         "properties": {
@@ -2866,6 +3952,26 @@
         ],
         "title": "RunItem",
         "description": "İş kaydının ayrıntı metni (`detail`) verilmez; web'de de gösterilmez."
+      },
+      "Saved": {
+        "properties": {
+          "number": {
+            "type": "integer",
+            "title": "Number"
+          },
+          "duplicate": {
+            "type": "boolean",
+            "title": "Duplicate"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "number",
+          "duplicate"
+        ],
+        "title": "Saved",
+        "description": "`number`: işlem numarası; maaş gününde kaydedilen alım sayısı. `duplicate`: bu onay daha\nönce kullanılmış, yeniden kaydedilmedi; numara ilk kaydınkidir."
       },
       "Session": {
         "properties": {
@@ -3951,6 +5057,223 @@
         ],
         "title": "Table[TransactionItem]"
       },
+      "TradeError": {
+        "properties": {
+          "error": {
+            "type": "string",
+            "title": "Error"
+          },
+          "fields": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Fields"
+          },
+          "price_days": {
+            "items": {
+              "type": "string",
+              "format": "date"
+            },
+            "type": "array",
+            "title": "Price Days"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "TradeError",
+        "description": "K-109: sanal işlemde o günün fiyatı yoksa en yakın fiyatlı günler; yalnız seçenektir."
+      },
+      "TradeInput": {
+        "properties": {
+          "fund": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Fund",
+            "default": ""
+          },
+          "day": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Day",
+            "default": ""
+          },
+          "units": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Units",
+            "default": ""
+          },
+          "price": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Price",
+            "default": ""
+          },
+          "fee": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Fee",
+            "default": ""
+          },
+          "amount": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Amount",
+            "default": ""
+          },
+          "all": {
+            "type": "boolean",
+            "title": "All",
+            "default": false
+          },
+          "ref": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Ref",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "TradeInput",
+        "description": "Gerçek profilde adet, fiyat, komisyon ve dekont; sanal alımda tutar ve komisyon; sanal\nsatışta adet ya da `all`. Profile uymayan alanlar yok sayılır."
+      },
+      "TradeKind": {
+        "type": "string",
+        "enum": [
+          "alis",
+          "satis"
+        ]
+      },
+      "TradePreviewBody": {
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/ProfileSlug"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TradeKind"
+          },
+          "instrument": {
+            "type": "string",
+            "title": "Instrument"
+          },
+          "fund_name": {
+            "type": "string",
+            "title": "Fund Name"
+          },
+          "trade_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Trade Date"
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "BUY",
+              "SELL"
+            ],
+            "title": "Side"
+          },
+          "units": {
+            "type": "string",
+            "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$",
+            "title": "Units"
+          },
+          "unit_price": {
+            "type": "string",
+            "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$",
+            "title": "Unit Price"
+          },
+          "fee": {
+            "type": "string",
+            "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$",
+            "title": "Fee"
+          },
+          "gross": {
+            "type": "string",
+            "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$",
+            "title": "Gross"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "units_before": {
+            "type": "string",
+            "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$",
+            "title": "Units Before"
+          },
+          "units_after": {
+            "type": "string",
+            "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$",
+            "title": "Units After"
+          },
+          "leftover": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leftover"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "confirmation": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Confirmation"
+          },
+          "changed": {
+            "type": "boolean",
+            "title": "Changed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "profile",
+          "kind",
+          "instrument",
+          "fund_name",
+          "trade_date",
+          "side",
+          "units",
+          "unit_price",
+          "fee",
+          "gross",
+          "ref",
+          "units_before",
+          "units_after",
+          "leftover",
+          "warnings",
+          "confirmation",
+          "changed"
+        ],
+        "title": "TradePreviewBody",
+        "description": "`changed`: onayda sonuç önizlemeden farklı çıktı, kayıt yapılmadı; bu yeni önizlemedir."
+      },
       "TransactionItem": {
         "properties": {
           "id": {
@@ -4217,6 +5540,146 @@
           "total"
         ],
         "title": "ValueSplit"
+      },
+      "VoidBlocked": {
+        "properties": {
+          "error": {
+            "type": "string",
+            "title": "Error"
+          },
+          "fields": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Fields"
+          },
+          "blocking": {
+            "items": {
+              "$ref": "#/components/schemas/BlockingSale"
+            },
+            "type": "array",
+            "title": "Blocking"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "VoidBlocked",
+        "description": "K-58: iptali engelleyen satışlar; önce onlar iptal edilir."
+      },
+      "VoidPreviewBody": {
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/ProfileSlug"
+          },
+          "target": {
+            "$ref": "#/components/schemas/VoidTarget"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "confirmation": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Confirmation"
+          },
+          "changed": {
+            "type": "boolean",
+            "title": "Changed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "profile",
+          "target",
+          "reason",
+          "confirmation",
+          "changed"
+        ],
+        "title": "VoidPreviewBody"
+      },
+      "VoidTarget": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "instrument": {
+            "type": "string",
+            "title": "Instrument"
+          },
+          "trade_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Trade Date"
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "BUY",
+              "SELL"
+            ],
+            "title": "Side"
+          },
+          "units": {
+            "type": "string",
+            "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$",
+            "title": "Units"
+          },
+          "unit_price": {
+            "type": "string",
+            "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$",
+            "title": "Unit Price"
+          },
+          "fee": {
+            "type": "string",
+            "pattern": "^(0|-?(0\\.[0-9]*[1-9]|[1-9][0-9]*(\\.[0-9]*[1-9])?))$",
+            "title": "Fee"
+          },
+          "external_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Ref"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "instrument",
+          "trade_date",
+          "side",
+          "units",
+          "unit_price",
+          "fee",
+          "external_ref",
+          "note"
+        ],
+        "title": "VoidTarget"
       }
     }
   }

@@ -15,6 +15,7 @@ API_ENV = {
     "FT_CF_ACCESS_AUD": "xht-aud-0123456789abcdef",
     "FT_WEB_ALLOWED_EMAIL": "kullanici@example.com",
     "FT_WEB_ORIGIN": "https://finans.example.com",
+    "FT_WEB_SESSION_KEY": "k" * 64,
 }
 
 

@@ -9,6 +9,7 @@ from types import MappingProxyType
 import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa
 from jwt.algorithms import RSAAlgorithm
+from pydantic import SecretStr
 
 from finans.settings import ApiSettings
 
@@ -17,6 +18,7 @@ AUDIENCE = "xht-aud-0123456789abcdef"
 EMAIL = "kullanici@example.com"
 ORIGIN = "https://finans.example.com"
 KID = "anahtar-1"
+CONFIRM_KEY = "o" * 64
 LIFETIME = timedelta(hours=24)
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
@@ -27,6 +29,7 @@ API_SETTINGS = ApiSettings(
     audience=AUDIENCE,
     allowed_email=EMAIL,
     origin=ORIGIN,
+    confirm_key=SecretStr(CONFIRM_KEY),
 )
 
 

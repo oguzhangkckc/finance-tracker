@@ -13,6 +13,7 @@ type Profile = Literal["real", "sanal"]
 PROFILES: tuple[Profile, ...] = ("real", "sanal")
 DEFAULT_WEB_HOST: Final = "127.0.0.1"
 MAX_PORT: Final = 65535
+MIN_CONFIRM_KEY: Final = 32
 _DIGITS: Final = re.compile(r"[0-9]{1,5}")
 # Anahtarlar bu alandan çekildiği için başka bir alan adı kabul edilmez (K-136).
 _TEAM_DOMAIN: Final = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com")
@@ -161,6 +162,8 @@ class ApiSettings:
     audience: str
     allowed_email: str
     origin: str
+    # Onay jetonunun HMAC anahtarı (K-137); SecretStr, yazdırılınca değeri görünmez.
+    confirm_key: SecretStr
 
     @property
     def issuer(self) -> str:
@@ -188,9 +191,15 @@ def api_settings(base: Settings) -> ApiSettings:
     origin = _origin(base.web_origin or "")
     if origin is None:
         problems.append("FT_WEB_ORIGIN https://<alan adı> biçiminde olmalı (yol yok)")
-    if problems or port is None or origin is None:
+    key = base.web_session_key
+    if key is None or len(key.get_secret_value()) < MIN_CONFIRM_KEY:
+        problems.append(
+            f"FT_WEB_SESSION_KEY (credstore'da ft_web_session_key) en az {MIN_CONFIRM_KEY} "
+            "karakter olmalı"
+        )
+    if problems or port is None or origin is None or key is None:
         raise ApiSettingsError(f"API başlamaz (K-136): {'; '.join(problems)}.")
-    return ApiSettings(host, port, team, audience, email, origin)
+    return ApiSettings(host, port, team, audience, email, origin, key)
 
 
 def _is_loopback(host: str) -> bool:

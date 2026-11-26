@@ -10,7 +10,7 @@ from starlette.responses import Response
 from finans.api.context import ApiContext, context, profile
 from finans.api.encoding import CanonicalJSONResponse
 from finans.api.errors import page_errors
-from finans.api.models import ERROR_RESPONSES, ErrorBody
+from finans.api.models import PAGE_RESPONSES
 from finans.api.pages import (
     AlertsPage,
     FundOption,
@@ -63,11 +63,6 @@ from finans.sunum.views import (
 )
 from finans.sunum.writes import choices
 
-RESPONSES: Final[dict[int | str, dict[str, object]]] = {
-    **ERROR_RESPONSES,
-    404: {"model": ErrorBody, "description": "Bulunamadı"},
-    503: {"model": ErrorBody, "description": "Sayfa verisi yüklenemedi"},
-}
 type ReportSlug = Literal["haftalik", "aylik", "maas-gunu"]
 TITLES: Final[dict[ReportSlug, str]] = {
     "haftalik": "Haftalık rapor",
@@ -76,7 +71,7 @@ TITLES: Final[dict[ReportSlug, str]] = {
 }
 KINDS: Final[dict[ReportSlug, ReportKind]] = {"haftalik": "weekly", "aylik": "monthly"}
 
-router = APIRouter(prefix="/api/{profil}", tags=["okuma"], responses=RESPONSES)
+router = APIRouter(prefix="/api/{profil}", tags=["okuma"], responses=PAGE_RESPONSES)
 Conf = Annotated[Settings, Depends(profile)]
 Ctx = Annotated[ApiContext, Depends(context)]
 

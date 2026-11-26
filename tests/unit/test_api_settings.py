@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from pydantic import SecretStr
 
 from finans.settings import (
     ApiSettings,
@@ -20,6 +21,7 @@ VALID = {
     "FT_CF_ACCESS_AUD": "xht-aud-0123456789abcdef",
     "FT_WEB_ALLOWED_EMAIL": "kullanici@example.com",
     "FT_WEB_ORIGIN": "https://finans.example.com",
+    "FT_WEB_SESSION_KEY": "k" * 64,
 }
 
 
@@ -45,6 +47,7 @@ def test_a_complete_environment_gives_the_api_settings(env: pytest.MonkeyPatch) 
         audience="xht-aud-0123456789abcdef",
         allowed_email="kullanici@example.com",
         origin="https://finans.example.com",
+        confirm_key=SecretStr("k" * 64),
     )
 
 
@@ -173,3 +176,16 @@ def test_blank_api_settings_are_undefined(monkeypatch: pytest.MonkeyPatch, tmp_p
     settings = load_settings()
 
     assert (settings.web_port, settings.web_allowed_email) == (None, None)
+
+
+def test_the_confirmation_key_must_be_long_and_never_shows(env: pytest.MonkeyPatch) -> None:
+    env.setenv("FT_WEB_SESSION_KEY", "kisa-gizli")
+    message = problems()
+    assert (
+        "FT_WEB_SESSION_KEY (credstore'da ft_web_session_key) en az 32 karakter olmalı" in message
+    )
+    assert "kisa-gizli" not in message
+
+    env.setenv("FT_WEB_SESSION_KEY", "g" * 40)
+    settings = api_settings(load_base_settings())
+    assert "g" * 40 not in repr(settings)
