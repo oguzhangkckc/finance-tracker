@@ -1,0 +1,61 @@
+/* K-128: kart ve çubuklar Kâğıt zeminin üstünde ayrı bir yüzeydir. */
+.mantine-AppShell-header,
+.mantine-AppShell-navbar,
+.mantine-AppShell-footer {
+  background-color: var(--ft-surface);
+}
+
+.ft-skip {
+  position: absolute;
+  top: -48px;
+  left: 8px;
+  z-index: 1000;
+  padding: 8px 12px;
+  border-radius: var(--mantine-radius-md);
+  background-color: var(--ft-surface);
+  color: var(--mantine-color-text);
+}
+
+.ft-skip:focus {
+  top: 8px;
+}
+
+/* K-125: sanal profilde her sayfada bant. */
+.ft-band {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  background-color: var(--mantine-primary-color-filled);
+  color: var(--mantine-primary-color-contrast);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 700;
+}
+
+/* K-128: dokunma hedefi en az 44 px. */
+.ft-nav {
+  min-height: 44px;
+  border-radius: var(--mantine-radius-md);
+}
+
+.ft-tabs {
+  display: flex;
+  height: 100%;
+}
+
+.ft-tab {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 44px;
+  color: var(--mantine-color-dimmed);
+  font-size: var(--mantine-font-size-xs);
+}
+
+.ft-tab[data-active] {
+  color: var(--mantine-primary-color-filled);
+  font-weight: 600;
+}

@@ -10,6 +10,7 @@ coverage.xml
 htmlcov/
 dist/
 build/
+node_modules/
 
 .env
 var/
