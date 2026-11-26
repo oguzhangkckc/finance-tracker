@@ -30,15 +30,15 @@ from finans.domain.numeric import canonical_text
 from finans.domain.settings import FIELD_LABELS, SettingField, SettingValues, SettingVersion
 from finans.ports.repositories import StoredSetting
 from finans.settings import Profile, Settings
-from finans.web.views import load_config
-from finans.web.writes import FormErrors, Recorded, ResultChanged
+from finans.sunum.views import load_config
+from finans.sunum.writes import FormErrors, Recorded, ResultChanged
 
 EDITABLE: Final = ("maas_gunu", "katki", "hedef")
 PREVIOUS: Final = "onceki_"
 TARGET: Final = "hedef_"
 HUNDRED: Final = Decimal(100)
 REASON_MAX: Final = 200
-_LOG = logging.getLogger("finans.web")
+_LOG = logging.getLogger("finans.sunum")
 
 
 @dataclass(frozen=True, slots=True)

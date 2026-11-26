@@ -152,21 +152,30 @@ Kurulum (2026-11-25):
   - üçünde de web yeniden başladı ve iki profilde `doctor` temiz geçti; günlüklerde cihaz bilgisi yok; deploy başına yaklaşık 20 saniye.
 
 ### G2 · JSON API
-`finans.api` (FastAPI): Access JWT doğrulaması ve anahtar istemcisi, CSRF, bütün okuma ve yazma uçları, OpenAPI şeması ve eşitlik testi (K-136…K-138). Eski web canlıda kalır. Yeni bağımlılıklar: `fastapi`, `pyjwt[crypto]`.
+`finans.api` (FastAPI) ve `finans.sunum` (K-136…K-138). Eski web canlıda kalır; API Pi'de çalışmaz, birim G4'te değişir. Yeni bağımlılıklar: `fastapi`, `pyjwt[crypto]`.
+- `finans.sunum`: web'in HTTP'den bağımsız modülleri (görünüm verisi, tablo kuralları, işlem ve ayar yazmaları, onay jetonu) buraya taşınır; web onları buradan alır.
+- `finans.api`: Access JWT doğrulaması ve anahtar önbelleği (`adapters/cf_access.py`), CSRF, güvenlik başlıkları, hata biçimi; `/api/saglik` ve `/api/oturum`; profil başına okuma ve yazma uçları (web'deki her sayfanın ve formun karşılığı, fiyat güncelleme isteği dahil); giriş noktası `finans-api` (yalnız yerel).
+- OpenAPI şeması `frontend/src/api/openapi.json`'dadır; `make openapi` üretir.
 Geliştirme kapısı:
-- JWT testleri, anahtar sunucusu erişilemezken önbellek boşsa red, doluysa kabul dahil;
+- JWT testleri, anahtar sunucusu erişilemezken önbellek boşsa red, doluysa kabul dahil; eksik ya da geçersiz ayarla API açılmaz;
 - CSRF testleri;
-- eski web testlerinin davranışları API'de: iki profil, önizleme → onay, nonce, taşıma seçeneği, sıralama ve filtre kuralları;
-- import-linter.
+- eski web testlerinin davranışları API'de: iki profil, önizleme → onay, 409 ve yeni önizleme, nonce tekrarında kaydın tekrarlanmaması, taşıma seçeneği, sıralama ve filtre kuralları;
+- şema: repodaki şema `app.openapi()` ile aynı, şemada `number` yok; Decimal yanıtlarda kanonik metin;
+- `sunum` taşımasından sonra web testleri değişmeden geçer;
+- import-linter ve mimari testleri.
+Not: Pi'deki `finans.env`'e `FT_WEB_PORT` G4'ten önce eklenmez. `finans-guncelle` bu ayar varsa `/api/saglik`'i yoklar; API G4'e kadar çalışmadığı için deploy düşerdi.
 
 ### G3 · Arayüz
 `frontend/` (React, Vite, TypeScript, Mantine): bütün sayfalar, grafikler, tablolar, önizleme → onay. CI'da `frontend` işi (Biome, `tsc`, Vitest, derleme, tiplerin farkı) ve `npm audit` (K-139).
+- Türkçe biçimlendirici ve `contracts/display`'den üretilen eşlik fikstürü (K-138).
+- Derlenmiş arayüzü API sunar: `index.html` `no-cache`, özetli dosyalar `immutable` (K-139).
+- Yerel turda Access yoktur; kimliğin yerelde nasıl sağlanacağı, doğrulama kapatılmadan, G3 planında kararlaştırılır (K-136).
 Geliştirme kapısı: CI yeşil; bileşen testleri: profil bandı ve onay kutusu, önizleme → onay ve 409, hedef toplamı, tablo sıralama ve filtre parametreleri.
 Kabul kapısı: Mac'te yerel API'ye karşı elle tur: iki profil, her yazma akışı, dar ekran.
 
 ### G4 · Geçiş
-- Web birimi 127.0.0.1'e geçer.
-- Kalkanlar: eski `finans.web`, Jinja şablonları, `app.js`, `site.css`, sunucu SVG'si, Unix soketi, Tailscale kimliği, şifre kilidi, `ft web sifre` ve doctor satırı; `jinja2` bağımlılığı.
+- Web birimi 127.0.0.1'e ve `finans-api`'ye geçer; `finans.env`'e Access ayarları ve `FT_WEB_PORT` eklenir, `FT_WEB_ORIGIN` alan adına döner.
+- Kalkanlar: eski `finans.web` ve `finans-web` giriş noktası, Jinja şablonları, `app.js`, `site.css`, sunucu SVG'si, Unix soketi, Tailscale kimliği, şifre kilidi, `ft web sifre` ve doctor satırı; `jinja2` bağımlılığı.
 - Cloudflare Access ve tünel kurulur; Tailscale serve kapanır (K-136, K-137).
 Geliştirme kapısı: `make check` ve CI; `systemd-analyze security` eşiği ölçülüp yeniden konur.
 Kabul kapısı:

@@ -30,13 +30,13 @@ from finans.domain.schedule import logical_date
 from finans.ports.clock import BUSINESS_TZ
 from finans.ports.unit_of_work import UnitOfWork
 from finans.settings import Settings
-from finans.web.views import load_config
+from finans.sunum.views import load_config
 
 type TradeKind = Literal["alis", "satis"]
 TRADE_KINDS: Final[tuple[TradeKind, ...]] = ("alis", "satis")
 REF_MAX: Final = 64
 REASON_MAX: Final = 200
-_LOG = logging.getLogger("finans.web")
+_LOG = logging.getLogger("finans.sunum")
 
 
 class FormErrors(Exception):

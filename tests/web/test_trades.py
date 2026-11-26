@@ -357,11 +357,11 @@ def test_the_log_holds_only_number_kind_and_profile(
     site: Site, caplog: pytest.LogCaptureFixture
 ) -> None:
     me = site.browser()
-    with caplog.at_level(logging.INFO, logger="finans.web"):
+    with caplog.at_level(logging.INFO, logger="finans"):
         post_confirm(me, "real", post_preview(me, "real", "alis", REAL_BUY))
         post_confirm(me, "real", me.post("/gercek/islemler/5/iptal", {"gerekce": "yanlış gün"}))
 
-    logged = [r.getMessage() for r in caplog.records if r.name == "finans.web"]
+    logged = [r.getMessage() for r in caplog.records if r.name in ("finans.web", "finans.sunum")]
     assert logged == ["İşlem kaydedildi: #5 alis (real)", "İşlem iptal edildi: #5 (real)"]
 
 

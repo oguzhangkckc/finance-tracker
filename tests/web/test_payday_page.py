@@ -108,8 +108,8 @@ def test_the_log_holds_only_the_count_and_profile(
 ) -> None:
     me = site.browser()
     page = me.get(PAGE)
-    with caplog.at_level(logging.INFO, logger="finans.web"):
+    with caplog.at_level(logging.INFO, logger="finans"):
         me.post(SAVE, hidden_fields(page.text, SAVE))
 
-    logged = [r.getMessage() for r in caplog.records if r.name == "finans.web"]
+    logged = [r.getMessage() for r in caplog.records if r.name in ("finans.web", "finans.sunum")]
     assert logged == ["Maaş günü planı uygulandı: 2 alım (sanal)"]

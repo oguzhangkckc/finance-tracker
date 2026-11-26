@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from finans.web.confirm import NONCE_FIELD, SIGNATURE_FIELD, sign, verify
+from finans.sunum.confirm import NONCE_FIELD, SIGNATURE_FIELD, sign, verify
 
 KEY = b"k" * 64
 NOW = datetime(2026, 12, 15, 9, 0, tzinfo=UTC)

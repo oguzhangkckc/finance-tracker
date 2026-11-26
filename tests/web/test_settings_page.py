@@ -326,11 +326,11 @@ def test_the_log_says_which_setting_changed_but_no_amount(
     started: Site, caplog: pytest.LogCaptureFixture
 ) -> None:
     me = started.browser()
-    with caplog.at_level(logging.INFO, logger="finans.web"):
+    with caplog.at_level(logging.INFO, logger="finans"):
         preview = me.post("/gercek/ayarlar/yeni", {**FORM, "katki": "1200"})
         _confirm(me, preview.text)
 
-    logged = [r.getMessage() for r in caplog.records if r.name == "finans.web"]
+    logged = [r.getMessage() for r in caplog.records if r.name in ("finans.web", "finans.sunum")]
     assert logged == ["Ayar sürümü kaydedildi: #2 aylık katkı; sonraki sürümlere taşınan: 0 (real)"]
 
 

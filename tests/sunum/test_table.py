@@ -7,7 +7,7 @@ from urllib.parse import parse_qsl
 
 import pytest
 
-from finans.web.table import Choice, Column, TableSpec, table
+from finans.sunum.table import Choice, Column, TableSpec, table
 
 D = Decimal
 

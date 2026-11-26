@@ -1,12 +1,24 @@
+import ipaddress
 import os
+import re
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Literal, Self
+from typing import Annotated, Final, Literal, Self
+from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 type Profile = Literal["real", "sanal"]
 PROFILES: tuple[Profile, ...] = ("real", "sanal")
+DEFAULT_WEB_HOST: Final = "127.0.0.1"
+MAX_PORT: Final = 65535
+MIN_CONFIRM_KEY: Final = 32
+_DIGITS: Final = re.compile(r"[0-9]{1,5}")
+# Anahtarlar bu alandan çekildiği için başka bir alan adı kabul edilmez (K-136).
+_TEAM_DOMAIN: Final = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com")
+_AUDIENCE: Final = re.compile(r"[!-~]+")
+_EMAIL: Final = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 
 
 class Settings(BaseSettings):
@@ -56,6 +68,12 @@ class Settings(BaseSettings):
     # K-126: şifrenin scrypt özeti (`ft web sifre`); boşsa web'de yazma kapalıdır.
     web_password: SecretStr | None = None
     web_socket: Path = Path("/run/finans-web/web.sock")
+    # K-136: JSON API; ham metin, çünkü yalnız API ister ve denetler (api_settings), ft etkilenmez.
+    web_host: str | None = None
+    web_port: str | None = None
+    cf_access_team_domain: str | None = None
+    cf_access_aud: str | None = None
+    web_allowed_email: str | None = None
 
     @field_validator(
         "evds_api_key",
@@ -67,6 +85,11 @@ class Settings(BaseSettings):
         "web_origin",
         "web_session_key",
         "web_password",
+        "web_host",
+        "web_port",
+        "cf_access_team_domain",
+        "cf_access_aud",
+        "web_allowed_email",
         mode="before",
     )
     @classmethod
@@ -125,3 +148,84 @@ def load_base_settings() -> Settings:
 
 def load_settings() -> Settings:
     return resolve_profile(load_base_settings())
+
+
+class ApiSettingsError(ValueError):
+    """API'nin ayarları eksik ya da geçersiz; API açılmaz (K-136)."""
+
+
+@dataclass(frozen=True, slots=True)
+class ApiSettings:
+    host: str
+    port: int
+    team_domain: str
+    audience: str
+    allowed_email: str
+    origin: str
+    # Onay jetonunun HMAC anahtarı (K-137); SecretStr, yazdırılınca değeri görünmez.
+    confirm_key: SecretStr
+
+    @property
+    def issuer(self) -> str:
+        return f"https://{self.team_domain}"
+
+
+def api_settings(base: Settings) -> ApiSettings:
+    """Bütün sorunlar birlikte bildirilir; değerler iletiye yazılmaz (K-47, K-136)."""
+    problems: list[str] = []
+    host = (base.web_host or "").strip() or DEFAULT_WEB_HOST
+    if not _is_loopback(host):
+        problems.append("FT_WEB_HOST yalnız loopback adresi olabilir (127.0.0.1 ya da ::1)")
+    port = _port((base.web_port or "").strip())
+    if port is None:
+        problems.append("FT_WEB_PORT 1 ile 65535 arasında bir sayı olmalı")
+    team = (base.cf_access_team_domain or "").strip().lower()
+    if not _TEAM_DOMAIN.fullmatch(team):
+        problems.append("FT_CF_ACCESS_TEAM_DOMAIN <takım>.cloudflareaccess.com biçiminde olmalı")
+    audience = (base.cf_access_aud or "").strip()
+    if not _AUDIENCE.fullmatch(audience):
+        problems.append("FT_CF_ACCESS_AUD Access uygulamasının AUD etiketi olmalı (boşluksuz)")
+    email = (base.web_allowed_email or "").strip()
+    if not _EMAIL.fullmatch(email):
+        problems.append("FT_WEB_ALLOWED_EMAIL bir e-posta adresi olmalı")
+    origin = _origin(base.web_origin or "")
+    if origin is None:
+        problems.append("FT_WEB_ORIGIN https://<alan adı> biçiminde olmalı (yol yok)")
+    key = base.web_session_key
+    if key is None or len(key.get_secret_value()) < MIN_CONFIRM_KEY:
+        problems.append(
+            f"FT_WEB_SESSION_KEY (credstore'da ft_web_session_key) en az {MIN_CONFIRM_KEY} "
+            "karakter olmalı"
+        )
+    if problems or port is None or origin is None or key is None:
+        raise ApiSettingsError(f"API başlamaz (K-136): {'; '.join(problems)}.")
+    return ApiSettings(host, port, team, audience, email, origin, key)
+
+
+def _is_loopback(host: str) -> bool:
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _port(text: str) -> int | None:
+    if not _DIGITS.fullmatch(text):
+        return None
+    port = int(text)
+    return port if 1 <= port <= MAX_PORT else None
+
+
+def _origin(text: str) -> str | None:
+    """Tarayıcı `Origin`'i sondaki eğik çizgi olmadan ve küçük harfle gönderir."""
+    origin = text.strip().rstrip("/").lower()
+    parts = urlsplit(origin)
+    try:
+        parts.port  # noqa: B018 - geçersiz port burada ValueError verir
+    except ValueError:
+        return None
+    if parts.scheme != "https" or not parts.hostname or parts.username or parts.password:
+        return None
+    if parts.path or parts.query or parts.fragment:
+        return None
+    return origin

@@ -39,7 +39,17 @@ NETWORK_MODULES = (
     "imaplib",
     "xmlrpc",
 )
-NETWORK_FREE = ("domain", "contracts", "ports", "application", "settings.py", "cli", "web")
+NETWORK_FREE = (
+    "domain",
+    "contracts",
+    "ports",
+    "application",
+    "settings.py",
+    "cli",
+    "web",
+    "api",
+    "sunum",
+)
 
 
 def _python_files(base: Path) -> list[Path]:

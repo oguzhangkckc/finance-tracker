@@ -12,9 +12,8 @@ from finans.application.settings import STATE_LABELS
 from finans.domain.models import DomainError
 from finans.ports.unit_of_work import StorageBusyError
 from finans.settings import Settings
-from finans.web.confirm import sign, verify
-from finans.web.forms import REFUSED
-from finans.web.setting_writes import (
+from finans.sunum.confirm import sign, verify
+from finans.sunum.setting_writes import (
     TARGET,
     ProfileOutcome,
     SettingRequest,
@@ -36,11 +35,12 @@ from finans.web.setting_writes import (
     request_fields,
     settings_view,
 )
-from finans.web.table import table
-from finans.web.tables import PAGE_PARAMS, SETTING_SOURCES, SETTINGS
+from finans.sunum.table import table
+from finans.sunum.tables import PAGE_PARAMS, SETTING_SOURCES, SETTINGS
+from finans.sunum.views import PAGE_ERRORS, PageError
+from finans.sunum.writes import FormErrors, ResultChanged
+from finans.web.forms import REFUSED
 from finans.web.trade_routes import EXPIRED, WriteContext, write_failure, write_gate, write_posted
-from finans.web.views import PAGE_ERRORS, PageError
-from finans.web.writes import FormErrors, ResultChanged
 
 # Yeni sürüm formu sınıf başına iki alan taşır; işlem formlarının sınırı yetmez.
 MAX_FIELDS: Final = 64
