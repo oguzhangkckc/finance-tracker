@@ -11,11 +11,17 @@ from starlette.responses import Response
 
 from finans.api.encoding import error_response
 from finans.api.middleware import SECURITY_HEADERS
+from finans.ports.unit_of_work import StorageBusyError
 from finans.sunum.views import PAGE_ERRORS, PageError
 
 INVALID: Final = "Girdi geçersiz."
 UNREADABLE: Final = "İstek gövdesi JSON olarak okunamadı."
 UNEXPECTED: Final = "Beklenmeyen hata; ayrıntı sunucu günlüğünde."
+BUSY: Final = (
+    "Şu an zamanlanmış bir iş çalışıyor; hiçbir şey kaydedilmedi. Birkaç saniye sonra aynı isteği"
+    " yeniden gönder."
+)
+BUSY_RETRY_SECONDS: Final = 5
 HTTP_MESSAGES: Final = {404: "Bulunamadı.", 405: "Bu yöntem desteklenmiyor."}
 FIELD_MESSAGES: Final = {
     "missing": "zorunlu",
@@ -48,6 +54,7 @@ def install_error_handlers(app: FastAPI) -> None:
     app.exception_handler(RequestValidationError)(_invalid)
     app.exception_handler(HTTPException)(_http)
     app.exception_handler(ApiError)(_api)
+    app.exception_handler(StorageBusyError)(_busy)
     app.exception_handler(Exception)(_unexpected)
 
 
@@ -98,6 +105,11 @@ async def _http(_request: Request, exc: HTTPException) -> Response:
 
 async def _api(_request: Request, exc: ApiError) -> Response:
     return error_response(exc.status, exc.message, exc.fields)
+
+
+async def _busy(_request: Request, _exc: StorageBusyError) -> Response:
+    """Yazma işlemi geri alındı ve nonce harcanmadı; aynı onay yeniden gönderilebilir."""
+    return error_response(503, BUSY, headers={"Retry-After": str(BUSY_RETRY_SECONDS)})
 
 
 async def _unexpected(_request: Request, _exc: Exception) -> Response:

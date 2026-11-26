@@ -3,7 +3,6 @@
 Rakamlar biçimlenmez; Türkçe gösterim istemcidedir. Ayar değişikliği satırları ve uyarılar
 kullanıcıya giden ileti olduğu için sunucuda Türkçe üretilir."""
 
-from collections.abc import Mapping
 from datetime import date, datetime
 from typing import Literal
 
@@ -15,6 +14,7 @@ from finans.application.settings import STATE_LABELS, HistoryRow, SettingState
 from finans.contracts.display import class_label
 from finans.contracts.report import AlertLine, HoldingLine, LotLine, Report
 from finans.domain.portfolio import PortfolioConfig
+from finans.domain.settings import SettingValues
 from finans.ports.repositories import JobStatus, StoredRun
 from finans.sunum.setting_writes import SettingsView, change_lines
 from finans.sunum.tables import RUN_STATUS, SETTING_SOURCES
@@ -301,8 +301,14 @@ class SettingItem(Model):
     changes: list[SettingChange]
 
 
-def _values(payday: int | None, contribution: object, targets: Mapping[str, object]) -> object:
-    return {"payday": payday, "monthly_contribution": contribution, "targets": dict(targets)}
+def setting_values(values: SettingValues) -> SettingValuesData:
+    return SettingValuesData.model_validate(
+        {
+            "payday": values.payday,
+            "monthly_contribution": values.monthly_contribution,
+            "targets": dict(values.targets),
+        }
+    )
 
 
 def setting_item(row: HistoryRow, view: SettingsView) -> SettingItem:
@@ -315,9 +321,7 @@ def setting_item(row: HistoryRow, view: SettingsView) -> SettingItem:
         source_label=SETTING_SOURCES[stored.source],
         effective_from=version.effective_from,
         initial=version.effective_from.year == 1,
-        values=SettingValuesData.model_validate(
-            _values(version.payday, version.monthly_contribution, version.targets)
-        ),
+        values=setting_values(version),
         state=row.state,
         state_label=STATE_LABELS[row.state],
         cancelled_at=stored.cancelled_at,
@@ -345,9 +349,7 @@ def settings_extras(view: SettingsView) -> dict[str, object]:
     row = view.current_row
     current = view.current
     return {
-        "current": SettingValuesData.model_validate(
-            _values(current.payday, current.monthly_contribution, current.targets)
-        ),
+        "current": setting_values(current),
         "current_id": None if row is None else row.stored.id,
         "current_from": (
             None

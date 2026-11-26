@@ -5,18 +5,16 @@ girdiyi yeniden okur, sonucu yeniden hesaplar ve yalnız önizlemeyle aynıysa n
 veritabanı işleminde yazar; farklıysa 409 ve yeni önizleme döner. Aynı onay ikinci kez gelirse
 yazılmaz, ilk kaydın numarası `duplicate` ile döner."""
 
-import logging
-from dataclasses import dataclass
-from typing import Annotated, Final
+from typing import Final
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter
 from starlette.responses import Response
 
-from finans.api.context import ApiContext, context, viewer
 from finans.api.encoding import CanonicalJSONResponse, error_response
-from finans.api.errors import HTTP_MESSAGES, INVALID, page_errors
+from finans.api.errors import HTTP_MESSAGES, page_errors
 from finans.api.models import PAGE_RESPONSES
 from finans.api.pages import class_names, refresh_info
+from finans.api.writer import W, Writer, confirmed, invalid, refused, saved
 from finans.api.writing import (
     ConfirmInput,
     PaydayInput,
@@ -40,10 +38,6 @@ from finans.application.paper import NoPriceError
 from finans.application.previews import VoidPreview
 from finans.application.transactions import VoidBlockedError
 from finans.domain.models import DomainError
-from finans.ports.clock import Clock
-from finans.settings import Settings
-from finans.sunum.confirm import Verified, sign, verify
-from finans.sunum.profiles import BY_SLUG, ProfileSlug
 from finans.sunum.views import ask_for_refresh, load_config
 from finans.sunum.writes import (
     TRADE_KINDS,
@@ -70,69 +64,9 @@ from finans.sunum.writes import (
     void_result,
 )
 
-REFUSED: Final = "İstek reddedildi."
-EXPIRED: Final = (
-    "Önizleme 10 dakikadan eski; onay süresi doldu, hiçbir şey kaydedilmedi. Yeniden önizle."
-)
 REFRESH_UNWRITABLE: Final = "Güncelleme isteği yazılamadı; Sistem sayfasına bakın."
-_LOG = logging.getLogger("finans.api")
 
 router = APIRouter(prefix="/api/{profil}", tags=["yazma"], responses=PAGE_RESPONSES)
-
-
-@dataclass(frozen=True, slots=True)
-class Writer:
-    conf: Settings
-    slug: ProfileSlug
-    clock: Clock
-    # Onay jetonu oturuma değil Access e-postasına bağlıdır (K-137).
-    session: str
-    key: bytes
-
-    @property
-    def sanal(self) -> bool:
-        return self.conf.profile == "sanal"
-
-    def sign(self, fields: dict[str, str]) -> dict[str, str]:
-        return sign(self.key, self.session, {"profil": self.slug, **fields}, now=self.clock.now())
-
-
-def writer(
-    profil: Annotated[ProfileSlug, Path(description="Profil (K-125)")],
-    ctx: Annotated[ApiContext, Depends(context)],
-    email: Annotated[str, Depends(viewer)],
-) -> Writer:
-    key = ctx.api.confirm_key.get_secret_value().encode()
-    return Writer(ctx.profiles[BY_SLUG[profil]], profil, ctx.clock, email.casefold(), key)
-
-
-W = Annotated[Writer, Depends(writer)]
-
-
-def _invalid(fields: dict[str, str]) -> Response:
-    return error_response(422, INVALID, json_fields(fields))
-
-
-def _refused(w: Writer, reason: str) -> Response:
-    _LOG.warning("Onay reddedildi (%s): %s", w.slug, reason)
-    return error_response(403, REFUSED)
-
-
-def _confirmed(w: Writer, body: ConfirmInput, kind: str) -> Verified | Response:
-    verified = verify(w.key, w.session, body.confirmation, now=w.clock.now())
-    if verified.status == "expired":
-        return error_response(422, EXPIRED)
-    if verified.status != "ok":
-        return _refused(w, "imza geçersiz")
-    if verified.fields.get("profil") != w.slug:
-        return _refused(w, "başka profilin onayı")
-    if verified.fields.get("islem") != kind:
-        return _refused(w, "başka bir işlemin onayı")
-    return verified
-
-
-def _saved(number: int, duplicate: bool) -> Response:
-    return CanonicalJSONResponse(Saved(number=number, duplicate=duplicate))
 
 
 def _trade_kind(value: str | None) -> TradeKind | None:
@@ -167,7 +101,7 @@ def trade_preview(w: W, tur: TradeKind, body: TradeInput) -> Response:
     try:
         request = read_trade(tur, form, sanal=w.sanal)
     except FormErrors as exc:
-        return _invalid(exc.fields)
+        return invalid(json_fields(exc.fields))
     with page_errors():
         return _trade_preview(w, tur, form, request, changed=False)
 
@@ -183,15 +117,15 @@ def trade_preview(w: W, tur: TradeKind, body: TradeInput) -> Response:
 def trade_save(w: W, body: ConfirmInput) -> Response:
     kind = _trade_kind(body.confirmation.get("islem"))
     if kind is None:
-        return _refused(w, "işlem türü yok")
-    verified = _confirmed(w, body, kind)
+        return refused(w, "işlem türü yok")
+    verified = confirmed(w, body, kind)
     if isinstance(verified, Response):
         return verified
     fields = verified.fields
     try:
         request = read_trade(kind, fields, sanal=w.sanal)
     except FormErrors as exc:
-        return _invalid(exc.fields)
+        return invalid(json_fields(exc.fields))
     with page_errors():
         try:
             recorded = record_trade(
@@ -206,7 +140,7 @@ def trade_save(w: W, body: ConfirmInput) -> Response:
             return _trade_preview(w, kind, fields, request, changed=True)
         except DomainError as exc:
             return error_response(422, str(exc))
-    return _saved(recorded.number, recorded.duplicate)
+    return saved(recorded.number, recorded.duplicate)
 
 
 VOID_ERRORS: Final[dict[int | str, dict[str, object]]] = {
@@ -253,7 +187,7 @@ def void_preview_endpoint(w: W, no: int, body: ReasonInput) -> Response:
     try:
         reason = read_reason({"gerekce": body.reason})
     except FormErrors as exc:
-        return _invalid(exc.fields)
+        return invalid(json_fields(exc.fields))
     with page_errors():
         return _void_preview(w, no, reason, changed=False)
 
@@ -267,16 +201,16 @@ def void_preview_endpoint(w: W, no: int, body: ReasonInput) -> Response:
     },
 )
 def void_save(w: W, no: int, body: ConfirmInput) -> Response:
-    verified = _confirmed(w, body, "iptal")
+    verified = confirmed(w, body, "iptal")
     if isinstance(verified, Response):
         return verified
     fields = verified.fields
     if fields.get("no") != str(no):
-        return _refused(w, "başka bir işlemin iptali")
+        return refused(w, "başka bir işlemin iptali")
     try:
         reason = read_reason(fields)
     except FormErrors:
-        return _refused(w, "imzalı gerekçe geçersiz")
+        return refused(w, "imzalı gerekçe geçersiz")
     with page_errors():
         try:
             recorded = record_void(
@@ -294,7 +228,7 @@ def void_save(w: W, no: int, body: ConfirmInput) -> Response:
             return CanonicalJSONResponse(blocked, status_code=422)
         except DomainError as exc:
             return error_response(422, str(exc))
-    return _saved(recorded.number, recorded.duplicate)
+    return saved(recorded.number, recorded.duplicate)
 
 
 def _sanal_only(w: Writer) -> Response | None:
@@ -340,7 +274,7 @@ def payday_preview_endpoint(w: W, body: PaydayInput) -> Response:
     try:
         request = read_payday(body.form())
     except FormErrors as exc:
-        return _invalid(exc.fields)
+        return invalid(json_fields(exc.fields))
     with page_errors():
         return _payday_preview(w, request, changed=False)
 
@@ -353,13 +287,13 @@ def payday_preview_endpoint(w: W, body: PaydayInput) -> Response:
 def payday_save(w: W, body: ConfirmInput) -> Response:
     if (missing := _sanal_only(w)) is not None:
         return missing
-    verified = _confirmed(w, body, "maas-gunu")
+    verified = confirmed(w, body, "maas-gunu")
     if isinstance(verified, Response):
         return verified
     try:
         request = read_payday(verified.fields)
     except FormErrors:
-        return _refused(w, "imzalı maaş günü geçersiz")
+        return refused(w, "imzalı maaş günü geçersiz")
     with page_errors():
         try:
             recorded = record_payday(
@@ -372,7 +306,7 @@ def payday_save(w: W, body: ConfirmInput) -> Response:
             )
         except ResultChanged:
             return _payday_preview(w, request, changed=True)
-    return _saved(recorded.number, recorded.duplicate)
+    return saved(recorded.number, recorded.duplicate)
 
 
 @router.post("/fiyat-guncelle", response_model=RefreshResult)

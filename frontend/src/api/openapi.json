@@ -2259,6 +2259,458 @@
           }
         }
       }
+    },
+    "/api/{profil}/ayarlar/onizle": {
+      "post": {
+        "tags": [
+          "ayar"
+        ],
+        "summary": "Setting Preview",
+        "operationId": "setting_preview_api__profil__ayarlar_onizle_post",
+        "parameters": [
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingPreviewBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/{profil}/ayarlar/kaydet": {
+      "post": {
+        "tags": [
+          "ayar"
+        ],
+        "summary": "Setting Save",
+        "operationId": "setting_save_api__profil__ayarlar_kaydet_post",
+        "parameters": [
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingSaved"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Sonuç değişti; yeni önizleme",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingPreviewBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/{profil}/ayarlar/{no}/vazgec": {
+      "get": {
+        "tags": [
+          "ayar"
+        ],
+        "summary": "Cancel Info",
+        "operationId": "cancel_info_api__profil__ayarlar__no__vazgec_get",
+        "parameters": [
+          {
+            "name": "no",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "No"
+            }
+          },
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingItem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/{profil}/ayarlar/{no}/vazgec/onizle": {
+      "post": {
+        "tags": [
+          "ayar"
+        ],
+        "summary": "Cancel Preview",
+        "operationId": "cancel_preview_api__profil__ayarlar__no__vazgec_onizle_post",
+        "parameters": [
+          {
+            "name": "no",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "No"
+            }
+          },
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReasonInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CancelPreviewBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/{profil}/ayarlar/{no}/vazgec/kaydet": {
+      "post": {
+        "tags": [
+          "ayar"
+        ],
+        "summary": "Cancel Save",
+        "operationId": "cancel_save_api__profil__ayarlar__no__vazgec_kaydet_post",
+        "parameters": [
+          {
+            "name": "no",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "No"
+            }
+          },
+          {
+            "name": "profil",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProfileSlug",
+              "description": "Profil (K-125)"
+            },
+            "description": "Profil (K-125)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Saved"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulunamadı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sayfa verisi yüklenemedi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Sonuç değişti; yeni önizleme",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CancelPreviewBody"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2507,6 +2959,41 @@
           "units"
         ],
         "title": "BlockingSale"
+      },
+      "CancelPreviewBody": {
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/ProfileSlug"
+          },
+          "target": {
+            "$ref": "#/components/schemas/SettingItem"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "confirmation": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Confirmation"
+          },
+          "changed": {
+            "type": "boolean",
+            "title": "Changed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "profile",
+          "target",
+          "reason",
+          "confirmation",
+          "changed"
+        ],
+        "title": "CancelPreviewBody"
       },
       "CheckItem": {
         "properties": {
@@ -2996,6 +3483,53 @@
         ],
         "title": "Inflation"
       },
+      "LaterVersion": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "effective_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective From"
+          },
+          "fields": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "payday",
+                "monthly_contribution",
+                "targets"
+              ]
+            },
+            "type": "array",
+            "title": "Fields"
+          },
+          "kept": {
+            "type": "string",
+            "title": "Kept"
+          },
+          "carried": {
+            "items": {
+              "$ref": "#/components/schemas/SettingChange"
+            },
+            "type": "array",
+            "title": "Carried"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "effective_from",
+          "fields",
+          "kept",
+          "carried"
+        ],
+        "title": "LaterVersion",
+        "description": "Değişikliği taşımayan planlanmış sürüm: `kept` taşınmazsa o günden geçerli olacak değerler,\n`carried` taşınırsa yazılacak değişiklik."
+      },
       "LotItem": {
         "properties": {
           "instrument": {
@@ -3439,6 +3973,147 @@
           "label"
         ],
         "title": "ProfileLink"
+      },
+      "ProfileProposal": {
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/ProfileSlug"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VersionData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "base": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VersionData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "changed_fields": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "payday",
+                "monthly_contribution",
+                "targets"
+              ]
+            },
+            "type": "array",
+            "title": "Changed Fields"
+          },
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/SettingChange"
+            },
+            "type": "array",
+            "title": "Changes"
+          },
+          "issues": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Issues"
+          },
+          "later": {
+            "items": {
+              "$ref": "#/components/schemas/LaterVersion"
+            },
+            "type": "array",
+            "title": "Later"
+          },
+          "ready": {
+            "type": "boolean",
+            "title": "Ready"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "profile",
+          "problem",
+          "version",
+          "base",
+          "changed_fields",
+          "changes",
+          "issues",
+          "later",
+          "ready"
+        ],
+        "title": "ProfileProposal",
+        "description": "`problem`: bu profilde önizleme yapılamadı (ör. başlangıç sürümü yok). `issues`\nkaydı engeller; `ready` ancak ikisi de yoksa doğrudur."
+      },
+      "ProfileResult": {
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/ProfileSlug"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "saved",
+              "duplicate",
+              "changed",
+              "busy",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "setting_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setting Id"
+          },
+          "rewritten": {
+            "items": {
+              "$ref": "#/components/schemas/RewrittenPair"
+            },
+            "type": "array",
+            "title": "Rewritten"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "profile",
+          "status",
+          "setting_id",
+          "rewritten",
+          "message"
+        ],
+        "title": "ProfileResult",
+        "description": "Her profil ayrı işlemde yazılır; sanalın sonucu gerçeği geri almaz. `busy`: sanal\nveritabanı meşguldü; aynı onay yeniden gönderilirse gerçek tekrar yazılmaz, sanal denenir."
       },
       "ProfileSlug": {
         "type": "string",
@@ -3892,6 +4567,25 @@
         ],
         "title": "ReturnsPage"
       },
+      "RewrittenPair": {
+        "properties": {
+          "cancelled": {
+            "type": "integer",
+            "title": "Cancelled"
+          },
+          "written": {
+            "type": "integer",
+            "title": "Written"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "cancelled",
+          "written"
+        ],
+        "title": "RewrittenPair"
+      },
       "RunItem": {
         "properties": {
           "id": {
@@ -4018,6 +4712,67 @@
         ],
         "title": "SettingChange"
       },
+      "SettingInput": {
+        "properties": {
+          "day": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Day",
+            "default": ""
+          },
+          "payday": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payday"
+          },
+          "contribution": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contribution"
+          },
+          "targets": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Targets"
+          },
+          "also_sanal": {
+            "type": "boolean",
+            "title": "Also Sanal",
+            "default": false
+          },
+          "carry": {
+            "type": "boolean",
+            "title": "Carry",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SettingInput"
+      },
       "SettingItem": {
         "properties": {
           "id": {
@@ -4113,6 +4868,77 @@
         ],
         "title": "SettingItem",
         "description": "`initial`: `ft config apply`'ın yazdığı başlangıç sürümü; yürürlük günü yoktur."
+      },
+      "SettingPreviewBody": {
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date",
+            "title": "Day"
+          },
+          "plans": {
+            "items": {
+              "$ref": "#/components/schemas/ProfileProposal"
+            },
+            "type": "array",
+            "title": "Plans"
+          },
+          "carry_option": {
+            "type": "boolean",
+            "title": "Carry Option"
+          },
+          "carry": {
+            "type": "boolean",
+            "title": "Carry"
+          },
+          "confirmation": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation"
+          },
+          "changed": {
+            "type": "boolean",
+            "title": "Changed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "day",
+          "plans",
+          "carry_option",
+          "carry",
+          "confirmation",
+          "changed"
+        ],
+        "title": "SettingPreviewBody",
+        "description": "`confirmation` yalnız bütün profillerin planı hazırsa verilir. `changed`: onayda sonuç\nönizlemeden farklı çıktı, kayıt yapılmadı; bu yeni önizlemedir."
+      },
+      "SettingSaved": {
+        "properties": {
+          "outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/ProfileResult"
+            },
+            "type": "array",
+            "title": "Outcomes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "outcomes"
+        ],
+        "title": "SettingSaved"
       },
       "SettingValuesData": {
         "properties": {
@@ -5540,6 +6366,31 @@
           "total"
         ],
         "title": "ValueSplit"
+      },
+      "VersionData": {
+        "properties": {
+          "effective_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective From"
+          },
+          "initial": {
+            "type": "boolean",
+            "title": "Initial"
+          },
+          "values": {
+            "$ref": "#/components/schemas/SettingValuesData"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "effective_from",
+          "initial",
+          "values"
+        ],
+        "title": "VersionData",
+        "description": "`initial`: `ft config apply`'ın yazdığı başlangıç sürümü; yürürlük günü yoktur."
       },
       "VoidBlocked": {
         "properties": {

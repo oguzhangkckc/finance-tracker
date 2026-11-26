@@ -2,6 +2,7 @@
 hesaplar; aynı onay bir kez yazılır; CLI ile aynı satır."""
 
 import logging
+from contextlib import closing
 from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
@@ -10,8 +11,11 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
+from finans.adapters.sqlite import connection as sqlite_connection
+from finans.adapters.sqlite.connection import connect
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.api.app import create_app
+from finans.api.errors import BUSY
 from finans.api.routes import islem
 from finans.ports.repositories import StoredTransaction
 from finans.settings import Profile, Settings, profile_settings
@@ -553,3 +557,24 @@ def test_signed_input_that_the_rules_no_longer_accept_is_not_saved(
     )
     assert (void_saved.status_code, payday_saved.status_code) == (403, 403)
     assert (len(rows(site, "real")), rows(site, "sanal")) == (4, [])
+
+
+def test_a_save_while_a_job_holds_the_database_saves_nothing_and_can_be_retried(
+    me: ApiClient, site: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sqlite_connection, "BUSY_TIMEOUT_MS", 50)
+    body = me.post("/api/gercek/islemler/alis/onizle", json=REAL_BUY).json()
+
+    with closing(connect(site.db_path)) as job:
+        job.execute("BEGIN IMMEDIATE")
+        busy = confirm(me, "/api/gercek/islemler/kaydet", body)
+        job.execute("ROLLBACK")
+
+    assert (busy.status_code, busy.json(), busy.headers["retry-after"]) == (
+        503,
+        {"error": BUSY, "fields": {}},
+        "5",
+    )
+    assert len(rows(site, "real")) == 4
+    retried = confirm(me, "/api/gercek/islemler/kaydet", body)
+    assert retried.json() == {"number": 5, "duplicate": False}
