@@ -4,6 +4,7 @@ import json
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from functools import cache
+from pathlib import Path
 from types import MappingProxyType
 
 import jwt
@@ -30,6 +31,8 @@ API_SETTINGS = ApiSettings(
     allowed_email=EMAIL,
     origin=ORIGIN,
     confirm_key=SecretStr(CONFIRM_KEY),
+    # Testler makinede derlenmiş bir arayüz olup olmamasına bağlı kalmasın.
+    dist=Path(__file__).with_name("derlenmis-arayuz-yok"),
 )
 
 

@@ -14,6 +14,7 @@ from finans.api.encoding import CanonicalJSONResponse
 from finans.api.errors import install_error_handlers
 from finans.api.middleware import BodyLimit, RequireAccess, RequireSameOrigin, SecurityHeaders
 from finans.api.routes import ayar, islem, okuma, ortak
+from finans.api.static import StaticSite
 from finans.ports.access import AccessKeySource
 from finans.ports.clock import Clock
 from finans.settings import ApiSettings, Settings, profile_settings
@@ -65,6 +66,8 @@ def create_app(
 
     app = _application(lifespan)
     app.state.context = ApiContext(settings, api, time, profile_settings(settings))
+    # Hiçbir rota eşleşmezse; yöntemi tutmayan API adresi 405 almaya devam eder (K-139).
+    app.router.default = StaticSite(api.dist, app.router.default)
     # Son eklenen en dışta çalışır.
     app.add_middleware(RequireSameOrigin, origin=api.origin)
     app.add_middleware(BodyLimit)
