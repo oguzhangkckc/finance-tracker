@@ -49,6 +49,7 @@ from finans.application.backup import (
     create_backup,
     files_with_secret_keys,
     recipient_problems,
+    unexpected_entries,
 )
 from finans.application.doctor import (
     Check,
@@ -109,6 +110,7 @@ __all__ = [
 
 
 MIGRATION_BACKUPS_KEPT = 5
+STRAY_SHOWN = 5
 
 
 class SetupError(Exception):
@@ -125,7 +127,7 @@ def migrate_database(settings: Settings, clock: Clock | None = None) -> Migratio
         settings.db_path,
         bundled(),
         clock=clock or SystemClock(),
-        backup_dir=settings.db_path.parent / "backups",
+        backup_dir=settings.migration_backup_dir,
         keep_backups=MIGRATION_BACKUPS_KEPT,
         sanal=is_sanal_profile(settings),
     )
@@ -463,7 +465,24 @@ def _backup_checks(settings: Settings, env: Path) -> list[Check]:
         if found
         else Check("age gizli anahtarı", "ok", "sunucuda yok (.env, credentials, yedek dizini)")
     )
-    return [setup, secret]
+    if settings.backup_dir is None or not settings.backup_dir.is_dir():
+        return [setup, secret]
+    return [setup, secret, _backup_dir_check(settings.backup_dir)]
+
+
+def _backup_dir_check(directory: Path) -> Check:
+    """Mac bu dizini çeker; şifresiz bir dosya burada makine dışına çıkar (K-142)."""
+    stray = unexpected_entries(directory)
+    if not stray:
+        return Check("Yedek dizini", "ok", "yalnız şifreli yedekler ve özetleri")
+    shown = ", ".join(stray[:STRAY_SHOWN])
+    more = f" ve {len(stray) - STRAY_SHOWN} tane daha" if len(stray) > STRAY_SHOWN else ""
+    return Check(
+        "Yedek dizini",
+        "fail",
+        f"beklenmeyen: {shown}{more}; Mac bu dizini çeker, yalnız şifreli yedek durmalı. "
+        "Migration öncesi kopyaysa veritabanının yanındaki migration-backups/'a taşı (K-142)",
+    )
 
 
 def _env_check(path: Path) -> Check:

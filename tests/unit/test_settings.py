@@ -134,6 +134,38 @@ def test_sanal_database_cannot_be_the_real_one(
         load_settings()
 
 
+def test_migration_copies_live_beside_each_profiles_database(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("FT_DB_PATH", str(tmp_path / "finans.db"))
+    monkeypatch.setenv("FT_SANAL_DB_PATH", str(tmp_path / "sanal" / "sanal.db"))
+    monkeypatch.setenv("FT_BACKUP_DIR", str(tmp_path / "backups"))
+
+    assert load_settings().migration_backup_dir == tmp_path / "migration-backups"
+    monkeypatch.setenv("FT_PROFILE", "sanal")
+    assert load_settings().migration_backup_dir == tmp_path / "sanal" / "migration-backups"
+
+
+@pytest.mark.parametrize(
+    "backup_dir",
+    [
+        "migration-backups",
+        "migration-backups/yedek",
+        ".",
+        "sanal/migration-backups",
+        "sanal",
+    ],
+)
+def test_nightly_backups_cannot_mix_with_migration_copies(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, backup_dir: str
+) -> None:
+    monkeypatch.setenv("FT_DB_PATH", str(tmp_path / "finans.db"))
+    monkeypatch.setenv("FT_SANAL_DB_PATH", str(tmp_path / "sanal" / "sanal.db"))
+    monkeypatch.setenv("FT_BACKUP_DIR", str(tmp_path / backup_dir))
+    with pytest.raises(ValidationError, match=r"FT_BACKUP_DIR .*\(K-142\)"):
+        load_settings()
+
+
 def test_unknown_profile_is_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("FT_DB_PATH", str(tmp_path / "finans.db"))
     monkeypatch.setenv("FT_PROFILE", "demo")

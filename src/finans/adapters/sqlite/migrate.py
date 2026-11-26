@@ -120,7 +120,7 @@ def _backup(
     at = clock.now()
     target = directory / backup_name(path, version=version, at=at)
     try:
-        directory.mkdir(parents=True, exist_ok=True)
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         remove_stale_partials(directory, path, now=at)
         write_backup(conn, target)
         prune_backups(directory, path, keep=keep)

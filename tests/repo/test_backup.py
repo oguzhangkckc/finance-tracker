@@ -133,6 +133,7 @@ def test_successful_migration_reports_a_single_file_private_backup(
     assert run.applied == [CURRENT + 1]
     assert run.backup == backups / FIRST_BACKUP
     assert [path.name for path in backups.iterdir()] == [FIRST_BACKUP]
+    assert stat.S_IMODE(backups.stat().st_mode) == 0o700
     assert stat.S_IMODE(run.backup.stat().st_mode) == 0o600
     assert _scalar(run.backup, "PRAGMA journal_mode") == "delete"
     assert _scalar(run.backup, "PRAGMA user_version") == CURRENT

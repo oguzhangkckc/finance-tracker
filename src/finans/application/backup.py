@@ -2,6 +2,7 @@
 silinmesi. Sunucu yedeği çözemez; tam geri yükleme testi Mac'te yapılır."""
 
 import hashlib
+import re
 import shutil
 import tempfile
 from collections.abc import Sequence
@@ -19,6 +20,10 @@ REAL_PREFIX: Final = "finans-"
 SANAL_PREFIX: Final = "sanal-"
 _SUFFIX: Final = ".db.age"
 _CHUNK: Final = 1 << 20
+_NAME: Final = (
+    rf"(?:{re.escape(REAL_PREFIX)}|{re.escape(SANAL_PREFIX)})\d{{8}}T\d{{6}}Z{re.escape(_SUFFIX)}"
+)
+_EXPECTED: Final = re.compile(rf"{_NAME}(?:\.sha256)?|\.{_NAME}\.partial")
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +118,16 @@ def verify_backups(directory: Path) -> list[BackupCheck]:
         message = "özet tutuyor" if ok else "özet tutmuyor; dosya bozulmuş olabilir"
         checks.append(BackupCheck(path.name, ok, message))
     return checks
+
+
+def unexpected_entries(directory: Path) -> list[str]:
+    """Yedek dizinini Mac çeker; şifreli yedek, özeti ve süren yedeğin geçici dosyası dışında bir
+    şey durmamalı (K-142). Yalnız adlara bakılır, içerik okunmaz; bağlantı da beklenmeyendir."""
+    return sorted(
+        entry.name
+        for entry in directory.iterdir()
+        if entry.is_symlink() or not entry.is_file() or not _EXPECTED.fullmatch(entry.name)
+    )
 
 
 def files_with_secret_keys(paths: Sequence[Path]) -> list[Path]:

@@ -15,6 +15,7 @@ from finans.application.backup import (
     create_backup,
     files_with_secret_keys,
     recipient_problems,
+    unexpected_entries,
     verify_backups,
 )
 from finans.ports.backup import BackupError, DatabaseCopier
@@ -142,6 +143,41 @@ def test_server_side_verification_checks_the_checksums(migrated_db: Path, tmp_pa
         ("finans-20261130T000000Z.db.age", True, "özet tutuyor"),
         ("finans-20261130T010000Z.db.age", False, "özet tutmuyor; dosya bozulmuş olabilir"),
     ]
+
+
+def test_only_encrypted_backups_belong_in_the_backup_directory(tmp_path: Path) -> None:
+    directory = tmp_path / "yedek"
+    directory.mkdir()
+    expected = [
+        "finans-20261126T001500Z.db.age",
+        "finans-20261126T001500Z.db.age.sha256",
+        "sanal-20261126T001502Z.db.age",
+        "sanal-20261126T001502Z.db.age.sha256",
+        ".finans-20261127T001500Z.db.age.partial",
+    ]
+    stray = [
+        "finans-20261125T134401Z-v4.db",
+        "sanal-20261125T134404Z-v4.db",
+        "finans.db",
+        "notlar.txt",
+        ".finans-20261125T134401Z-v4.db.x1.partial",
+        "finans-20261126T001500Z.db.age.bak",
+    ]
+    for name in expected + stray:
+        (directory / name).write_bytes(b"x")
+    (directory / "alt").mkdir()
+    (directory / "sanal-20261127T001502Z.db.age").symlink_to(directory / "finans.db")
+
+    assert unexpected_entries(directory) == sorted([*stray, "alt", "sanal-20261127T001502Z.db.age"])
+
+
+def test_a_directory_with_real_backups_has_nothing_unexpected(
+    migrated_db: Path, tmp_path: Path
+) -> None:
+    _backup(migrated_db, tmp_path, FakeEncryptor())
+    _backup(migrated_db, tmp_path, FakeEncryptor(), prefix=SANAL_PREFIX)
+
+    assert unexpected_entries(tmp_path / "yedek") == []
 
 
 def test_secret_keys_are_found_in_files_and_directories(tmp_path: Path) -> None:

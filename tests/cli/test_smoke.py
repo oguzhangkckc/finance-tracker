@@ -61,8 +61,9 @@ def test_db_migrate_prints_the_backup_taken_before_pending_migrations(
 
     assert result.exit_code == 0, result.output
     assert f"Uygulanan migration'lar: {version}" in result.output
-    assert f"Migration öncesi yedek: {tmp_path / 'backups' / 'finans-'}" in result.output
-    assert len(list((tmp_path / "backups").iterdir())) == 1
+    assert f"Migration öncesi yedek: {tmp_path / 'migration-backups' / 'finans-'}" in result.output
+    assert len(list((tmp_path / "migration-backups").iterdir())) == 1
+    assert not (tmp_path / "backups").exists()
 
 
 def test_db_migrate_without_settings_exits_with_clear_message() -> None:

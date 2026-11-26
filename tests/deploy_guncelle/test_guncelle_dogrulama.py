@@ -206,7 +206,7 @@ def test_going_back_past_a_migration_needs_a_restore_first(pi: Pi) -> None:
     [reason] = _reasons(pi, old, geri=True)
 
     assert reason.startswith("geri dönüş şemayı geri almaz (0002_yeni.sql kurulu ama hedefte yok)")
-    assert "K-55" in reason
+    assert "(K-55, veritabanının yanındaki migration-backups/)" in reason
 
 
 def test_going_back_without_a_lost_migration_needs_nothing(pi: Pi) -> None:
