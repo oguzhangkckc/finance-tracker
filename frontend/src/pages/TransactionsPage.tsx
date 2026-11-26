@@ -1,5 +1,6 @@
-import { Text } from "@mantine/core";
+import { Anchor, Button, Group, Text } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router";
 import { useApi } from "../api/context";
 import { transactionsQuery } from "../api/queries";
 import type { TransactionItem, TransactionsData } from "../api/types";
@@ -7,7 +8,8 @@ import { useToday } from "../clock";
 import { type DataColumn, DataTable, useTableQuery } from "../components/DataTable";
 import { QueryView } from "../components/QueryView";
 import { dayLabel, exact, money } from "../format/display";
-import { useProfile } from "../profile";
+import { href } from "../layout/nav";
+import { type ProfileSlug, useProfile } from "../profile";
 import { Page } from "./Page";
 
 function Note({ row }: { row: TransactionItem }) {
@@ -25,7 +27,26 @@ function Note({ row }: { row: TransactionItem }) {
   );
 }
 
-function Transactions({ data }: { data: TransactionsData }) {
+function Actions({ profile }: { profile: ProfileSlug }) {
+  const sanal = profile === "sanal";
+  return (
+    <Group gap="sm">
+      <Button component={Link} to={href(profile, "islemler/yeni/alis")}>
+        {sanal ? "Sanal alım" : "Alım ekle"}
+      </Button>
+      <Button component={Link} to={href(profile, "islemler/yeni/satis")} variant="default">
+        {sanal ? "Sanal satış" : "Satış ekle"}
+      </Button>
+      {sanal && (
+        <Button component={Link} to={href(profile, "maas-gunu")} variant="default">
+          Maaş günü planı
+        </Button>
+      )}
+    </Group>
+  );
+}
+
+function Transactions({ data, profile }: { data: TransactionsData; profile: ProfileSlug }) {
   const today = useToday();
   const columns: DataColumn<TransactionItem>[] = [
     { key: "no", label: "#", cell: (row) => row.id },
@@ -48,6 +69,17 @@ function Transactions({ data }: { data: TransactionsData }) {
     { key: "tutar", label: "Tutar", numeric: true, cell: (row) => money(row.amount) },
     { key: "komisyon", label: "Komisyon", numeric: true, cell: (row) => exact(row.fee) },
     { key: "not", label: "Not", cell: (row) => <Note row={row} /> },
+    {
+      key: "islem",
+      label: "İşlem",
+      quietLabel: true,
+      cell: (row) =>
+        row.voided_at === null && (
+          <Anchor component={Link} to={href(profile, `islemler/${row.id}/iptal`)}>
+            İptal et <span className="ft-sr">(#{row.id})</span>
+          </Anchor>
+        ),
+    },
   ];
   return (
     <DataTable
@@ -63,10 +95,14 @@ function Transactions({ data }: { data: TransactionsData }) {
 }
 
 export function TransactionsPage() {
-  const query = useQuery(transactionsQuery(useApi(), useProfile(), useTableQuery()));
+  const profile = useProfile();
+  const query = useQuery(transactionsQuery(useApi(), profile, useTableQuery()));
   return (
     <Page title="İşlemler">
-      <QueryView query={query}>{(data) => <Transactions data={data} />}</QueryView>
+      <Actions profile={profile} />
+      <QueryView query={query}>
+        {(data) => <Transactions data={data} profile={profile} />}
+      </QueryView>
     </Page>
   );
 }

@@ -112,10 +112,16 @@ describe("işlem tablosu", () => {
       "1.250,00 TL",
       "0",
       "maaş D-12",
+      "İptal et (#1)",
     ]);
     expect(rows[1]).toHaveClass("ft-voided");
     expect(rows[1]).toHaveTextContent("satış");
     expect(rows[1]).toHaveTextContent("İptal: yanlış adet");
+    expect(within(rows[1] as HTMLElement).queryByRole("link", { name: /İptal et/ })).toBeNull();
+    expect(screen.getByRole("link", { name: "İptal et (#1)" })).toHaveAttribute(
+      "href",
+      "/gercek/islemler/1/iptal",
+    );
   });
 
   it("sıralanabilir başlık bağlantıdır ve yönünü söyler", async () => {
@@ -236,6 +242,37 @@ describe("işlem tablosu", () => {
     expect(screen.getByRole("link", { name: "Filtreleri temizle" })).toHaveAttribute(
       "href",
       "/gercek/islemler",
+    );
+  });
+
+  it("profile göre işlem ekleme bağlantılarını verir", async () => {
+    const { unmount } = open("/gercek/islemler", tableState<TransactionItem>([]));
+    expect(await screen.findByRole("link", { name: "Alım ekle" })).toHaveAttribute(
+      "href",
+      "/gercek/islemler/yeni/alis",
+    );
+    expect(screen.getByRole("link", { name: "Satış ekle" })).toHaveAttribute(
+      "href",
+      "/gercek/islemler/yeni/satis",
+    );
+    expect(screen.queryByRole("link", { name: "Maaş günü planı" })).not.toBeInTheDocument();
+    unmount();
+
+    renderApp("/sanal/islemler", {
+      "GET /api/oturum": () => json(SESSION),
+      "GET /api/sanal/islemler": () => json({ table: tableState<TransactionItem>([]) }),
+    });
+    expect(await screen.findByRole("link", { name: "Sanal alım" })).toHaveAttribute(
+      "href",
+      "/sanal/islemler/yeni/alis",
+    );
+    expect(screen.getByRole("link", { name: "Sanal satış" })).toHaveAttribute(
+      "href",
+      "/sanal/islemler/yeni/satis",
+    );
+    expect(screen.getByRole("link", { name: "Maaş günü planı" })).toHaveAttribute(
+      "href",
+      "/sanal/maas-gunu",
     );
   });
 

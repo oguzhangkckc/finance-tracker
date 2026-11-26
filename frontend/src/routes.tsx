@@ -40,6 +40,15 @@ const AlertsPage = lazy(() =>
 const SystemPage = lazy(() =>
   import("./pages/SystemPage").then((module) => ({ default: module.SystemPage })),
 );
+const TradePage = lazy(() =>
+  import("./pages/TradePage").then((module) => ({ default: module.TradePage })),
+);
+const VoidPage = lazy(() =>
+  import("./pages/VoidPage").then((module) => ({ default: module.VoidPage })),
+);
+const PaydayPage = lazy(() =>
+  import("./pages/PaydayPage").then((module) => ({ default: module.PaydayPage })),
+);
 const SettingsPage = lazy(() =>
   import("./pages/SettingsPage").then((module) => ({ default: module.SettingsPage })),
 );
@@ -105,6 +114,9 @@ export const routes: RouteObject[] = [
               { path: "varliklar", element: <HoldingsPage /> },
               { path: "varliklar/lotlar", element: <LotsPage /> },
               { path: "islemler", element: <TransactionsPage /> },
+              { path: "islemler/yeni/:tur", element: <TradePage /> },
+              { path: "islemler/:no/iptal", element: <VoidPage /> },
+              { path: "maas-gunu", element: <PaydayPage /> },
               { path: "dagilim", element: <AllocationPage /> },
               { path: "getiri", element: <ReturnsPage /> },
               { path: "raporlar", element: <ReportsPage /> },

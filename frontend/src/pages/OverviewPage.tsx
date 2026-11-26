@@ -10,6 +10,7 @@ import { Delta } from "../components/Delta";
 import { EmptyState, Warning } from "../components/Notice";
 import { PriceLine } from "../components/PriceLine";
 import { QueryView } from "../components/QueryView";
+import { RefreshButton } from "../components/RefreshButton";
 import { ValueChart } from "../components/ValueChart";
 import { parseDecimal } from "../format/decimal";
 import { dayLabel, money, percent } from "../format/display";
@@ -154,6 +155,7 @@ function Overview({ data, profile }: { data: OverviewData; profile: ProfileSlug 
             Son fiyat güncellemesi:{" "}
             {refresh.last_sync === null ? "son iki günde yok" : localTime(refresh.last_sync, today)}
           </Text>
+          {refresh.allowed && <RefreshButton profile={profile} />}
           {!refresh.allowed && (
             <Text size="sm" c="dimmed">
               Elle güncelleme şu an kapalı: {refresh.reason}.

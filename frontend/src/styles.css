@@ -266,3 +266,57 @@
   margin: 0;
   font-weight: 600;
 }
+
+/* K-125: hangi portföye yazılacağı kalın ve profil renginde. */
+.ft-target {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 14px 16px;
+  border: 2px solid var(--mantine-primary-color-filled);
+  border-left-width: 8px;
+  border-radius: var(--mantine-radius-md);
+  background-color: var(--ft-surface);
+}
+
+.ft-target svg {
+  flex: none;
+  color: var(--mantine-primary-color-filled);
+}
+
+.ft-target strong {
+  color: var(--mantine-primary-color-filled);
+  letter-spacing: 0.03em;
+}
+
+.ft-steps {
+  display: flex;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  color: var(--mantine-color-dimmed);
+  font-size: var(--mantine-font-size-sm);
+  list-style: none;
+  counter-reset: step;
+}
+
+.ft-steps li::before {
+  margin-right: 6px;
+  content: counter(step) ".";
+  counter-increment: step;
+}
+
+.ft-steps li[aria-current="step"] {
+  color: var(--mantine-color-text);
+  font-weight: 600;
+}
+
+.ft-plain {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.ft-muted {
+  color: var(--mantine-color-dimmed);
+}

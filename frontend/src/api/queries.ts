@@ -98,6 +98,23 @@ export function settingsQuery(api: Api, profil: ProfileSlug, query: string) {
   });
 }
 
+export function fundOptionsQuery(api: Api, profil: ProfileSlug) {
+  return queryOptions({
+    queryKey: ["sayfa", profil, "secenekler"],
+    queryFn: () => unwrap(api.GET("/api/{profil}/secenekler", path(profil))),
+  });
+}
+
+// Önizleme her açılışta yeniden hesaplanır; eski plan gösterilmesin.
+export function paydayQuery(api: Api, profil: ProfileSlug) {
+  return queryOptions({
+    queryKey: ["sayfa", profil, "maas-gunu"],
+    queryFn: () => unwrap(api.GET("/api/{profil}/maas-gunu", path(profil))),
+    staleTime: 0,
+    gcTime: 0,
+  });
+}
+
 export function sessionQuery(api: Api) {
   return queryOptions({
     queryKey: ["oturum"],
