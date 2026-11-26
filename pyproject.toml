@@ -5,10 +5,12 @@ description = "Kişisel portföy takip servisi"
 readme = "docs/DESIGN.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+    "fastapi>=0.165.0",
     "httpx>=0.28.1",
     "jinja2>=3.1.6",
     "pydantic>=2.14.4",
     "pydantic-settings>=2.16.3",
+    "pyjwt[crypto]>=2.15.1",
     "starlette>=1.10.0",
     "typer>=0.29.2",
     "uvicorn>=0.54.0",
@@ -91,7 +93,7 @@ include_external_packages = true
 name = "Katmanlar"
 type = "layers"
 layers = [
-    "finans.cli | finans.web",
+    "finans.cli | finans.web | finans.api",
     "finans.sunum",
     "finans.bootstrap",
     "finans.settings",
@@ -102,9 +104,9 @@ layers = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "CLI, web ve sunum somut adapter görmez; bağlama yalnızca bootstrap'ta"
+name = "CLI, web, API ve sunum somut adapter görmez; bağlama yalnızca bootstrap'ta"
 type = "forbidden"
-source_modules = ["finans.cli", "finans.web", "finans.sunum"]
+source_modules = ["finans.cli", "finans.web", "finans.api", "finans.sunum"]
 forbidden_modules = ["finans.adapters"]
 allow_indirect_imports = true
 
@@ -113,6 +115,7 @@ name = "Adapter'lar birbirinden bağımsız"
 type = "independence"
 modules = [
     "finans.adapters.age",
+    "finans.adapters.cf_access",
     "finans.adapters.clock",
     "finans.adapters.csv_statement",
     "finans.adapters.csv_transactions",
@@ -140,6 +143,7 @@ source_modules = [
     "finans.settings",
     "finans.cli",
     "finans.web",
+    "finans.api",
     "finans.sunum",
 ]
 # K-103: import-linter standart kütüphaneyi yalnız üst düzeyde tanır; urllib.request ve
@@ -151,7 +155,7 @@ allow_indirect_imports = true
 name = "sunum HTTP çatısı görmez; web ve API ortak kullanır (K-138)"
 type = "forbidden"
 source_modules = ["finans.sunum"]
-forbidden_modules = ["starlette", "jinja2", "markupsafe", "uvicorn"]
+forbidden_modules = ["fastapi", "starlette", "jinja2", "markupsafe", "uvicorn"]
 
 [[tool.importlinter.contracts]]
 name = "domain ve ports altyapı kütüphanesi görmez"

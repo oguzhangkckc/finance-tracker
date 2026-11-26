@@ -11,6 +11,7 @@ from pathlib import Path
 
 from finans.adapters._http import HttpClient
 from finans.adapters.age import AgeEncryptor
+from finans.adapters.cf_access import CloudflareAccessKeys
 from finans.adapters.clock import SystemClock
 from finans.adapters.csv_statement import CsvStatementFile
 from finans.adapters.csv_transactions import CsvTransactionFile
@@ -61,6 +62,7 @@ from finans.application.doctor import (
 from finans.application.jobs import JobContext, JobOutcome, job_body, run_job
 from finans.contracts.report import SANAL_NOTICE
 from finans.domain.portfolio import ConfigError, PortfolioConfig
+from finans.ports.access import AccessKeySource
 from finans.ports.clock import Clock
 from finans.ports.notifier import Notifier, NotifyError
 from finans.ports.operations import RefreshRequests
@@ -74,7 +76,7 @@ from finans.ports.sources import (
     TransactionFile,
 )
 from finans.ports.unit_of_work import UnitOfWork
-from finans.settings import Settings
+from finans.settings import ApiSettings, Settings
 
 __all__ = [
     "MigrationError",
@@ -481,3 +483,8 @@ def web_listener(settings: Settings) -> socket.socket:
 def refresh_requests(settings: Settings) -> RefreshRequests:
     """İstek dosyaları veritabanının yanında; sanal ve gerçek profil ayrı dosyalarda (K-123)."""
     return FileRefreshRequests(settings.db_path.parent / "refresh", settings.profile)
+
+
+def access_keys(settings: ApiSettings) -> AccessKeySource:
+    """Access anahtarları yalnız takımın kendi adresinden çekilir (K-136)."""
+    return CloudflareAccessKeys(settings.team_domain)
