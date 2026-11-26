@@ -20,11 +20,6 @@ from tests.support.access import (
 )
 
 
-@pytest.fixture
-def keys() -> FakeAccessKeys:
-    return FakeAccessKeys([public_jwk()])
-
-
 def verifier_for(
     keys: FakeAccessKeys, clock: FixedClock, *, prefetch: bool = True
 ) -> AccessVerifier:

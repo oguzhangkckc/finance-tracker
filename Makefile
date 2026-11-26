@@ -1,6 +1,6 @@
 RUN := uv run --frozen
 
-.PHONY: sync fmt lint typecheck imports test live audit check deploy-py312
+.PHONY: sync fmt lint typecheck imports test live audit check deploy-py312 openapi
 
 sync:
 	uv sync --locked
@@ -37,3 +37,7 @@ check: lint typecheck imports test
 deploy-py312:
 	uv run --python 3.12 --no-project python -I -m py_compile deploy/guncelle.py
 	uv run --python 3.12 --no-project --with pytest==9.2.0 pytest --confcutdir=tests/deploy_guncelle tests/deploy_guncelle
+
+# API şeması repodadır ve TypeScript tiplerinin kaynağıdır; bir test eşitliğini denetler (K-138).
+openapi:
+	$(RUN) python -m finans.api.openapi > frontend/src/api/openapi.json

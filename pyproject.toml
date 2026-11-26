@@ -20,6 +20,7 @@ dependencies = [
 ft = "finans.cli.main:app"
 ft-agent = "finans.cli.agent:app"
 finans-web = "finans.web.__main__:main"
+finans-api = "finans.api.__main__:main"
 
 [build-system]
 requires = ["uv_build>=0.10.8,<0.11.0"]

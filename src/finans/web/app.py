@@ -34,6 +34,7 @@ from finans.contracts.display import (
 from finans.contracts.report import SANAL_NOTICE, Report
 from finans.ports.clock import BUSINESS_TZ, Clock
 from finans.settings import PROFILES, Profile, Settings, profile_settings
+from finans.sunum.profiles import PROFILE_LABELS, SLUGS
 from finans.sunum.table import table
 from finans.sunum.tables import (
     ALERT_EVENTS,
@@ -89,8 +90,6 @@ NAV: Final = (
 TABS: Final = (*NAV[:3], NAV[5], ("/daha", "Daha fazla", "daha"))
 MORE: Final = tuple(item for item in NAV if item not in TABS)
 STATIC: Final = Path(__file__).parent / "static"
-SLUGS: Final[dict[Profile, str]] = {"real": "gercek", "sanal": "sanal"}
-PROFILE_LABELS: Final[dict[Profile, str]] = {"real": "Gerçek", "sanal": "Sanal"}
 MIN_SESSION_KEY: Final = 32
 # Kilitten sonra yalnız bu uygulamanın bir sayfasına dönülür; sorgu ve `..` taşınmaz.
 NEXT_PAGE: Final = re.compile(rf"/(?:{'|'.join(SLUGS.values())})(?:/[a-z0-9-]+)*/?")

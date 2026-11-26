@@ -1,0 +1,163 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "finans-api",
+    "version": "1"
+  },
+  "paths": {
+    "/api/saglik": {
+      "get": {
+        "tags": [
+          "ortak"
+        ],
+        "summary": "Health",
+        "description": "Kimlik istemez ve bilgi vermez; deploy betiğinin sağlık denetimi bunu yoklar (K-140).",
+        "operationId": "health_api_saglik_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/oturum": {
+      "get": {
+        "tags": [
+          "ortak"
+        ],
+        "summary": "Session",
+        "operationId": "session_api_oturum_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Erişim reddedildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Girdi geçersiz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ErrorBody": {
+        "properties": {
+          "error": {
+            "type": "string",
+            "title": "Error"
+          },
+          "fields": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Fields"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ErrorBody"
+      },
+      "Health": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok",
+            "title": "Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "Health"
+      },
+      "ProfileLink": {
+        "properties": {
+          "slug": {
+            "$ref": "#/components/schemas/ProfileSlug"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "slug",
+          "label"
+        ],
+        "title": "ProfileLink"
+      },
+      "ProfileSlug": {
+        "type": "string",
+        "enum": [
+          "gercek",
+          "sanal"
+        ]
+      },
+      "Session": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "profiles": {
+            "items": {
+              "$ref": "#/components/schemas/ProfileLink"
+            },
+            "type": "array",
+            "title": "Profiles"
+          },
+          "default_profile": {
+            "$ref": "#/components/schemas/ProfileSlug"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "email",
+          "profiles",
+          "default_profile"
+        ],
+        "title": "Session"
+      }
+    }
+  }
+}
