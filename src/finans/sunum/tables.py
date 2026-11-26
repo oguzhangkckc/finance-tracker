@@ -7,8 +7,8 @@ from typing import Final
 from finans.application.settings import HistoryRow, SettingState
 from finans.domain.models import Side
 from finans.ports.repositories import StoredRun
-from finans.web.table import Choice, Column, TableSpec
-from finans.web.views import AlertEventRow, HoldingRow, LotRow, TransactionRow
+from finans.sunum.table import Choice, Column, TableSpec
+from finans.sunum.views import AlertEventRow, HoldingRow, LotRow, TransactionRow
 
 # Başka özelliklerin sayfaya taşıdığı parametreler (ör. kayıt bildirimi); tablo filtresi değildir.
 PAGE_PARAMS: Final = ("islem", "no", "istek")

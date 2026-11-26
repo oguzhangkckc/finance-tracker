@@ -34,16 +34,8 @@ from finans.contracts.display import (
 from finans.contracts.report import SANAL_NOTICE, Report
 from finans.ports.clock import BUSINESS_TZ, Clock
 from finans.settings import PROFILES, Profile, Settings, profile_settings
-from finans.web.assets import Assets
-from finans.web.forms import read_form
-from finans.web.icons import icon
-from finans.web.lock import Attempt, WriteLock
-from finans.web.security import BodyLimitMiddleware, IdentityMiddleware, SecurityHeadersMiddleware
-from finans.web.session import SessionMiddleware, csrf_token
-from finans.web.setting_routes import setting_routes
-from finans.web.svg import allocation_bar, contribution_chart, value_chart
-from finans.web.table import table
-from finans.web.tables import (
+from finans.sunum.table import table
+from finans.sunum.tables import (
     ALERT_EVENTS,
     HOLDINGS,
     LOTS,
@@ -52,8 +44,7 @@ from finans.web.tables import (
     RUNS,
     TRANSACTIONS,
 )
-from finans.web.trade_routes import WriteContext, write_routes
-from finans.web.views import (
+from finans.sunum.views import (
     PAGE_ERRORS,
     PageError,
     alert_event_rows,
@@ -73,6 +64,15 @@ from finans.web.views import (
     transaction_rows,
     value_chart_view,
 )
+from finans.web.assets import Assets
+from finans.web.forms import read_form
+from finans.web.icons import icon
+from finans.web.lock import Attempt, WriteLock
+from finans.web.security import BodyLimitMiddleware, IdentityMiddleware, SecurityHeadersMiddleware
+from finans.web.session import SessionMiddleware, csrf_token
+from finans.web.setting_routes import setting_routes
+from finans.web.svg import allocation_bar, contribution_chart, value_chart
+from finans.web.trade_routes import WriteContext, write_routes
 
 NAV: Final = (
     ("/", "Özet", "ozet"),
