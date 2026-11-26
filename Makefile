@@ -1,6 +1,6 @@
 RUN := uv run --frozen
 
-.PHONY: sync fmt lint typecheck imports test live audit check deploy-py312 openapi frontend frontend-node
+.PHONY: sync fmt lint typecheck imports test live audit check deploy-py312 openapi bicim frontend frontend-node
 
 sync:
 	uv sync --locked
@@ -56,3 +56,8 @@ deploy-py312:
 openapi: frontend-node frontend/node_modules/.package-lock.json
 	$(RUN) python -m finans.api.openapi > frontend/src/api/openapi.json
 	cd frontend && npm run types
+
+# Arayüzün Türkçe biçimlendiricisi contracts/display'e bu fikstürle bağlıdır; bir test güncelliğini denetler (K-139).
+bicim: frontend-node frontend/node_modules/.package-lock.json
+	$(RUN) python -m finans.api.parity > frontend/src/format/parity.json
+	cd frontend && npx --no-install biome format --write src/format/parity.json

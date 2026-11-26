@@ -1,0 +1,2337 @@
+{
+  "money": [
+    {
+      "value": "0",
+      "text": "0,00 TL"
+    },
+    {
+      "value": "0.5",
+      "text": "0,50 TL"
+    },
+    {
+      "value": "0.005",
+      "text": "0,00 TL"
+    },
+    {
+      "value": "0.015",
+      "text": "0,02 TL"
+    },
+    {
+      "value": "0.125",
+      "text": "0,12 TL"
+    },
+    {
+      "value": "0.135",
+      "text": "0,14 TL"
+    },
+    {
+      "value": "-0.125",
+      "text": "-0,12 TL"
+    },
+    {
+      "value": "-0.004",
+      "text": "0,00 TL"
+    },
+    {
+      "value": "999.995",
+      "text": "1.000,00 TL"
+    },
+    {
+      "value": "-999.995",
+      "text": "-1.000,00 TL"
+    },
+    {
+      "value": "1234.565",
+      "text": "1.234,56 TL"
+    },
+    {
+      "value": "1234.575",
+      "text": "1.234,58 TL"
+    },
+    {
+      "value": "1234567.891",
+      "text": "1.234.567,89 TL"
+    },
+    {
+      "value": "-1000000",
+      "text": "-1.000.000,00 TL"
+    },
+    {
+      "value": "0.000001",
+      "text": "0,00 TL"
+    }
+  ],
+  "percent": [
+    {
+      "value": "0",
+      "places": 0,
+      "signed": false,
+      "text": "%0"
+    },
+    {
+      "value": "0",
+      "places": 0,
+      "signed": true,
+      "text": "%0"
+    },
+    {
+      "value": "0",
+      "places": 1,
+      "signed": false,
+      "text": "%0,0"
+    },
+    {
+      "value": "0",
+      "places": 1,
+      "signed": true,
+      "text": "%0,0"
+    },
+    {
+      "value": "0",
+      "places": 2,
+      "signed": false,
+      "text": "%0,00"
+    },
+    {
+      "value": "0",
+      "places": 2,
+      "signed": true,
+      "text": "%0,00"
+    },
+    {
+      "value": "0",
+      "places": 4,
+      "signed": false,
+      "text": "%0,0000"
+    },
+    {
+      "value": "0",
+      "places": 4,
+      "signed": true,
+      "text": "%0,0000"
+    },
+    {
+      "value": "0.047058",
+      "places": 0,
+      "signed": false,
+      "text": "%5"
+    },
+    {
+      "value": "0.047058",
+      "places": 0,
+      "signed": true,
+      "text": "+%5"
+    },
+    {
+      "value": "0.047058",
+      "places": 1,
+      "signed": false,
+      "text": "%4,7"
+    },
+    {
+      "value": "0.047058",
+      "places": 1,
+      "signed": true,
+      "text": "+%4,7"
+    },
+    {
+      "value": "0.047058",
+      "places": 2,
+      "signed": false,
+      "text": "%4,71"
+    },
+    {
+      "value": "0.047058",
+      "places": 2,
+      "signed": true,
+      "text": "+%4,71"
+    },
+    {
+      "value": "0.047058",
+      "places": 4,
+      "signed": false,
+      "text": "%4,7058"
+    },
+    {
+      "value": "0.047058",
+      "places": 4,
+      "signed": true,
+      "text": "+%4,7058"
+    },
+    {
+      "value": "-0.012",
+      "places": 0,
+      "signed": false,
+      "text": "-%1"
+    },
+    {
+      "value": "-0.012",
+      "places": 0,
+      "signed": true,
+      "text": "-%1"
+    },
+    {
+      "value": "-0.012",
+      "places": 1,
+      "signed": false,
+      "text": "-%1,2"
+    },
+    {
+      "value": "-0.012",
+      "places": 1,
+      "signed": true,
+      "text": "-%1,2"
+    },
+    {
+      "value": "-0.012",
+      "places": 2,
+      "signed": false,
+      "text": "-%1,20"
+    },
+    {
+      "value": "-0.012",
+      "places": 2,
+      "signed": true,
+      "text": "-%1,20"
+    },
+    {
+      "value": "-0.012",
+      "places": 4,
+      "signed": false,
+      "text": "-%1,2000"
+    },
+    {
+      "value": "-0.012",
+      "places": 4,
+      "signed": true,
+      "text": "-%1,2000"
+    },
+    {
+      "value": "0.444",
+      "places": 0,
+      "signed": false,
+      "text": "%44"
+    },
+    {
+      "value": "0.444",
+      "places": 0,
+      "signed": true,
+      "text": "+%44"
+    },
+    {
+      "value": "0.444",
+      "places": 1,
+      "signed": false,
+      "text": "%44,4"
+    },
+    {
+      "value": "0.444",
+      "places": 1,
+      "signed": true,
+      "text": "+%44,4"
+    },
+    {
+      "value": "0.444",
+      "places": 2,
+      "signed": false,
+      "text": "%44,40"
+    },
+    {
+      "value": "0.444",
+      "places": 2,
+      "signed": true,
+      "text": "+%44,40"
+    },
+    {
+      "value": "0.444",
+      "places": 4,
+      "signed": false,
+      "text": "%44,4000"
+    },
+    {
+      "value": "0.444",
+      "places": 4,
+      "signed": true,
+      "text": "+%44,4000"
+    },
+    {
+      "value": "0.00005",
+      "places": 0,
+      "signed": false,
+      "text": "%0"
+    },
+    {
+      "value": "0.00005",
+      "places": 0,
+      "signed": true,
+      "text": "%0"
+    },
+    {
+      "value": "0.00005",
+      "places": 1,
+      "signed": false,
+      "text": "%0,0"
+    },
+    {
+      "value": "0.00005",
+      "places": 1,
+      "signed": true,
+      "text": "%0,0"
+    },
+    {
+      "value": "0.00005",
+      "places": 2,
+      "signed": false,
+      "text": "%0,00"
+    },
+    {
+      "value": "0.00005",
+      "places": 2,
+      "signed": true,
+      "text": "%0,00"
+    },
+    {
+      "value": "0.00005",
+      "places": 4,
+      "signed": false,
+      "text": "%0,0050"
+    },
+    {
+      "value": "0.00005",
+      "places": 4,
+      "signed": true,
+      "text": "+%0,0050"
+    },
+    {
+      "value": "0.000049",
+      "places": 0,
+      "signed": false,
+      "text": "%0"
+    },
+    {
+      "value": "0.000049",
+      "places": 0,
+      "signed": true,
+      "text": "%0"
+    },
+    {
+      "value": "0.000049",
+      "places": 1,
+      "signed": false,
+      "text": "%0,0"
+    },
+    {
+      "value": "0.000049",
+      "places": 1,
+      "signed": true,
+      "text": "%0,0"
+    },
+    {
+      "value": "0.000049",
+      "places": 2,
+      "signed": false,
+      "text": "%0,00"
+    },
+    {
+      "value": "0.000049",
+      "places": 2,
+      "signed": true,
+      "text": "%0,00"
+    },
+    {
+      "value": "0.000049",
+      "places": 4,
+      "signed": false,
+      "text": "%0,0049"
+    },
+    {
+      "value": "0.000049",
+      "places": 4,
+      "signed": true,
+      "text": "+%0,0049"
+    },
+    {
+      "value": "-0.00005",
+      "places": 0,
+      "signed": false,
+      "text": "%0"
+    },
+    {
+      "value": "-0.00005",
+      "places": 0,
+      "signed": true,
+      "text": "%0"
+    },
+    {
+      "value": "-0.00005",
+      "places": 1,
+      "signed": false,
+      "text": "%0,0"
+    },
+    {
+      "value": "-0.00005",
+      "places": 1,
+      "signed": true,
+      "text": "%0,0"
+    },
+    {
+      "value": "-0.00005",
+      "places": 2,
+      "signed": false,
+      "text": "%0,00"
+    },
+    {
+      "value": "-0.00005",
+      "places": 2,
+      "signed": true,
+      "text": "%0,00"
+    },
+    {
+      "value": "-0.00005",
+      "places": 4,
+      "signed": false,
+      "text": "-%0,0050"
+    },
+    {
+      "value": "-0.00005",
+      "places": 4,
+      "signed": true,
+      "text": "-%0,0050"
+    },
+    {
+      "value": "0.000125",
+      "places": 0,
+      "signed": false,
+      "text": "%0"
+    },
+    {
+      "value": "0.000125",
+      "places": 0,
+      "signed": true,
+      "text": "%0"
+    },
+    {
+      "value": "0.000125",
+      "places": 1,
+      "signed": false,
+      "text": "%0,0"
+    },
+    {
+      "value": "0.000125",
+      "places": 1,
+      "signed": true,
+      "text": "%0,0"
+    },
+    {
+      "value": "0.000125",
+      "places": 2,
+      "signed": false,
+      "text": "%0,01"
+    },
+    {
+      "value": "0.000125",
+      "places": 2,
+      "signed": true,
+      "text": "+%0,01"
+    },
+    {
+      "value": "0.000125",
+      "places": 4,
+      "signed": false,
+      "text": "%0,0125"
+    },
+    {
+      "value": "0.000125",
+      "places": 4,
+      "signed": true,
+      "text": "+%0,0125"
+    },
+    {
+      "value": "1",
+      "places": 0,
+      "signed": false,
+      "text": "%100"
+    },
+    {
+      "value": "1",
+      "places": 0,
+      "signed": true,
+      "text": "+%100"
+    },
+    {
+      "value": "1",
+      "places": 1,
+      "signed": false,
+      "text": "%100,0"
+    },
+    {
+      "value": "1",
+      "places": 1,
+      "signed": true,
+      "text": "+%100,0"
+    },
+    {
+      "value": "1",
+      "places": 2,
+      "signed": false,
+      "text": "%100,00"
+    },
+    {
+      "value": "1",
+      "places": 2,
+      "signed": true,
+      "text": "+%100,00"
+    },
+    {
+      "value": "1",
+      "places": 4,
+      "signed": false,
+      "text": "%100,0000"
+    },
+    {
+      "value": "1",
+      "places": 4,
+      "signed": true,
+      "text": "+%100,0000"
+    },
+    {
+      "value": "12.3456",
+      "places": 0,
+      "signed": false,
+      "text": "%1.235"
+    },
+    {
+      "value": "12.3456",
+      "places": 0,
+      "signed": true,
+      "text": "+%1.235"
+    },
+    {
+      "value": "12.3456",
+      "places": 1,
+      "signed": false,
+      "text": "%1.234,6"
+    },
+    {
+      "value": "12.3456",
+      "places": 1,
+      "signed": true,
+      "text": "+%1.234,6"
+    },
+    {
+      "value": "12.3456",
+      "places": 2,
+      "signed": false,
+      "text": "%1.234,56"
+    },
+    {
+      "value": "12.3456",
+      "places": 2,
+      "signed": true,
+      "text": "+%1.234,56"
+    },
+    {
+      "value": "12.3456",
+      "places": 4,
+      "signed": false,
+      "text": "%1.234,5600"
+    },
+    {
+      "value": "12.3456",
+      "places": 4,
+      "signed": true,
+      "text": "+%1.234,5600"
+    },
+    {
+      "value": "-0.5",
+      "places": 0,
+      "signed": false,
+      "text": "-%50"
+    },
+    {
+      "value": "-0.5",
+      "places": 0,
+      "signed": true,
+      "text": "-%50"
+    },
+    {
+      "value": "-0.5",
+      "places": 1,
+      "signed": false,
+      "text": "-%50,0"
+    },
+    {
+      "value": "-0.5",
+      "places": 1,
+      "signed": true,
+      "text": "-%50,0"
+    },
+    {
+      "value": "-0.5",
+      "places": 2,
+      "signed": false,
+      "text": "-%50,00"
+    },
+    {
+      "value": "-0.5",
+      "places": 2,
+      "signed": true,
+      "text": "-%50,00"
+    },
+    {
+      "value": "-0.5",
+      "places": 4,
+      "signed": false,
+      "text": "-%50,0000"
+    },
+    {
+      "value": "-0.5",
+      "places": 4,
+      "signed": true,
+      "text": "-%50,0000"
+    }
+  ],
+  "points": [
+    {
+      "value": "0",
+      "text": "0,0 puan"
+    },
+    {
+      "value": "0.028",
+      "text": "+2,8 puan"
+    },
+    {
+      "value": "-0.0615",
+      "text": "-6,2 puan"
+    },
+    {
+      "value": "0.04396",
+      "text": "+4,4 puan"
+    },
+    {
+      "value": "-0.04396",
+      "text": "-4,4 puan"
+    },
+    {
+      "value": "0.0005",
+      "text": "0,0 puan"
+    },
+    {
+      "value": "0.00049",
+      "text": "0,0 puan"
+    },
+    {
+      "value": "-0.0005",
+      "text": "0,0 puan"
+    },
+    {
+      "value": "-0.00051",
+      "text": "-0,1 puan"
+    },
+    {
+      "value": "0.0015",
+      "text": "+0,2 puan"
+    },
+    {
+      "value": "0.25",
+      "text": "+25,0 puan"
+    },
+    {
+      "value": "-1",
+      "text": "-100,0 puan"
+    }
+  ],
+  "gap": [
+    {
+      "value": "0",
+      "text": "hedefte"
+    },
+    {
+      "value": "0.028",
+      "text": "2,8 puan fazla"
+    },
+    {
+      "value": "-0.0615",
+      "text": "6,2 puan eksik"
+    },
+    {
+      "value": "0.04396",
+      "text": "4,4 puan fazla"
+    },
+    {
+      "value": "-0.04396",
+      "text": "4,4 puan eksik"
+    },
+    {
+      "value": "0.0005",
+      "text": "hedefte"
+    },
+    {
+      "value": "0.00049",
+      "text": "hedefte"
+    },
+    {
+      "value": "-0.0005",
+      "text": "hedefte"
+    },
+    {
+      "value": "-0.00051",
+      "text": "0,1 puan eksik"
+    },
+    {
+      "value": "0.0015",
+      "text": "0,2 puan fazla"
+    },
+    {
+      "value": "0.25",
+      "text": "25,0 puan fazla"
+    },
+    {
+      "value": "-1",
+      "text": "100,0 puan eksik"
+    }
+  ],
+  "exact": [
+    {
+      "value": "0",
+      "text": "0"
+    },
+    {
+      "value": "12.83827",
+      "text": "12,83827"
+    },
+    {
+      "value": "12.838270",
+      "text": "12,83827"
+    },
+    {
+      "value": "4050",
+      "text": "4050"
+    },
+    {
+      "value": "0.000001",
+      "text": "0,000001"
+    },
+    {
+      "value": "-0.5",
+      "text": "-0,5"
+    },
+    {
+      "value": "1234567.000001",
+      "text": "1234567,000001"
+    }
+  ],
+  "same_places": [
+    {
+      "values": ["10.500000", "11"],
+      "texts": ["10,500000", "11,000000"]
+    },
+    {
+      "values": ["1.7443", "1.73", "1.744322"],
+      "texts": ["1,744300", "1,730000", "1,744322"]
+    },
+    {
+      "values": ["22.5", null],
+      "texts": ["22,5", null]
+    },
+    {
+      "values": ["3150", "3150.5"],
+      "texts": ["3150,0", "3150,5"]
+    },
+    {
+      "values": ["-1.5", "2.25"],
+      "texts": ["-1,50", "2,25"]
+    },
+    {
+      "values": ["0", "0.0"],
+      "texts": ["0,0", "0,0"]
+    },
+    {
+      "values": [null, null],
+      "texts": [null, null]
+    }
+  ],
+  "day": [
+    {
+      "day": "2026-01-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Ocak"
+    },
+    {
+      "day": "2026-01-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Ocak'ın"
+    },
+    {
+      "day": "2026-01-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Ocak'ta"
+    },
+    {
+      "day": "2026-01-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Ocak'tan"
+    },
+    {
+      "day": "2026-02-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Şubat"
+    },
+    {
+      "day": "2026-02-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Şubat'ın"
+    },
+    {
+      "day": "2026-02-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Şubat'ta"
+    },
+    {
+      "day": "2026-02-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Şubat'tan"
+    },
+    {
+      "day": "2026-03-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Mart"
+    },
+    {
+      "day": "2026-03-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Mart'ın"
+    },
+    {
+      "day": "2026-03-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Mart'ta"
+    },
+    {
+      "day": "2026-03-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Mart'tan"
+    },
+    {
+      "day": "2026-04-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Nisan"
+    },
+    {
+      "day": "2026-04-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Nisan'ın"
+    },
+    {
+      "day": "2026-04-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Nisan'da"
+    },
+    {
+      "day": "2026-04-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Nisan'dan"
+    },
+    {
+      "day": "2026-05-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Mayıs"
+    },
+    {
+      "day": "2026-05-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Mayıs'ın"
+    },
+    {
+      "day": "2026-05-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Mayıs'ta"
+    },
+    {
+      "day": "2026-05-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Mayıs'tan"
+    },
+    {
+      "day": "2026-06-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Haziran"
+    },
+    {
+      "day": "2026-06-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Haziran'ın"
+    },
+    {
+      "day": "2026-06-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Haziran'da"
+    },
+    {
+      "day": "2026-06-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Haziran'dan"
+    },
+    {
+      "day": "2026-07-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Temmuz"
+    },
+    {
+      "day": "2026-07-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Temmuz'un"
+    },
+    {
+      "day": "2026-07-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Temmuz'da"
+    },
+    {
+      "day": "2026-07-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Temmuz'dan"
+    },
+    {
+      "day": "2026-08-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Ağustos"
+    },
+    {
+      "day": "2026-08-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Ağustos'un"
+    },
+    {
+      "day": "2026-08-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Ağustos'ta"
+    },
+    {
+      "day": "2026-08-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Ağustos'tan"
+    },
+    {
+      "day": "2026-09-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Eylül"
+    },
+    {
+      "day": "2026-09-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Eylül'ün"
+    },
+    {
+      "day": "2026-09-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Eylül'de"
+    },
+    {
+      "day": "2026-09-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Eylül'den"
+    },
+    {
+      "day": "2026-10-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Ekim"
+    },
+    {
+      "day": "2026-10-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Ekim'in"
+    },
+    {
+      "day": "2026-10-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Ekim'de"
+    },
+    {
+      "day": "2026-10-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Ekim'den"
+    },
+    {
+      "day": "2026-11-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Kasım"
+    },
+    {
+      "day": "2026-11-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Kasım'ın"
+    },
+    {
+      "day": "2026-11-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Kasım'da"
+    },
+    {
+      "day": "2026-11-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Kasım'dan"
+    },
+    {
+      "day": "2026-12-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Aralık"
+    },
+    {
+      "day": "2026-12-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Aralık'ın"
+    },
+    {
+      "day": "2026-12-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Aralık'ta"
+    },
+    {
+      "day": "2026-12-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Aralık'tan"
+    },
+    {
+      "day": "2026-02-25",
+      "today": "2026-11-26",
+      "case": "",
+      "year": true,
+      "text": "25 Şubat 2026"
+    },
+    {
+      "day": "2026-02-25",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": true,
+      "text": "25 Şubat 2026'nın"
+    },
+    {
+      "day": "2026-02-25",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": true,
+      "text": "25 Şubat 2026'da"
+    },
+    {
+      "day": "2026-02-25",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": true,
+      "text": "25 Şubat 2026'dan"
+    },
+    {
+      "day": "2026-11-25",
+      "today": "2026-11-26",
+      "case": "",
+      "year": true,
+      "text": "25 Kasım 2026"
+    },
+    {
+      "day": "2026-11-25",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": true,
+      "text": "25 Kasım 2026'nın"
+    },
+    {
+      "day": "2026-11-25",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": true,
+      "text": "25 Kasım 2026'da"
+    },
+    {
+      "day": "2026-11-25",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": true,
+      "text": "25 Kasım 2026'dan"
+    },
+    {
+      "day": "2000-03-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Mart 2000"
+    },
+    {
+      "day": "2000-03-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Mart 2000'in"
+    },
+    {
+      "day": "2000-03-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Mart 2000'de"
+    },
+    {
+      "day": "2000-03-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Mart 2000'den"
+    },
+    {
+      "day": "2001-03-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Mart 2001"
+    },
+    {
+      "day": "2001-03-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Mart 2001'in"
+    },
+    {
+      "day": "2001-03-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Mart 2001'de"
+    },
+    {
+      "day": "2001-03-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Mart 2001'den"
+    },
+    {
+      "day": "2010-03-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Mart 2010"
+    },
+    {
+      "day": "2010-03-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Mart 2010'un"
+    },
+    {
+      "day": "2010-03-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Mart 2010'da"
+    },
+    {
+      "day": "2010-03-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Mart 2010'dan"
+    },
+    {
+      "day": "2020-03-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Mart 2020"
+    },
+    {
+      "day": "2020-03-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Mart 2020'nin"
+    },
+    {
+      "day": "2020-03-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Mart 2020'de"
+    },
+    {
+      "day": "2020-03-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Mart 2020'den"
+    },
+    {
+      "day": "2022-03-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Mart 2022"
+    },
+    {
+      "day": "2022-03-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Mart 2022'nin"
+    },
+    {
+      "day": "2022-03-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Mart 2022'de"
+    },
+    {
+      "day": "2022-03-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Mart 2022'den"
+    },
+    {
+      "day": "2023-03-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Mart 2023"
+    },
+    {
+      "day": "2023-03-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Mart 2023'ün"
+    },
+    {
+      "day": "2023-03-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Mart 2023'te"
+    },
+    {
+      "day": "2023-03-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Mart 2023'ten"
+    },
+    {
+      "day": "2024-03-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Mart 2024"
+    },
+    {
+      "day": "2024-03-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Mart 2024'ün"
+    },
+    {
+      "day": "2024-03-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Mart 2024'te"
+    },
+    {
+      "day": "2024-03-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Mart 2024'ten"
+    },
+    {
+      "day": "2025-03-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Mart 2025"
+    },
+    {
+      "day": "2025-03-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Mart 2025'in"
+    },
+    {
+      "day": "2025-03-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Mart 2025'te"
+    },
+    {
+      "day": "2025-03-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Mart 2025'ten"
+    },
+    {
+      "day": "2027-03-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Mart 2027"
+    },
+    {
+      "day": "2027-03-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Mart 2027'nin"
+    },
+    {
+      "day": "2027-03-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Mart 2027'de"
+    },
+    {
+      "day": "2027-03-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Mart 2027'den"
+    },
+    {
+      "day": "2028-03-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Mart 2028"
+    },
+    {
+      "day": "2028-03-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Mart 2028'in"
+    },
+    {
+      "day": "2028-03-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Mart 2028'de"
+    },
+    {
+      "day": "2028-03-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Mart 2028'den"
+    },
+    {
+      "day": "2029-03-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Mart 2029"
+    },
+    {
+      "day": "2029-03-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Mart 2029'un"
+    },
+    {
+      "day": "2029-03-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Mart 2029'da"
+    },
+    {
+      "day": "2029-03-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Mart 2029'dan"
+    },
+    {
+      "day": "2030-03-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Mart 2030"
+    },
+    {
+      "day": "2030-03-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Mart 2030'un"
+    },
+    {
+      "day": "2030-03-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Mart 2030'da"
+    },
+    {
+      "day": "2030-03-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Mart 2030'dan"
+    },
+    {
+      "day": "2040-03-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Mart 2040"
+    },
+    {
+      "day": "2040-03-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Mart 2040'ın"
+    },
+    {
+      "day": "2040-03-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Mart 2040'ta"
+    },
+    {
+      "day": "2040-03-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Mart 2040'tan"
+    },
+    {
+      "day": "2050-03-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Mart 2050"
+    },
+    {
+      "day": "2050-03-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Mart 2050'nin"
+    },
+    {
+      "day": "2050-03-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Mart 2050'de"
+    },
+    {
+      "day": "2050-03-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Mart 2050'den"
+    },
+    {
+      "day": "2060-03-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Mart 2060"
+    },
+    {
+      "day": "2060-03-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Mart 2060'ın"
+    },
+    {
+      "day": "2060-03-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Mart 2060'ta"
+    },
+    {
+      "day": "2060-03-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Mart 2060'tan"
+    },
+    {
+      "day": "2070-03-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Mart 2070"
+    },
+    {
+      "day": "2070-03-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Mart 2070'in"
+    },
+    {
+      "day": "2070-03-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Mart 2070'te"
+    },
+    {
+      "day": "2070-03-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Mart 2070'ten"
+    },
+    {
+      "day": "2080-03-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Mart 2080"
+    },
+    {
+      "day": "2080-03-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Mart 2080'in"
+    },
+    {
+      "day": "2080-03-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Mart 2080'de"
+    },
+    {
+      "day": "2080-03-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Mart 2080'den"
+    },
+    {
+      "day": "2090-03-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Mart 2090"
+    },
+    {
+      "day": "2090-03-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Mart 2090'ın"
+    },
+    {
+      "day": "2090-03-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Mart 2090'da"
+    },
+    {
+      "day": "2090-03-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Mart 2090'dan"
+    },
+    {
+      "day": "2100-03-09",
+      "today": "2026-11-26",
+      "case": "",
+      "year": null,
+      "text": "9 Mart 2100"
+    },
+    {
+      "day": "2100-03-09",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": null,
+      "text": "9 Mart 2100'ün"
+    },
+    {
+      "day": "2100-03-09",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": null,
+      "text": "9 Mart 2100'de"
+    },
+    {
+      "day": "2100-03-09",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": null,
+      "text": "9 Mart 2100'den"
+    },
+    {
+      "day": "2025-12-31",
+      "today": "2026-11-26",
+      "case": "",
+      "year": false,
+      "text": "31 Aralık"
+    },
+    {
+      "day": "2025-12-31",
+      "today": "2026-11-26",
+      "case": "in",
+      "year": false,
+      "text": "31 Aralık'ın"
+    },
+    {
+      "day": "2025-12-31",
+      "today": "2026-11-26",
+      "case": "de",
+      "year": false,
+      "text": "31 Aralık'ta"
+    },
+    {
+      "day": "2025-12-31",
+      "today": "2026-11-26",
+      "case": "den",
+      "year": false,
+      "text": "31 Aralık'tan"
+    }
+  ],
+  "month": [
+    {
+      "period": "2026-01",
+      "case": "",
+      "text": "Ocak 2026"
+    },
+    {
+      "period": "2026-01",
+      "case": "in",
+      "text": "Ocak 2026'nın"
+    },
+    {
+      "period": "2026-01",
+      "case": "de",
+      "text": "Ocak 2026'da"
+    },
+    {
+      "period": "2026-01",
+      "case": "den",
+      "text": "Ocak 2026'dan"
+    },
+    {
+      "period": "2026-02",
+      "case": "",
+      "text": "Şubat 2026"
+    },
+    {
+      "period": "2026-02",
+      "case": "in",
+      "text": "Şubat 2026'nın"
+    },
+    {
+      "period": "2026-02",
+      "case": "de",
+      "text": "Şubat 2026'da"
+    },
+    {
+      "period": "2026-02",
+      "case": "den",
+      "text": "Şubat 2026'dan"
+    },
+    {
+      "period": "2026-03",
+      "case": "",
+      "text": "Mart 2026"
+    },
+    {
+      "period": "2026-03",
+      "case": "in",
+      "text": "Mart 2026'nın"
+    },
+    {
+      "period": "2026-03",
+      "case": "de",
+      "text": "Mart 2026'da"
+    },
+    {
+      "period": "2026-03",
+      "case": "den",
+      "text": "Mart 2026'dan"
+    },
+    {
+      "period": "2026-04",
+      "case": "",
+      "text": "Nisan 2026"
+    },
+    {
+      "period": "2026-04",
+      "case": "in",
+      "text": "Nisan 2026'nın"
+    },
+    {
+      "period": "2026-04",
+      "case": "de",
+      "text": "Nisan 2026'da"
+    },
+    {
+      "period": "2026-04",
+      "case": "den",
+      "text": "Nisan 2026'dan"
+    },
+    {
+      "period": "2026-05",
+      "case": "",
+      "text": "Mayıs 2026"
+    },
+    {
+      "period": "2026-05",
+      "case": "in",
+      "text": "Mayıs 2026'nın"
+    },
+    {
+      "period": "2026-05",
+      "case": "de",
+      "text": "Mayıs 2026'da"
+    },
+    {
+      "period": "2026-05",
+      "case": "den",
+      "text": "Mayıs 2026'dan"
+    },
+    {
+      "period": "2026-06",
+      "case": "",
+      "text": "Haziran 2026"
+    },
+    {
+      "period": "2026-06",
+      "case": "in",
+      "text": "Haziran 2026'nın"
+    },
+    {
+      "period": "2026-06",
+      "case": "de",
+      "text": "Haziran 2026'da"
+    },
+    {
+      "period": "2026-06",
+      "case": "den",
+      "text": "Haziran 2026'dan"
+    },
+    {
+      "period": "2026-07",
+      "case": "",
+      "text": "Temmuz 2026"
+    },
+    {
+      "period": "2026-07",
+      "case": "in",
+      "text": "Temmuz 2026'nın"
+    },
+    {
+      "period": "2026-07",
+      "case": "de",
+      "text": "Temmuz 2026'da"
+    },
+    {
+      "period": "2026-07",
+      "case": "den",
+      "text": "Temmuz 2026'dan"
+    },
+    {
+      "period": "2026-08",
+      "case": "",
+      "text": "Ağustos 2026"
+    },
+    {
+      "period": "2026-08",
+      "case": "in",
+      "text": "Ağustos 2026'nın"
+    },
+    {
+      "period": "2026-08",
+      "case": "de",
+      "text": "Ağustos 2026'da"
+    },
+    {
+      "period": "2026-08",
+      "case": "den",
+      "text": "Ağustos 2026'dan"
+    },
+    {
+      "period": "2026-09",
+      "case": "",
+      "text": "Eylül 2026"
+    },
+    {
+      "period": "2026-09",
+      "case": "in",
+      "text": "Eylül 2026'nın"
+    },
+    {
+      "period": "2026-09",
+      "case": "de",
+      "text": "Eylül 2026'da"
+    },
+    {
+      "period": "2026-09",
+      "case": "den",
+      "text": "Eylül 2026'dan"
+    },
+    {
+      "period": "2026-10",
+      "case": "",
+      "text": "Ekim 2026"
+    },
+    {
+      "period": "2026-10",
+      "case": "in",
+      "text": "Ekim 2026'nın"
+    },
+    {
+      "period": "2026-10",
+      "case": "de",
+      "text": "Ekim 2026'da"
+    },
+    {
+      "period": "2026-10",
+      "case": "den",
+      "text": "Ekim 2026'dan"
+    },
+    {
+      "period": "2026-11",
+      "case": "",
+      "text": "Kasım 2026"
+    },
+    {
+      "period": "2026-11",
+      "case": "in",
+      "text": "Kasım 2026'nın"
+    },
+    {
+      "period": "2026-11",
+      "case": "de",
+      "text": "Kasım 2026'da"
+    },
+    {
+      "period": "2026-11",
+      "case": "den",
+      "text": "Kasım 2026'dan"
+    },
+    {
+      "period": "2026-12",
+      "case": "",
+      "text": "Aralık 2026"
+    },
+    {
+      "period": "2026-12",
+      "case": "in",
+      "text": "Aralık 2026'nın"
+    },
+    {
+      "period": "2026-12",
+      "case": "de",
+      "text": "Aralık 2026'da"
+    },
+    {
+      "period": "2026-12",
+      "case": "den",
+      "text": "Aralık 2026'dan"
+    },
+    {
+      "period": "2000-10",
+      "case": "",
+      "text": "Ekim 2000"
+    },
+    {
+      "period": "2000-10",
+      "case": "in",
+      "text": "Ekim 2000'in"
+    },
+    {
+      "period": "2000-10",
+      "case": "de",
+      "text": "Ekim 2000'de"
+    },
+    {
+      "period": "2000-10",
+      "case": "den",
+      "text": "Ekim 2000'den"
+    },
+    {
+      "period": "2001-10",
+      "case": "",
+      "text": "Ekim 2001"
+    },
+    {
+      "period": "2001-10",
+      "case": "in",
+      "text": "Ekim 2001'in"
+    },
+    {
+      "period": "2001-10",
+      "case": "de",
+      "text": "Ekim 2001'de"
+    },
+    {
+      "period": "2001-10",
+      "case": "den",
+      "text": "Ekim 2001'den"
+    },
+    {
+      "period": "2010-10",
+      "case": "",
+      "text": "Ekim 2010"
+    },
+    {
+      "period": "2010-10",
+      "case": "in",
+      "text": "Ekim 2010'un"
+    },
+    {
+      "period": "2010-10",
+      "case": "de",
+      "text": "Ekim 2010'da"
+    },
+    {
+      "period": "2010-10",
+      "case": "den",
+      "text": "Ekim 2010'dan"
+    },
+    {
+      "period": "2020-10",
+      "case": "",
+      "text": "Ekim 2020"
+    },
+    {
+      "period": "2020-10",
+      "case": "in",
+      "text": "Ekim 2020'nin"
+    },
+    {
+      "period": "2020-10",
+      "case": "de",
+      "text": "Ekim 2020'de"
+    },
+    {
+      "period": "2020-10",
+      "case": "den",
+      "text": "Ekim 2020'den"
+    },
+    {
+      "period": "2022-10",
+      "case": "",
+      "text": "Ekim 2022"
+    },
+    {
+      "period": "2022-10",
+      "case": "in",
+      "text": "Ekim 2022'nin"
+    },
+    {
+      "period": "2022-10",
+      "case": "de",
+      "text": "Ekim 2022'de"
+    },
+    {
+      "period": "2022-10",
+      "case": "den",
+      "text": "Ekim 2022'den"
+    },
+    {
+      "period": "2023-10",
+      "case": "",
+      "text": "Ekim 2023"
+    },
+    {
+      "period": "2023-10",
+      "case": "in",
+      "text": "Ekim 2023'ün"
+    },
+    {
+      "period": "2023-10",
+      "case": "de",
+      "text": "Ekim 2023'te"
+    },
+    {
+      "period": "2023-10",
+      "case": "den",
+      "text": "Ekim 2023'ten"
+    },
+    {
+      "period": "2024-10",
+      "case": "",
+      "text": "Ekim 2024"
+    },
+    {
+      "period": "2024-10",
+      "case": "in",
+      "text": "Ekim 2024'ün"
+    },
+    {
+      "period": "2024-10",
+      "case": "de",
+      "text": "Ekim 2024'te"
+    },
+    {
+      "period": "2024-10",
+      "case": "den",
+      "text": "Ekim 2024'ten"
+    },
+    {
+      "period": "2025-10",
+      "case": "",
+      "text": "Ekim 2025"
+    },
+    {
+      "period": "2025-10",
+      "case": "in",
+      "text": "Ekim 2025'in"
+    },
+    {
+      "period": "2025-10",
+      "case": "de",
+      "text": "Ekim 2025'te"
+    },
+    {
+      "period": "2025-10",
+      "case": "den",
+      "text": "Ekim 2025'ten"
+    },
+    {
+      "period": "2027-10",
+      "case": "",
+      "text": "Ekim 2027"
+    },
+    {
+      "period": "2027-10",
+      "case": "in",
+      "text": "Ekim 2027'nin"
+    },
+    {
+      "period": "2027-10",
+      "case": "de",
+      "text": "Ekim 2027'de"
+    },
+    {
+      "period": "2027-10",
+      "case": "den",
+      "text": "Ekim 2027'den"
+    },
+    {
+      "period": "2028-10",
+      "case": "",
+      "text": "Ekim 2028"
+    },
+    {
+      "period": "2028-10",
+      "case": "in",
+      "text": "Ekim 2028'in"
+    },
+    {
+      "period": "2028-10",
+      "case": "de",
+      "text": "Ekim 2028'de"
+    },
+    {
+      "period": "2028-10",
+      "case": "den",
+      "text": "Ekim 2028'den"
+    },
+    {
+      "period": "2029-10",
+      "case": "",
+      "text": "Ekim 2029"
+    },
+    {
+      "period": "2029-10",
+      "case": "in",
+      "text": "Ekim 2029'un"
+    },
+    {
+      "period": "2029-10",
+      "case": "de",
+      "text": "Ekim 2029'da"
+    },
+    {
+      "period": "2029-10",
+      "case": "den",
+      "text": "Ekim 2029'dan"
+    },
+    {
+      "period": "2030-10",
+      "case": "",
+      "text": "Ekim 2030"
+    },
+    {
+      "period": "2030-10",
+      "case": "in",
+      "text": "Ekim 2030'un"
+    },
+    {
+      "period": "2030-10",
+      "case": "de",
+      "text": "Ekim 2030'da"
+    },
+    {
+      "period": "2030-10",
+      "case": "den",
+      "text": "Ekim 2030'dan"
+    },
+    {
+      "period": "2040-10",
+      "case": "",
+      "text": "Ekim 2040"
+    },
+    {
+      "period": "2040-10",
+      "case": "in",
+      "text": "Ekim 2040'ın"
+    },
+    {
+      "period": "2040-10",
+      "case": "de",
+      "text": "Ekim 2040'ta"
+    },
+    {
+      "period": "2040-10",
+      "case": "den",
+      "text": "Ekim 2040'tan"
+    },
+    {
+      "period": "2050-10",
+      "case": "",
+      "text": "Ekim 2050"
+    },
+    {
+      "period": "2050-10",
+      "case": "in",
+      "text": "Ekim 2050'nin"
+    },
+    {
+      "period": "2050-10",
+      "case": "de",
+      "text": "Ekim 2050'de"
+    },
+    {
+      "period": "2050-10",
+      "case": "den",
+      "text": "Ekim 2050'den"
+    },
+    {
+      "period": "2060-10",
+      "case": "",
+      "text": "Ekim 2060"
+    },
+    {
+      "period": "2060-10",
+      "case": "in",
+      "text": "Ekim 2060'ın"
+    },
+    {
+      "period": "2060-10",
+      "case": "de",
+      "text": "Ekim 2060'ta"
+    },
+    {
+      "period": "2060-10",
+      "case": "den",
+      "text": "Ekim 2060'tan"
+    },
+    {
+      "period": "2070-10",
+      "case": "",
+      "text": "Ekim 2070"
+    },
+    {
+      "period": "2070-10",
+      "case": "in",
+      "text": "Ekim 2070'in"
+    },
+    {
+      "period": "2070-10",
+      "case": "de",
+      "text": "Ekim 2070'te"
+    },
+    {
+      "period": "2070-10",
+      "case": "den",
+      "text": "Ekim 2070'ten"
+    },
+    {
+      "period": "2080-10",
+      "case": "",
+      "text": "Ekim 2080"
+    },
+    {
+      "period": "2080-10",
+      "case": "in",
+      "text": "Ekim 2080'in"
+    },
+    {
+      "period": "2080-10",
+      "case": "de",
+      "text": "Ekim 2080'de"
+    },
+    {
+      "period": "2080-10",
+      "case": "den",
+      "text": "Ekim 2080'den"
+    },
+    {
+      "period": "2090-10",
+      "case": "",
+      "text": "Ekim 2090"
+    },
+    {
+      "period": "2090-10",
+      "case": "in",
+      "text": "Ekim 2090'ın"
+    },
+    {
+      "period": "2090-10",
+      "case": "de",
+      "text": "Ekim 2090'da"
+    },
+    {
+      "period": "2090-10",
+      "case": "den",
+      "text": "Ekim 2090'dan"
+    },
+    {
+      "period": "2100-10",
+      "case": "",
+      "text": "Ekim 2100"
+    },
+    {
+      "period": "2100-10",
+      "case": "in",
+      "text": "Ekim 2100'ün"
+    },
+    {
+      "period": "2100-10",
+      "case": "de",
+      "text": "Ekim 2100'de"
+    },
+    {
+      "period": "2100-10",
+      "case": "den",
+      "text": "Ekim 2100'den"
+    }
+  ],
+  "labels": {
+    "profiles": {
+      "gercek": "Gerçek",
+      "sanal": "Sanal"
+    },
+    "sanal_notice": "SANAL — gerçek alım değil"
+  }
+}
