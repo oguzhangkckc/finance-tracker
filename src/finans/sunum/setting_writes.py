@@ -128,17 +128,6 @@ def total_text(total: Decimal) -> str:
     return f"%{_comma(abs(HUNDRED - total))} {word}"
 
 
-def form_total(values: Mapping[str, str], classes: Sequence[str]) -> tuple[str, str]:
-    """Formdaki hedeflerin toplamı ve farkı; betik yokken de ilk hâli görünür."""
-    total = ZERO
-    for code in classes:
-        value = _decimal(_field(values, f"{TARGET}{code}"), code)
-        if value is None:
-            return "?", "bir alan sayı değil"
-        total += value
-    return _comma(total), total_text(total)
-
-
 def _targets(
     form: Mapping[str, str],
     classes: Sequence[str],

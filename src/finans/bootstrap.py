@@ -2,7 +2,6 @@ import logging
 import os
 import secrets
 import shutil
-import socket
 import sys
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -41,7 +40,6 @@ from finans.adapters.sqlite.snapshot import SqliteCopier
 from finans.adapters.sqlite.unit_of_work import SqliteUnitOfWork
 from finans.adapters.tefas import TefasPriceSource
 from finans.adapters.telegram import TelegramNotifier
-from finans.adapters.unix_listener import listen_unix
 from finans.application.backup import (
     REAL_PREFIX,
     SANAL_PREFIX,
@@ -58,7 +56,6 @@ from finans.application.doctor import (
     portfolio_checks,
     price_check,
     settings_check,
-    web_password_check,
 )
 from finans.application.jobs import JobContext, JobOutcome, job_body, run_job
 from finans.contracts.report import SANAL_NOTICE
@@ -105,7 +102,6 @@ __all__ = [
     "system_clock",
     "telegram_renderer",
     "transaction_file",
-    "web_listener",
 ]
 
 
@@ -355,19 +351,8 @@ def run_doctor(settings: Settings) -> list[Check]:
     checks.append(_evds_key_check(settings))
     checks.append(_telegram_check(settings))
     checks.extend(_backup_checks(settings, Path(".env")))
-    checks.extend(_web_password_checks(settings))
     checks.append(_env_check(Path(".env")))
     return checks
-
-
-def _web_password_checks(settings: Settings) -> list[Check]:
-    """credstore yalnız root'a açık; özeti `ft-finans doctor` LoadCredential ile verir (K-126).
-    Web ayarlı değilse ya da credential dizini yoksa (geliştirme makinesi) denetim yapılmaz."""
-    credentials = os.environ.get("CREDENTIALS_DIRECTORY")
-    if not credentials or settings.web_origin is None:
-        return []
-    path = Path(credentials) / "ft_web_password"
-    return [web_password_check(path.read_text(encoding="utf-8") if path.is_file() else None)]
 
 
 def _schema_check(status: SchemaStatus) -> Check:
@@ -492,11 +477,6 @@ def _env_check(path: Path) -> Check:
     if mode & 0o077:
         return Check(".env izinleri", "warn", f"{mode:o}; 600 olmalı (chmod 600 .env)")
     return Check(".env izinleri", "ok", f"{mode:o}")
-
-
-def web_listener(settings: Settings) -> socket.socket:
-    """finans-web'in dinlediği tek yer: 0600 izinli Unix soketi, TCP yok (K-101, K-123)."""
-    return listen_unix(settings.web_socket)
 
 
 def refresh_requests(settings: Settings) -> RefreshRequests:

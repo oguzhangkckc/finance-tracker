@@ -31,5 +31,6 @@ systemd-analyze verify --man=no "$work"/*.timer "$work"/*.path "$work"/finans-*j
   "$work"/finans-web.service "$work"/finans-*refresh.service
 echo "systemd birimleri geçerli."
 
-# K-106, K-124: ağa açık tek servisin sertleştirmesi gevşerse CI kırılır (eşik 0-100 ölçeğinde).
-systemd-analyze security --offline=yes --threshold=20 "$work"/finans-web.service
+# K-124, K-136: ağa açık tek servisin sertleştirmesi gevşerse CI kırılır (eşik 0-100 ölçeğinde).
+# G4'te systemd 255 (ubuntu-24.04) ile ölçülen 1.5'tir; ağ erişimi PrivateNetwork'ün 0.8'ini yükseltti.
+systemd-analyze security --offline=yes --threshold=15 "$work"/finans-web.service

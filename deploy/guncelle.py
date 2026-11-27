@@ -68,7 +68,6 @@ CREDENTIALS: Final = {
     ),
     "sanal": ("ft_evds_api_key", "ft_telegram_bot_token"),
 }
-WEB_PASSWORD: Final = "ft_web_password"  # noqa: S105 - credential adı, değer değil
 REFUSED: Final = (
     "⛔ Reddedildi: yalnız '<40 haneli küçük harfli sha> [--geri] [--paket -]' kabul edilir."
 )
@@ -419,9 +418,8 @@ def ft_command(
 
 
 def doctor_credentials(paths: Yollar, profile: str) -> tuple[str, ...]:
-    """Elle doctor gibi: web şifresi yalnız dosyası varsa yüklenir (K-126)."""
-    extra = (WEB_PASSWORD,) if (paths.credstore / WEB_PASSWORD).exists() else ()
-    return (*CREDENTIALS[profile], *extra)
+    """Elle doctor gibi: profilin işleriyle aynı sırlar (K-140)."""
+    return CREDENTIALS[profile]
 
 
 def running_jobs(paths: Yollar, runner: Calistirici) -> list[str]:

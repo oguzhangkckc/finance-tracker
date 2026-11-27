@@ -8,11 +8,6 @@ credentials=()
 for name in ft_evds_api_key ft_telegram_bot_token; do
   credentials+=(-p "LoadCredential=$name:/etc/finans/credstore/$name")
 done
-# K-126: doctor web'in şifre özetini de denetler. Dosya yoksa systemd birimi hiç başlatmaz;
-# bu yüzden yalnız varsa yüklenir ve yokluğunu doctor bildirir. Diğer komutlar özeti görmez.
-if [ "${1:-}" = doctor ] && [ -e /etc/finans/credstore/ft_web_password ]; then
-  credentials+=(-p "LoadCredential=ft_web_password:/etc/finans/credstore/ft_web_password")
-fi
 
 exec systemd-run --quiet --pipe --wait --collect \
   --uid=finans --gid=finans --working-directory=/var/lib/finans \

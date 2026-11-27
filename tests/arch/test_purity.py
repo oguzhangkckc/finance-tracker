@@ -46,7 +46,6 @@ NETWORK_FREE = (
     "application",
     "settings.py",
     "cli",
-    "web",
     "api",
     "sunum",
 )

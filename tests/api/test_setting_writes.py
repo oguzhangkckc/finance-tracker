@@ -31,8 +31,8 @@ from tests.fakes.access import FakeAccessKeys
 from tests.fakes.clock import FixedClock
 from tests.support.access import API_SETTINGS
 from tests.support.api_client import ApiClient
-from tests.support.web_profiles import two_profiles
-from tests.support.web_writes import NOW, priced_sanal, start_settings
+from tests.support.profiles import two_profiles
+from tests.support.writes import NOW, priced_sanal, start_settings
 
 D = Decimal
 REAL = "/api/gercek/ayarlar"

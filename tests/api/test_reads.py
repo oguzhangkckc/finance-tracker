@@ -21,8 +21,8 @@ from finans.sunum.views import load_report, payday_text, report_text
 from tests.fakes.access import FakeAccessKeys
 from tests.support.access import API_SETTINGS
 from tests.support.api_client import ApiClient
-from tests.support.web_profiles import NOW, two_profiles
-from tests.support.web_writes import start_settings
+from tests.support.profiles import NOW, two_profiles
+from tests.support.writes import start_settings
 
 PAGES = (
     "ozet",
