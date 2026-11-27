@@ -192,7 +192,7 @@ Kabul kapısı: Mac'te yerel API'ye karşı (`make yerel`, `frontend/` içinde `
 - Birimin adı `finans-web.service` kalır, `finans-api`'yi çalıştırır (K-144). Geçiş günü sırası ve geri dönüş Kurulum adım 11.7'dedir; deploy bir kez elle kurulum ister (birim, wrapper'lar ve deploy betiği değişir).
 Geliştirme kapısı: `make check` ve CI; `systemd-analyze security` eşiği ölçülüp yeniden konur.
 Kabul kapısı:
-- Mac'ten ve telefondan Google girişiyle bütün sayfalar açılır; başka hesap reddedilir.
+- Mac'ten ve telefondan e-posta koduyla (One-time PIN, K-145) bütün sayfalar açılır; başka e-posta reddedilir.
 - Pi'de JWT'siz istek 403 alır.
 - İki profilde `doctor` ve `job list` temiz.
 - Ertesi sabah gece yedeği ve 09:30 çekmesi çalışır.
