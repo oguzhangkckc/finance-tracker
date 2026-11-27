@@ -58,7 +58,6 @@ from finans.application.doctor import (
     portfolio_checks,
     price_check,
     settings_check,
-    web_password_check,
 )
 from finans.application.jobs import JobContext, JobOutcome, job_body, run_job
 from finans.contracts.report import SANAL_NOTICE
@@ -355,19 +354,8 @@ def run_doctor(settings: Settings) -> list[Check]:
     checks.append(_evds_key_check(settings))
     checks.append(_telegram_check(settings))
     checks.extend(_backup_checks(settings, Path(".env")))
-    checks.extend(_web_password_checks(settings))
     checks.append(_env_check(Path(".env")))
     return checks
-
-
-def _web_password_checks(settings: Settings) -> list[Check]:
-    """credstore yalnız root'a açık; özeti `ft-finans doctor` LoadCredential ile verir (K-126).
-    Web ayarlı değilse ya da credential dizini yoksa (geliştirme makinesi) denetim yapılmaz."""
-    credentials = os.environ.get("CREDENTIALS_DIRECTORY")
-    if not credentials or settings.web_origin is None:
-        return []
-    path = Path(credentials) / "ft_web_password"
-    return [web_password_check(path.read_text(encoding="utf-8") if path.is_file() else None)]
 
 
 def _schema_check(status: SchemaStatus) -> Check:

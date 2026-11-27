@@ -1,5 +1,5 @@
 [Unit]
-Description=finans-takip web arayüzü (yalnız tailnet, Unix soketi)
+Description=finans-takip web arayüzü ve JSON API (127.0.0.1, Cloudflare tüneli ve Access arkasında)
 Documentation=file:/opt/finans/docs/DESIGN.md
 
 [Service]
@@ -10,11 +10,6 @@ WorkingDirectory=/var/lib/finans
 EnvironmentFile=/etc/finans/finans.env
 # K-106: işlerin sırları yüklenmez; profil drop-in'de seçilir (K-123).
 LoadCredential=ft_web_session_key:/etc/finans/credstore/ft_web_session_key
-# K-126: yazma şifresinin scrypt özeti; dosya boşsa yazma kapalı, hiç yoksa servis başlamaz.
-LoadCredential=ft_web_password:/etc/finans/credstore/ft_web_password
-# K-123: soket /run/finans-web/web.sock; uvicorn'un 0666'sı yerine adapter 0600 verir.
-RuntimeDirectory=finans-web
-RuntimeDirectoryMode=0700
 UMask=0077
 NoNewPrivileges=yes
 PrivateTmp=yes
@@ -22,8 +17,8 @@ ProtectSystem=strict
 # K-123: WAL'da salt okunur bağlantı da -shm dosyasına yazar; istek dosyası da bu dizinde.
 ReadWritePaths=/var/lib/finans
 ProtectHome=yes
-PrivateNetwork=yes
-RestrictAddressFamilies=AF_UNIX
+# K-136: Access anahtarları (JWKS) internetten çekilir, uygulama 127.0.0.1'de TCP dinler.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 CapabilityBoundingSet=
 PrivateDevices=yes
 PrivateMounts=yes
@@ -43,7 +38,7 @@ MemoryDenyWriteExecute=yes
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallErrorNumber=EPERM
-ExecStart=/opt/finans/.venv/bin/finans-web
+ExecStart=/opt/finans/.venv/bin/finans-api
 Restart=on-failure
 RestartSec=5
 

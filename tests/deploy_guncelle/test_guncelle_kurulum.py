@@ -425,12 +425,9 @@ def test_doctor_problems_are_counted_but_never_printed(
     assert "finans.db" not in out
 
 
-@pytest.mark.parametrize("present", [True, False])
-def test_doctor_gets_the_web_password_only_if_it_exists(
-    pi: Pi, ortam: guncelle.Ortam, present: bool
-) -> None:
-    if present:
-        (pi.paths.credstore / guncelle.WEB_PASSWORD).write_text("özet\n", encoding="utf-8")
+def test_doctor_never_gets_a_leftover_web_password(pi: Pi, ortam: guncelle.Ortam) -> None:
+    """K-137: şifre kilidi kalktı; geçiş gününde silinene kadar duran dosya doctor'a verilmez."""
+    (pi.paths.credstore / "ft_web_password").write_text("özet\n", encoding="utf-8")
     new = pi.commit({"docs/DESIGN.md": "yeni\n"})
 
     _main(pi, ortam, new)
@@ -438,8 +435,7 @@ def test_doctor_gets_the_web_password_only_if_it_exists(
     doctors = _ft(pi, "doctor")
     assert len(doctors) == 2
     for call in doctors:
-        loaded = any(arg.startswith("LoadCredential=ft_web_password:") for arg in call)
-        assert loaded is present
+        assert not any("ft_web_password" in arg for arg in call)
 
 
 @pytest.mark.parametrize(("profile", "wrapper"), [("gercek", "ft-finans"), ("sanal", "ft-sanal")])

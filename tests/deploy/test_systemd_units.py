@@ -240,27 +240,16 @@ def test_sanal_wrapper_runs_like_the_sanal_service() -> None:
     assert loop[1].split() == SANAL_SECRETS
 
 
-DOCTOR_CREDENTIAL_BLOCK = (
-    'if [ "${1:-}" = doctor ] && [ -e /etc/finans/credstore/ft_web_password ]; then\n'
-    '  credentials+=(-p "LoadCredential=ft_web_password:/etc/finans/credstore/ft_web_password")\n'
-    "fi\n"
-)
-
-
 @pytest.mark.parametrize("wrapper", ["ft-finans", "ft-sanal"])
-def test_only_manual_doctor_sees_the_web_password_and_only_if_it_exists(wrapper: str) -> None:
-    """K-126: eksik dosya birimi başlatmazdı; yokluğunu doctor bildirir."""
-    text = (DEPLOY / wrapper).read_text(encoding="utf-8")
-
-    assert text.count(DOCTOR_CREDENTIAL_BLOCK) == 1
-    assert "ft_web_password" not in text.replace(DOCTOR_CREDENTIAL_BLOCK, "")
+def test_manual_commands_never_see_the_web_password(wrapper: str) -> None:
+    """K-137: şifre kilidi kalktı; wrapper'lar yalnız işlerin sırlarını yükler."""
+    assert "ft_web_password" not in (DEPLOY / wrapper).read_text(encoding="utf-8")
 
 
 WEB_HARDENING = {
     **HARDENING,
-    # K-106
-    "PrivateNetwork": "yes",
-    "RestrictAddressFamilies": "AF_UNIX",
+    # K-106, K-136: ağa çıkar (Access anahtarları) ve 127.0.0.1'de TCP dinler.
+    "RestrictAddressFamilies": "AF_INET AF_INET6 AF_UNIX",
     "CapabilityBoundingSet": "",
     "PrivateDevices": "yes",
     "ProtectKernelTunables": "yes",
@@ -270,8 +259,6 @@ WEB_HARDENING = {
     "ProtectProc": "invisible",
     "SystemCallFilter": "@system-service",
     "MemoryDenyWriteExecute": "yes",
-    "RuntimeDirectory": "finans-web",
-    "RuntimeDirectoryMode": "0700",
     "UMask": "0077",
     # K-124
     "PrivateMounts": "yes",
@@ -298,20 +285,19 @@ def _trigger(settings: Settings) -> Path:
     return requests.trigger
 
 
-def test_the_web_service_is_networkless_and_sees_only_its_own_secrets() -> None:
+def test_the_web_service_runs_the_api_and_sees_only_its_session_key() -> None:
+    """K-144: birimin adı kalır, `finans-api`'yi çalıştırır; soket, şifre ve ağsızlık kalktı."""
     service = _unit(UNITS / "finans-web.service")["Service"]
 
     assert {name: _one(service, name) for name in WEB_HARDENING} == WEB_HARDENING
     assert (_one(service, "User"), _one(service, "Group")) == ("finans", "finans")
-    assert _one(service, "ExecStart") == "/opt/finans/.venv/bin/finans-web"
+    assert _one(service, "ExecStart") == "/opt/finans/.venv/bin/finans-api"
     assert _one(service, "EnvironmentFile") == "/etc/finans/finans.env"
     loaded = [value for name, value in service if name == "LoadCredential"]
-    web_secrets = ["ft_web_session_key", "ft_web_password"]
-    assert loaded == [f"{name}:/etc/finans/credstore/{name}" for name in web_secrets]
-    for name in web_secrets:
-        assert "SecretStr" in str(Settings.model_fields[name.removeprefix("ft_")].annotation)
-    socket = Settings.model_fields["web_socket"].default
-    assert socket.parent == Path("/run") / _one(service, "RuntimeDirectory")
+    assert loaded == ["ft_web_session_key:/etc/finans/credstore/ft_web_session_key"]
+    assert "SecretStr" in str(Settings.model_fields["web_session_key"].annotation)
+    names = {name for name, _ in service}
+    assert not names & {"PrivateNetwork", "RuntimeDirectory", "RuntimeDirectoryMode"}
 
 
 def test_the_web_profile_is_chosen_only_in_its_drop_in() -> None:
@@ -375,6 +361,15 @@ def test_a_refresh_request_runs_the_profiles_price_sync_like_its_jobs(
 
 def test_web_settings_stay_empty_in_the_example() -> None:
     env = _env()
+    web = (
+        "FT_WEB_ORIGIN",
+        "FT_WEB_HOST",
+        "FT_WEB_PORT",
+        "FT_CF_ACCESS_TEAM_DOMAIN",
+        "FT_CF_ACCESS_AUD",
+        "FT_WEB_ALLOWED_EMAIL",
+    )
 
-    assert (env["FT_WEB_ALLOWED_LOGIN"], env["FT_WEB_ORIGIN"]) == ("", "")
+    assert {name: env[name] for name in web} == dict.fromkeys(web, "")
     assert "FT_WEB_SESSION_KEY" not in env
+    assert "FT_WEB_ALLOWED_LOGIN" not in env
