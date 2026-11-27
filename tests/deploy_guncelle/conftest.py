@@ -17,6 +17,19 @@ import pytest
 
 import guncelle
 
+# `make deploy-py312` kök conftest'i yüklemez (--confcutdir). Bağlı bir worktree'de `git rebase
+# --exec` ve git kancaları GIT_DIR'ı dışa aktarır; silinmezse fixture'ların ve guncelle'nin git
+# komutları gerçek depoya yazar. Liste git'ten alınır; çağrı hiçbir depoya bakmasın diye GIT_*'sız.
+GIT_LOCAL_ENV = subprocess.run(
+    ["git", "rev-parse", "--local-env-vars"],  # noqa: S607 - git PATH'ten, sabit argüman
+    env={name: value for name, value in os.environ.items() if not name.startswith("GIT_")},
+    capture_output=True,
+    text=True,
+    check=True,
+).stdout.split()
+for _name in GIT_LOCAL_ENV:
+    os.environ.pop(_name, None)
+
 FILES = {
     "deploy/systemd/finans-web.service": "[Service]\nExecStart=/opt/finans/.venv/bin/finans-web\n",
     "deploy/systemd/finans-web.service.d/profil.conf": "[Service]\nEnvironment=FT_PROFILE=sanal\n",
