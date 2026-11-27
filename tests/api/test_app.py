@@ -117,8 +117,12 @@ def test_an_unexpected_error_is_a_500_without_detail(app: FastAPI, clock: FixedC
 
 
 def test_the_docs_and_the_schema_are_not_served(client: ApiClient) -> None:
+    # Bu adresler artık arayüze düşer (K-139); FastAPI'nin şeması ve belge sayfası değildir.
     for path in ("/docs", "/redoc", "/openapi.json", "/docs/oauth2-redirect"):
-        assert client.get(path).status_code == 404
+        response = client.get(path)
+        assert "swagger" not in response.text.lower()
+        assert "redoc" not in response.text.lower()
+        assert '"openapi"' not in response.text
 
 
 def test_building_the_app_does_not_fetch_keys(app: FastAPI, keys: FakeAccessKeys) -> None:

@@ -166,12 +166,24 @@ Geliştirme kapısı:
 Not: Pi'deki `finans.env`'e `FT_WEB_PORT` G4'ten önce eklenmez. `finans-guncelle` bu ayar varsa `/api/saglik`'i yoklar; API G4'e kadar çalışmadığı için deploy düşerdi.
 
 ### G3 · Arayüz
-`frontend/` (React, Vite, TypeScript, Mantine): bütün sayfalar, grafikler, tablolar, önizleme → onay. CI'da `frontend` işi (Biome, `tsc`, Vitest, derleme, tiplerin farkı) ve `npm audit` (K-139).
-- Türkçe biçimlendirici ve `contracts/display`'den üretilen eşlik fikstürü (K-138).
-- Derlenmiş arayüzü API sunar: `index.html` `no-cache`, özetli dosyalar `immutable` (K-139).
-- Yerel turda Access yoktur; kimliğin yerelde nasıl sağlanacağı, doğrulama kapatılmadan, G3 planında kararlaştırılır (K-136).
-Geliştirme kapısı: CI yeşil; bileşen testleri: profil bandı ve onay kutusu, önizleme → onay ve 409, hedef toplamı, tablo sıralama ve filtre parametreleri.
-Kabul kapısı: Mac'te yerel API'ye karşı elle tur: iki profil, her yazma akışı, dar ekran.
+`frontend/` (Node 26, React, Vite, TypeScript, Mantine): bütün sayfalar, grafikler, tablolar, önizleme → onay (K-139). Python tarafında yeni bağımlılık yoktur; npm paketleri K-139'daki listedir.
+- Türkçe biçimlendirici ve `contracts/display`'den üretilen eşlik fikstürü (`make bicim`; K-138, K-139).
+- Derlenmiş arayüzü API sunar (`FT_WEB_DIST`): `index.html` `no-cache` ve CSP ile, özetli dosyalar `immutable`, kimlik zorunlu (K-139).
+- Yerel kimlik: `scripts/yerel_api.py` API'yi yerel bir anahtar ve jetonla başlatır, Vite vekili jetonu ekler; doğrulamayı kapatan ayar yoktur (K-136, K-139).
+- Denetimler: `make frontend` (Biome, `tsc`, Vitest, tiplerin farkı, derleme); `make check` onu da çalıştırır. CI'da `frontend` işi; `npm audit` `audit` işinde.
+- Canlıya etkisi: ön yüz iskeleti merge edilince deploy her seferinde ön yüzü derler ve paketi Pi'ye gönderir (`/opt/finans/frontend/dist`). API çalışmadığı için görünür değişiklik yoktur; paketli ilk deploy izlenir.
+Geliştirme kapısı:
+- `make check` ve CI yeşil;
+- biçimlendirici eşliği; statik sunum testleri;
+- bileşen testleri:
+  - profil bandı ve onay kutusu;
+  - önizleme → onay, 409, tekrar onay, 503;
+  - hedef toplamı;
+  - tablo sıralama, filtre ve sayfa parametrelerinin adresle eşleşmesi;
+  - fiyatsız gün ve iptali engelleyen satışlar;
+  - grafiklerin tablo karşılıkları.
+
+Kabul kapısı: Mac'te yerel API'ye karşı (`make yerel`, `frontend/` içinde `npm run build` ve `npm run preview`), derlenmiş paketle elle tur: iki profil, her yazma akışı, dar ekran.
 
 ### G4 · Geçiş
 - Web birimi 127.0.0.1'e ve `finans-api`'ye geçer; `finans.env`'e Access ayarları ve `FT_WEB_PORT` eklenir, `FT_WEB_ORIGIN` alan adına döner.

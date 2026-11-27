@@ -10,8 +10,10 @@ coverage.xml
 htmlcov/
 dist/
 build/
+node_modules/
 
 .env
+.env.local
 var/
 *.db
 *.db-wal

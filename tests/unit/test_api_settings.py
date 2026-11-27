@@ -77,6 +77,24 @@ def test_every_missing_setting_is_reported_at_once(
     assert "FT_WEB_HOST" not in message
 
 
+def test_the_build_directory_defaults_to_where_deploy_unpacks_it(env: pytest.MonkeyPatch) -> None:
+    env.setenv("FT_WEB_DIST", "  ")
+    assert api_settings(load_base_settings()).dist == Path("/opt/finans/frontend/dist")
+
+
+def test_the_build_directory_can_be_moved(env: pytest.MonkeyPatch) -> None:
+    env.setenv("FT_WEB_DIST", " /srv/arayuz ")
+    assert api_settings(load_base_settings()).dist == Path("/srv/arayuz")
+
+
+@pytest.mark.parametrize("dist", ["frontend/dist", "~/dist", "./dist"])
+def test_the_build_directory_must_be_absolute(env: pytest.MonkeyPatch, dist: str) -> None:
+    env.setenv("FT_WEB_DIST", dist)
+    message = problems()
+    assert "FT_WEB_DIST mutlak bir yol olmalı" in message
+    assert dist not in message
+
+
 def test_blank_values_count_as_missing(env: pytest.MonkeyPatch) -> None:
     for name in VALID:
         env.setenv(name, "  ")

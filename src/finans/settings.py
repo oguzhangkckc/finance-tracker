@@ -12,6 +12,8 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 type Profile = Literal["real", "sanal"]
 PROFILES: tuple[Profile, ...] = ("real", "sanal")
 DEFAULT_WEB_HOST: Final = "127.0.0.1"
+# Deploy ön yüz paketini buraya açar (K-140); web biriminin çalışma dizini başka olduğu için mutlak.
+DEFAULT_WEB_DIST: Final = Path("/opt/finans/frontend/dist")
 MAX_PORT: Final = 65535
 MIN_CONFIRM_KEY: Final = 32
 MIGRATION_BACKUPS: Final = "migration-backups"
@@ -75,6 +77,8 @@ class Settings(BaseSettings):
     cf_access_team_domain: str | None = None
     cf_access_aud: str | None = None
     web_allowed_email: str | None = None
+    # K-139: derlenmiş arayüzün dizini; ham metin, api_settings denetler.
+    web_dist: str | None = None
 
     @field_validator(
         "evds_api_key",
@@ -91,6 +95,7 @@ class Settings(BaseSettings):
         "cf_access_team_domain",
         "cf_access_aud",
         "web_allowed_email",
+        "web_dist",
         mode="before",
     )
     @classmethod
@@ -187,6 +192,7 @@ class ApiSettings:
     origin: str
     # Onay jetonunun HMAC anahtarı (K-137); SecretStr, yazdırılınca değeri görünmez.
     confirm_key: SecretStr
+    dist: Path = DEFAULT_WEB_DIST
 
     @property
     def issuer(self) -> str:
@@ -220,9 +226,13 @@ def api_settings(base: Settings) -> ApiSettings:
             f"FT_WEB_SESSION_KEY (credstore'da ft_web_session_key) en az {MIN_CONFIRM_KEY} "
             "karakter olmalı"
         )
+    dist_text = (base.web_dist or "").strip()
+    dist = Path(dist_text) if dist_text else DEFAULT_WEB_DIST
+    if not dist.is_absolute():
+        problems.append("FT_WEB_DIST mutlak bir yol olmalı")
     if problems or port is None or origin is None or key is None:
         raise ApiSettingsError(f"API başlamaz (K-136): {'; '.join(problems)}.")
-    return ApiSettings(host, port, team, audience, email, origin, key)
+    return ApiSettings(host, port, team, audience, email, origin, key, dist)
 
 
 def _is_loopback(host: str) -> bool:

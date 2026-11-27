@@ -1,6 +1,6 @@
 RUN := uv run --frozen
 
-.PHONY: sync fmt lint typecheck imports test live audit check deploy-py312 openapi
+.PHONY: sync fmt lint typecheck imports test live audit check deploy-py312 openapi bicim frontend frontend-node yerel
 
 sync:
 	uv sync --locked
@@ -31,7 +31,21 @@ audit:
 	uv export --frozen --no-dev --no-emit-project --format requirements-txt --output-file "$$tmp" >/dev/null && \
 	$(RUN) pip-audit --strict --disable-pip --require-hashes --requirement "$$tmp"
 
-check: lint typecheck imports test
+check: lint typecheck imports test frontend
+
+# K-139: Biome, tsc, Vitest, şemadan üretilen tiplerin farkı ve derleme.
+frontend: frontend-node frontend/node_modules/.package-lock.json
+	cd frontend && npm run check
+
+# npm ci yalnız kilit dosyası ya da Node sürümü değişince yeniden çalışır.
+frontend/node_modules/.package-lock.json: frontend/package-lock.json frontend/.nvmrc
+	cd frontend && npm ci
+
+frontend-node:
+	@want=$$(cut -d. -f1 frontend/.nvmrc); have=$$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null); \
+	if [ "$$want" != "$$have" ]; then \
+		echo "Node $$want gerekli (bulunan: $${have:-yok}); frontend/ içinde 'nvm use' ile seç." >&2; exit 1; \
+	fi
 
 # Pi'nin sistem Python'u 3.12; finans-guncelle ve testleri onunla da çalışmalı (K-140).
 deploy-py312:
@@ -39,5 +53,16 @@ deploy-py312:
 	uv run --python 3.12 --no-project --with pytest==9.2.0 pytest --confcutdir=tests/deploy_guncelle tests/deploy_guncelle
 
 # API şeması repodadır ve TypeScript tiplerinin kaynağıdır; bir test eşitliğini denetler (K-138).
-openapi:
+openapi: frontend-node frontend/node_modules/.package-lock.json
 	$(RUN) python -m finans.api.openapi > frontend/src/api/openapi.json
+	cd frontend && npm run types
+
+# Arayüzün Türkçe biçimlendiricisi contracts/display'e bu fikstürle bağlıdır; bir test güncelliğini denetler (K-139).
+bicim: frontend-node frontend/node_modules/.package-lock.json
+	$(RUN) python -m finans.api.parity > frontend/src/format/parity.json
+	cd frontend && npx --no-install biome format --write src/format/parity.json
+
+# Yerel geliştirmede API: Access yerine yerel anahtar ve 24 saatlik jeton (K-139).
+# Arayüz: frontend/ içinde npm run dev (ya da derlenmiş paketle npm run preview).
+yerel:
+	$(RUN) python scripts/yerel_api.py

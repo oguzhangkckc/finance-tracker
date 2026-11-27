@@ -20,6 +20,8 @@ SECURITY_HEADERS: Final = {
     "Cross-Origin-Resource-Policy": "same-origin",
     "Cache-Control": "no-store",
 }
+# Derlenmiş arayüzün dosyaları kendi önbellek süresini ve sayfa politikasını koyar (K-139).
+RESPONSE_DECIDES: Final = frozenset({"Cache-Control", "Content-Security-Policy"})
 SAFE_METHODS: Final = frozenset({"GET", "HEAD", "OPTIONS"})
 HEALTH_PATH: Final = "/api/saglik"
 ACCESS_HEADER: Final = "cf-access-jwt-assertion"
@@ -41,7 +43,8 @@ class SecurityHeaders:
             if message["type"] == "http.response.start":
                 headers = MutableHeaders(scope=message)
                 for name, value in SECURITY_HEADERS.items():
-                    headers[name] = value
+                    if name not in RESPONSE_DECIDES or name not in headers:
+                        headers[name] = value
             await send(message)
 
         await self._app(scope, receive, with_headers)

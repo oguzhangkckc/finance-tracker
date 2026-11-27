@@ -1,0 +1,30 @@
+import type { components } from "./schema";
+
+type Schemas = components["schemas"];
+
+export type Report = Schemas["Report"];
+export type Summary = Schemas["Summary"];
+export type HoldingLine = Schemas["HoldingLine"];
+export type AllocationLine = Schemas["AllocationLine"];
+export type AlertLine = Schemas["AlertLine"];
+export type ReturnFigure = Schemas["ReturnFigure"];
+export type RefreshInfo = Schemas["RefreshInfo"];
+export type ValueChartData = Schemas["ValueChartData"];
+export type ValuePoint = Schemas["ValuePointItem"];
+export type ContributionItem = Schemas["ContributionItem"];
+export type OverviewData = Schemas["OverviewPage"];
+export type AllocationData = Schemas["ReportPage"];
+export type ReturnsData = Schemas["ReturnsPage"];
+export type ReportText = Schemas["ReportText"];
+export type HoldingItem = Schemas["HoldingItem"];
+export type LotItem = Schemas["LotItem"];
+export type TransactionItem = Schemas["TransactionItem"];
+export type AlertEventItem = Schemas["AlertEventItem"];
+export type RunItem = Schemas["RunItem"];
+export type SettingItem = Schemas["SettingItem"];
+export type HoldingsData = Schemas["HoldingsPage"];
+export type LotsData = Schemas["LotsPage"];
+export type TransactionsData = Schemas["TransactionsPage"];
+export type AlertsData = Schemas["AlertsPage"];
+export type SystemData = Schemas["SystemPage"];
+export type SettingsData = Schemas["SettingsPage"];

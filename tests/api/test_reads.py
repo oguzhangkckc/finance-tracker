@@ -191,6 +191,13 @@ def test_a_transaction_row_is_exact_and_canonical(reader: ApiClient) -> None:
     assert (table["day_filter"], table["search"]) == (True, True)
 
 
+def test_the_default_sort_is_reported_while_another_column_is_sorted(reader: ApiClient) -> None:
+    table = reader.get("/api/gercek/islemler?sirala=fon").json()["table"]
+
+    assert (table["sort"], table["descending"]) == ("fon", False)
+    assert (table["default_sort"], table["default_descending"]) == ("tarih", True)
+
+
 def test_sorting_is_by_decimal_and_ties_keep_number_order(reader: ApiClient) -> None:
     # Tutarlar: #1 1000, #2 1000, #3 500, #4 110.
     assert row_ids(reader, "?sirala=tutar&yon=artan") == [4, 3, 1, 2]
