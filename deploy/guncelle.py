@@ -336,7 +336,7 @@ def manual_reasons(
             reasons.append(
                 f"geri dönüş şemayı geri almaz ({', '.join(lost)} kurulu ama hedefte yok); "
                 "önce veritabanı migration öncesi kopyadan geri yüklenmeli (K-55, veritabanının "
-                "yanındaki backups/)"
+                "yanındaki migration-backups/)"
             )
     return reasons
 

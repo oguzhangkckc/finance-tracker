@@ -14,6 +14,7 @@ PROFILES: tuple[Profile, ...] = ("real", "sanal")
 DEFAULT_WEB_HOST: Final = "127.0.0.1"
 MAX_PORT: Final = 65535
 MIN_CONFIRM_KEY: Final = 32
+MIGRATION_BACKUPS: Final = "migration-backups"
 _DIGITS: Final = re.compile(r"[0-9]{1,5}")
 # Anahtarlar bu alandan çekildiği için başka bir alan adı kabul edilmez (K-136).
 _TEAM_DOMAIN: Final = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com")
@@ -109,6 +110,12 @@ class Settings(BaseSettings):
     def sanal_database(self) -> Path:
         return self.sanal_db_path or self.db_path.parent / "sanal.db"
 
+    @property
+    def migration_backup_dir(self) -> Path:
+        """Migration öncesi şifresiz kopyalar (K-55, K-142); sanal profilde sanal veritabanının
+        yanı, çünkü resolve_profile db_path'i çevirir."""
+        return self.db_path.parent / MIGRATION_BACKUPS
+
     @model_validator(mode="after")
     def _sanal_database_is_separate(self) -> Self:
         if self.sanal_database.resolve() == self.db_path.resolve():
@@ -116,6 +123,22 @@ class Settings(BaseSettings):
                 "Sanal veritabanı gerçek veritabanıyla aynı dosya olamaz "
                 "(FT_SANAL_DB_PATH ve FT_DB_PATH)."
             )
+        return self
+
+    @model_validator(mode="after")
+    def _nightly_backups_stay_apart(self) -> Self:
+        # Mac yedek dizinini çeker; migration öncesi şifresiz kopya oraya karışmamalı (K-142).
+        if self.backup_dir is None:
+            return self
+        nightly = self.backup_dir.resolve()
+        for database in (self.db_path, self.sanal_database):
+            copies = (database.parent / MIGRATION_BACKUPS).resolve()
+            if nightly.is_relative_to(copies) or copies.is_relative_to(nightly):
+                raise ValueError(
+                    f"FT_BACKUP_DIR migration öncesi kopyaların dizini ({copies}) olamaz, onu "
+                    "içeremez ve onun içinde olamaz: yedek dizini Mac'e çekilir ve yalnız şifreli "
+                    "yedek tutar (K-142)."
+                )
         return self
 
 

@@ -81,6 +81,33 @@ def test_age_secret_key_on_the_server_fails_without_showing_it(
     assert secret not in result.output
 
 
+def test_backup_directory_must_hold_only_encrypted_backups(
+    portfolio: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert runner.invoke(app, ["config", "apply"]).exit_code == 0
+    directory = tmp_path / "yedek"
+    directory.mkdir()
+    monkeypatch.setenv("FT_BACKUP_DIR", str(directory))
+    monkeypatch.setenv("FT_BACKUP_AGE_RECIPIENTS", "age1mac, age1kurtarma")
+    for name in ("finans-20261126T001500Z.db.age", "finans-20261126T001500Z.db.age.sha256"):
+        (directory / name).write_bytes(b"age-sahte")
+
+    clean = runner.invoke(app, ["doctor"])
+    assert "✓ Yedek dizini: yalnız şifreli yedekler ve özetleri" in clean.output
+
+    for stamp in range(10, 17):
+        (directory / f"finans-20261125T1344{stamp}Z-v4.db").write_bytes(b"SQLite format 3")
+    result = runner.invoke(app, ["doctor"])
+
+    assert result.exit_code == 1
+    assert (
+        "✗ Yedek dizini: beklenmeyen: finans-20261125T134410Z-v4.db, "
+        "finans-20261125T134411Z-v4.db, finans-20261125T134412Z-v4.db, "
+        "finans-20261125T134413Z-v4.db, finans-20261125T134414Z-v4.db ve 2 tane daha; "
+        "Mac bu dizini çeker, yalnız şifreli yedek durmalı."
+    ) in result.output
+
+
 WEB_HASH = hash_password("uzun bir parola cümlesi")
 
 

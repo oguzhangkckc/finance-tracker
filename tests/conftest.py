@@ -19,6 +19,29 @@ from tests.fakes.clock import FixedClock
 settings.register_profile("finans", deadline=None)
 settings.load_profile("finans")
 
+# Bağlı bir worktree'de `git rebase --exec` ve git kancaları GIT_DIR'ı mutlak yolla dışa aktarır;
+# testlerin geçici depolarda çalıştırdığı git komutları o zaman gerçek depoya yazar (2026-11-26:
+# ana depo bare oldu). Liste `git rev-parse --local-env-vars`; test, eksiksiz olduğunu denetler.
+GIT_LOCAL_ENV = (
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_CONFIG",
+    "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_COUNT",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_IMPLICIT_WORK_TREE",
+    "GIT_GRAFT_FILE",
+    "GIT_INDEX_FILE",
+    "GIT_NO_REPLACE_OBJECTS",
+    "GIT_REPLACE_REF_BASE",
+    "GIT_PREFIX",
+    "GIT_SHALLOW_FILE",
+    "GIT_COMMON_DIR",
+)
+for _name in GIT_LOCAL_ENV:
+    os.environ.pop(_name, None)
+
 
 def _network_blocked(*_args: object, **_kwargs: object) -> NoReturn:
     raise RuntimeError(
