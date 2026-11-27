@@ -24,8 +24,8 @@ from tests.fakes.access import FakeAccessKeys
 from tests.fakes.clock import FixedClock
 from tests.support.access import API_SETTINGS, access_token
 from tests.support.api_client import ACCESS_HEADER, ApiClient
-from tests.support.web_profiles import two_profiles
-from tests.support.web_writes import NOW, cli_rows, cli_twin, priced_sanal, run_cli, same_row
+from tests.support.profiles import two_profiles
+from tests.support.writes import NOW, cli_rows, cli_twin, priced_sanal, run_cli, same_row
 
 REAL_BUY = {
     "fund": "XHT",

@@ -173,14 +173,15 @@ def test_everything_the_jobs_write_is_under_the_writable_path() -> None:
 def test_credential_files_are_read_as_settings(tmp_path: Path) -> None:
     (tmp_path / "ft_evds_api_key").write_text("deneme-anahtari", encoding="utf-8")
     (tmp_path / "ft_healthcheck_backup_url").write_text("", encoding="utf-8")
-    (tmp_path / "ft_web_password").write_text("\n", encoding="utf-8")
+    # K-137: geçiş gününde silinene kadar duran şifre dosyası ayarları bozmaz.
+    (tmp_path / "ft_web_password").write_text("özet\n", encoding="utf-8")
 
     settings = Settings(db_path=tmp_path / "finans.db", _secrets_dir=tmp_path)
 
     assert settings.evds_api_key is not None
     assert settings.evds_api_key.get_secret_value() == "deneme-anahtari"
     assert settings.healthcheck_backup_url is None
-    assert settings.web_password is None
+    assert not hasattr(settings, "web_password")
 
 
 def test_environment_example_holds_no_secrets() -> None:

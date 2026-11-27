@@ -200,7 +200,7 @@ Katman kuralları (yukarıdan aşağıya: cli | web | api → sunum → bootstra
 - adapters ports'u uygular; birbirini import etmez. İstisna alt çizgiyle başlayan ortak modüllerdir (`adapters/_http.py`, `adapters/_csv.py`). Adapter'lar application'ı ve settings'i görmez; ayarlar onlara bootstrap'ta enjekte edilir.
 - cli somut adapter import etmez. Somut sınıflar yalnızca bootstrap.py içinde bağlanır; testler aynı noktadan sahte uygulamaları enjekte eder.
 - api, cli ile aynı kurallara uyar; cli ve api birbirini import etmez. Giriş noktası `finans-api`'dir (K-104, K-138). Eski `finans.web` G4'te kaldırıldı.
-- sunum, web ile api'nin ortak sunum mantığıdır; bootstrap'ın üstündedir, somut adapter import etmez ve FastAPI, Starlette ya da Jinja2 import etmez (K-138).
+- sunum, api'nin HTTP'den bağımsız sunum mantığıdır (G2'de eski web ile ortak kullanılmak için ayrıldı); bootstrap'ın üstündedir, somut adapter import etmez ve FastAPI, Starlette ya da uvicorn import etmez (K-138).
 - Ağ ve SQLite erişimi yalnızca adapters altında yapılabilir; testlerde gerçek ağ kapalıdır.
 - `float` kaynak kodun hiçbir yerinde kullanılmaz. Duvar saatine yalnızca `adapters/clock.py` erişir. Duvar saati sayılanlar: `datetime.now`, `datetime.utcnow`, `datetime.today`, `date.today`, `time.time`, `time.time_ns`, `time.localtime`, `time.gmtime`, `time.ctime` ve zaman argümanı verilmeden çağrılan `time.strftime`.
 
@@ -1107,7 +1107,7 @@ Hedef: evdeki, her zaman açık, 64 bit Debian tabanlı bir Linux cihaz (Raspber
        - İlk deneme `workflow_dispatch` ile ve Pi'de kurulu commit verilerek yapılır. Betik "zaten kurulu" der ve hiçbir şey değişmez. Bu, Tailscale, SSH, `from=`, host anahtarı, sudo ve betik zincirini baştan sona sınar. İş günlüğünde Pi'nin adı ya da adresi görünmez.
        - Ardından yalnız belge değiştiren bir commit merge edilir: Deploy işi yeşil biter, `git -C /opt/finans rev-parse HEAD` yeni SHA'yı gösterir.
        - Sonra `workflow_dispatch` ile önceki SHA'ya dönülür (geri dönüş seçili), ardından yeniden ileri alınır.
-    8. **Birim değişikliği.** İş kod 2 ile durursa kod ve ön yüz yerindedir. Değişen birimler adım 7'deki gibi elle kopyalanır, ardından `daemon-reload` ve `finans-web` yeniden başlatılır.
+    8. **Birim değişikliği.** İş kod 2 ile durursa hedef commit henüz kurulmamıştır (`/opt/finans` önceki commit'tedir). Değişen birimler, wrapper'lar ve betik 12.1'deki gibi hedef commit'ten kurulur, ardından deploy işi yeniden çalıştırılır; web'i elle yeniden başlatmak migration'ı ve `uv sync`'i atlardı.
 
 ## Gözlemlenebilirlik ve operasyon
 

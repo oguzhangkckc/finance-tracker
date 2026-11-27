@@ -64,13 +64,9 @@ class Settings(BaseSettings):
     tefas_base_url: str = "https://www.tefas.gov.tr/api/funds/"
     # K-71: istekler arası en az 10 sn; daha kısası kabul edilmez.
     tefas_min_interval_s: int = Field(default=10, ge=10)
-    # K-123: web arayüzü; izin verilen tek Tailscale girişi ve POST denetimi için köken.
-    web_allowed_login: str | None = None
+    # K-137: yazma isteklerinin kökeni ve onay jetonunun anahtarı.
     web_origin: str | None = None
     web_session_key: SecretStr | None = None
-    # K-126: şifrenin scrypt özeti (`ft web sifre`); boşsa web'de yazma kapalıdır.
-    web_password: SecretStr | None = None
-    web_socket: Path = Path("/run/finans-web/web.sock")
     # K-136: JSON API; ham metin, çünkü yalnız API ister ve denetler (api_settings), ft etkilenmez.
     web_host: str | None = None
     web_port: str | None = None
@@ -86,10 +82,8 @@ class Settings(BaseSettings):
         "telegram_chat_id",
         "healthcheck_reports_url",
         "healthcheck_backup_url",
-        "web_allowed_login",
         "web_origin",
         "web_session_key",
-        "web_password",
         "web_host",
         "web_port",
         "cf_access_team_domain",

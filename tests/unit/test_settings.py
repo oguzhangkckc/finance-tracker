@@ -166,6 +166,24 @@ def test_nightly_backups_cannot_mix_with_migration_copies(
         load_settings()
 
 
+@pytest.mark.parametrize("source", ["ortam", ".env"])
+def test_leftover_w2_web_settings_do_not_stop_the_jobs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, source: str
+) -> None:
+    """K-136: FT_WEB_ALLOWED_LOGIN geçiş gününde finans.env'den (Pi) ya da .env'den (yerel)
+    silinene kadar durabilir."""
+    monkeypatch.setenv("FT_DB_PATH", str(tmp_path / "finans.db"))
+    if source == "ortam":
+        monkeypatch.setenv("FT_WEB_ALLOWED_LOGIN", "kisi@example.com")
+    else:
+        (tmp_path / ".env").write_text("FT_WEB_ALLOWED_LOGIN=kisi@example.com\n", encoding="utf-8")
+
+    settings = load_settings()
+
+    assert settings.db_path == tmp_path / "finans.db"
+    assert not hasattr(settings, "web_allowed_login")
+
+
 def test_unknown_profile_is_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("FT_DB_PATH", str(tmp_path / "finans.db"))
     monkeypatch.setenv("FT_PROFILE", "demo")
