@@ -189,6 +189,7 @@ Kabul kapısı: Mac'te yerel API'ye karşı (`make yerel`, `frontend/` içinde `
 - Web birimi 127.0.0.1'e ve `finans-api`'ye geçer; `finans.env`'e Access ayarları ve `FT_WEB_PORT` eklenir, `FT_WEB_ORIGIN` alan adına döner.
 - Kalkanlar: eski `finans.web` ve `finans-web` giriş noktası, Jinja şablonları, `app.js`, `site.css`, sunucu SVG'si, Unix soketi, Tailscale kimliği, şifre kilidi, `ft web sifre` ve doctor satırı; `jinja2` bağımlılığı.
 - Cloudflare Access ve tünel kurulur; Tailscale serve kapanır (K-136, K-137).
+- Birimin adı `finans-web.service` kalır, `finans-api`'yi çalıştırır (K-144). Geçiş günü sırası ve geri dönüş Kurulum adım 11.7'dedir; deploy bir kez elle kurulum ister (birim, wrapper'lar ve deploy betiği değişir).
 Geliştirme kapısı: `make check` ve CI; `systemd-analyze security` eşiği ölçülüp yeniden konur.
 Kabul kapısı:
 - Mac'ten ve telefondan Google girişiyle bütün sayfalar açılır; başka hesap reddedilir.
